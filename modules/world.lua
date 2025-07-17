@@ -43,6 +43,7 @@ function World.new(gameMap)
         active = false,
         targets = {},
         selectedIndex = 1
+
     }
     self.cursorInput = {
         timer = 0,
@@ -51,6 +52,7 @@ function World.new(gameMap)
         activeKey = nil
     }
 
+    self.unitInfoMenu = {active = false, unit = nil}
     self.turnShouldEnd = false -- New flag to defer ending the turn
     -- Game State and UI
     self.gameState = "gameplay"

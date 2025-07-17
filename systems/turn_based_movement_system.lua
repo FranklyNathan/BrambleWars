@@ -66,7 +66,7 @@ function TurnBasedMovementSystem.update(dt, world)
                                     if style == "ground_aim" or style == "no_target" then
                                         showAttack = true
                                     -- For directional, cycle, and auto-hit attacks, check if any valid targets exist from the current position.
-                                    elseif style == "directional_aim" or style == "cycle_target" or style == "auto_hit_all" then
+                                    elseif style == "directional_aim" or style == "auto_hit_all" or style == "cycle_target" then
                                         if #WorldQueries.findValidTargetsForAttack(entity, attackName, world) > 0 then
                                             showAttack = true
                                         end

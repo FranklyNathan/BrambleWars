@@ -24,7 +24,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
     square.components = {} -- All components will be stored here
     square.hasActed = false -- For turn-based logic
 
-    -- Set properties based on type/playerType
+    -- Set properties based on type/subType
     if square.type == "player" then
         square.playerType = subType -- e.g., "drapionsquare"
         local blueprint = CharacterBlueprints[subType]
@@ -37,6 +37,17 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.isFlying = blueprint.isFlying or false -- Add the flying trait to the entity
         square.weight = blueprint.weight or 1 -- Default to a light weight
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
+        square.originType = blueprint.originType
+        square.HpStat = blueprint.HpStat
+        square.maxHp = blueprint.HpStat * 100
+        square.attackStat = blueprint.attackStat
+        square.defenseStat = blueprint.defenseStat
+        square.magicStat = blueprint.magicStat
+        square.resistanceStat = blueprint.resistanceStat
+        square.witStat = blueprint.witStat
+        square.maxWisp = blueprint.wispStat
+        square.attacks = blueprint.attacks
+        square.displayName = blueprint.displayName -- Use display name from blueprint
 
         -- A mapping from the internal player type to the asset name for scalability.
         local playerSpriteMap = {
@@ -68,12 +79,17 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
     elseif square.type == "enemy" then
         square.enemyType = subType -- e.g., "standard"
         local blueprint = EnemyBlueprints[subType]
-        square.color = {blueprint.color[1], blueprint.color[2], blueprint.color[3], 1}
-        square.maxHp = blueprint.maxHp
-        square.baseAttackStat = blueprint.attackStat
-        square.baseDefenseStat = blueprint.defenseStat
-        square.movement = blueprint.movement or 4 -- Default movement range in tiles
-        square.weight = blueprint.weight or 5 -- Default to a medium weight
+        square.originType = blueprint.originType
+        square.HpStat = blueprint.HpStat
+        square.maxHp = blueprint.HpStat * 100
+        square.attackStat = blueprint.attackStat
+        square.defenseStat = blueprint.defenseStat
+        square.magicStat = blueprint.magicStat
+        square.resistanceStat = blueprint.resistanceStat
+        square.witStat = blueprint.witStat
+        square.maxWisp = blueprint.wispStat
+        square.attacks = blueprint.attacks
+        square.displayName = subType -- Use enemy type as display name
 
         -- Add animation component for enemies
         local enemySpriteMap = {
@@ -98,6 +114,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
     end
 
     square.hp = square.maxHp -- All squares start with full HP
+    square.wisp = square.maxWisp -- Start with full wisp
 
     -- A scalable way to handle status effects
     square.statusEffects = {}

@@ -101,26 +101,39 @@ local function handle_free_roam_input(key, world)
         local unit = getPlayerUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, world)
         if unit and not unit.hasActed then
             -- If the cursor is on an available player unit, select it.
-            world.selectedUnit = unit
+world.selectedUnit = unit
             world.playerTurnState = "unit_selected"
             -- Calculate movement range and pathing data
             world.reachableTiles, world.came_from = Pathfinding.calculateReachableTiles(unit, world)
             world.attackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, world.reachableTiles)
             world.movementPath = {} -- Start with an empty path
+
+        elseif unit and unit.hasActed then
+           -- Toggle info menu for friendly units that have already acted
+           if world.unitInfoMenu.active and world.unitInfoMenu.unit == unit then
+               world.unitInfoMenu.active = false
+               world.unitInfoMenu.unit = nil
+           else
+               world.unitInfoMenu.active = true
+               world.unitInfoMenu.unit = unit
+           end
         else
-            -- If the cursor is on an empty tile, open the map menu.
-            local isOccupied = WorldQueries.isTileOccupied(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
-            if not isOccupied then
-                world.playerTurnState = "map_menu"
-                world.mapMenu.active = true
-                world.mapMenu.options = {{text = "End Turn", key = "end_turn"}}
-                world.mapMenu.selectedIndex = 1
-            end
-        end
+           -- Check if the cursor is over a unit of the opposite type: toggle unit info menu.
+           local otherUnit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
+           if otherUnit and otherUnit.type ~= (unit and unit.type) then
+               if world.unitInfoMenu.active and world.unitInfoMenu.unit == otherUnit then
+                   world.unitInfoMenu.active = false; world.unitInfoMenu.unit = nil
+               else world.unitInfoMenu.active = true; world.unitInfoMenu.unit = otherUnit end
+           end
+       end
+   end
+
+    if not world.selectedUnit then
+        local unit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
     end
 end
 
--- Handles input when a unit is selected and the player is choosing a destination.
+
 local function handle_unit_selected_input(key, world)
     if key == "j" then -- Confirm Move
         local cursorOnUnit = world.mapCursorTile.x == world.selectedUnit.tileX and
@@ -289,7 +302,6 @@ local function handle_action_menu_input(key, world)
                     world.mapCursorTile.x = unit.tileX
                     world.mapCursorTile.y = unit.tileY
                 end
-            print("Exiting attack execution, playerTurnState:", world.playerTurnState)
             end
         end
     end
@@ -315,6 +327,8 @@ local function handle_map_menu_input(key, world)
             world.playerTurnState = "free_roam" -- State will change to "enemy" anyway
             world.turnShouldEnd = true
         end
+    elseif world.unitInfoMenu.active then
+        world.unitInfoMenu.active = false
     end
 end
 
@@ -531,8 +545,9 @@ stateHandlers.party_select = function(key, world)
                 world.characterGrid[world.selectedSquare.y][world.selectedSquare.x] = secondSquareType
                 world.characterGrid[world.cursorPos.y][world.cursorPos.x] = firstSquareType
             end
-            world.selectedSquare = nil
         end
+    elseif world.unitInfoMenu.active then
+        world.unitInfoMenu.active = false
     end
 end
 

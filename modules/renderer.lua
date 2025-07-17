@@ -35,6 +35,37 @@ local function drawHealthBar(square)
     end
 end
 
+local function drawWispBar(square)
+    local barMaxWidth, barHeight, barYOffset = square.size, 3, square.size + 6 -- Slightly below health bar
+    local maxNotches = 8 -- Character with max 8 wisp will have a bar as long as the health bar
+    local currentNotches = math.min(square.maxWisp, maxNotches) -- Cap notches at maxNotches
+    local barWidth = (currentNotches / maxNotches) * barMaxWidth -- Adjust bar length
+    local notchWidth = barWidth / currentNotches -- Width of each notch
+    local wispRatio = square.wisp / square.maxWisp -- 0 to 1
+
+    -- Calculate the number of filled notches
+    local filledNotches = math.floor(wispRatio * currentNotches)
+
+    for i = 1, currentNotches do
+        local notchX = square.x + (i - 1) * notchWidth
+        local notchColor = (i <= filledNotches) and {0.5, 0.5, 1, 1} or {0.1, 0.1, 0.3, 1} -- Light blue when full, dark blue when low
+        love.graphics.setColor(notchColor)
+        love.graphics.rectangle("fill", notchX, square.y + barYOffset, notchWidth, barHeight)
+
+        -- Optionally, draw notch separators for better visibility (adjust color and width as needed).
+        if i < currentNotches then
+            love.graphics.setColor(0, 0, 0, 0.2)
+            love.graphics.rectangle("fill", notchX + notchWidth - 1, square.y + barYOffset, 1, barHeight)
+        end
+    end
+end
+
+local function drawAllBars(entity)
+   drawHealthBar(entity)
+   drawWispBar(entity)
+end
+
+
 -- Calculates the final Y position and rotation for an entity, accounting for airborne and bobbing effects.
 -- Also draws the shadow for airborne units.
 local function calculate_visual_offsets(entity, currentAnim, drawX, baseDrawY)
@@ -153,7 +184,7 @@ local function draw_entity(entity, world, is_active_player)
     end
 
     -- 7. Draw the health bar on top of everything
-    drawHealthBar(entity)
+    drawAllBars(entity)
 
     love.graphics.pop()
 end
@@ -378,27 +409,35 @@ local function draw_world_space_ui(world)
                 local attackData = world.selectedAttackName and AttackBlueprints[world.selectedAttackName]
 
                 if target and attacker and attackData then
-                    if attackData.type == "support" then
+                    if attackData.useType == "support" then
                         -- Draw a green overlay on the targeted ally.
                         love.graphics.setColor(0.2, 1, 0.2, 0.3) -- Semi-transparent green.
                         love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                     elseif world.selectedAttackName == "phantom_step" then
                         -- For phantom_step, shade the target red and the warp destination blue.
+                        love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
+                        love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                         local dx, dy = 0, 0
                         if target.lastDirection == "up" then dy = 1
                         elseif target.lastDirection == "down" then dy = -1
                         elseif target.lastDirection == "left" then dx = 1
                         elseif target.lastDirection == "right" then dx = -1
-                        end
-                        -- Shade the target tile red.
-                        love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
-                        love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
-
+                        end                        
                         local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
                         local behindPixelX, behindPixelY = Grid.toPixels(behindTileX, behindTileY)
 
                         -- Shade the destination tile blue.
                         love.graphics.setColor(0.2, 0.4, 1, 0.3) -- Semi-transparent blue
+                        love.graphics.rectangle("fill", behindPixelX + BORDER_WIDTH, behindPixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+                    elseif attackData.rangetype == "standard_range" then
+                        love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
+                        love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+                    elseif attackData.rangetype == "ranged_only" then
+                        -- Shade the target tile red.
+                        love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
+                        love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+
+                        local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
                         love.graphics.rectangle("fill", behindPixelX + BORDER_WIDTH, behindPixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                     elseif world.selectedAttackName == "hookshot" then
 
@@ -457,9 +496,6 @@ local function draw_world_space_ui(world)
                             end
                         end
                     end
-                    -- Default case for single-target damaging attacks (like Slash). Highlight the target tile red.
-                    love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
-                    love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                 end
             end
         end

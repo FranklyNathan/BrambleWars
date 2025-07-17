@@ -144,13 +144,29 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
                 canBeTargeted = not isSelf and not (target.hp and target.hp <= 0)
             end
 
+            
             if canBeTargeted then
-                local dist = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
-                if dist >= minRange and dist <= range then
+                local dx = math.abs(attacker.tileX - target.tileX)
+                local dy = math.abs(attacker.tileY - target.tileY)
+                local distance = dx + dy
+
+                local inRange = false
+                if attackData.rangetype == "standard_range" then -- Range is a standard "circle"
+                    inRange = distance >= minRange and distance <= range
+                elseif attackData.rangetype == "ranged_only" then -- Only allow ranged shapes (no immediate adjacent tile)
+                    inRange = distance >= minRange and distance <= range and distance > 1
+                elseif attackData.rangetype == "melee_only" then  -- Only allow attacks on adjacent tiles.
+                    inRange = distance == 1
+                else -- Default
+                    inRange = distance >= minRange and distance <= range
+                end
+
+                if inRange then                   
                     -- Special validation for line-of-sight attacks (must be in a straight, unblocked line)
                     if attackData.line_of_sight_only then
                         local isStraightLine = (attacker.tileX == target.tileX or attacker.tileY == target.tileY)
                         if isStraightLine then
+                            local dist = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
                             local isBlocked = false
                             if attacker.tileX == target.tileX then -- Vertical line
                                 local dirY = (target.tileY > attacker.tileY) and 1 or -1

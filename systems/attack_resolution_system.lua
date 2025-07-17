@@ -39,12 +39,12 @@ function AttackResolutionSystem.update(dt, world)
                                 target.statusEffects.poison = nil
                             end
                         else -- It's a damage effect
-                            local damage, isCrit = CombatFormulas.calculateFinalDamage(effect.attacker, target, effect.power, effect.critChanceOverride)
-                            CombatActions.applyDirectDamage(target, damage, isCrit, effect.attacker)
+                            CombatActions.applyDirectDamage(target, effect.power, effect.critChanceOverride, effect.attacker)
 
                             -- Handle status effects on successful hit.
-                            if effect.statusEffect then                            
-                                local statusCopy = { -- Create a copy to avoid modifying the original effect data
+                            if effect.statusEffect then
+                                -- Directly use the status effect data from the effect object
+                                local statusCopy = {
                                     type = effect.statusEffect.type,
                                     duration = effect.statusEffect.duration,
                                     force = effect.statusEffect.force,

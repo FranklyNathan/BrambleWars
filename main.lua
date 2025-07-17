@@ -19,6 +19,7 @@ local ProjectileSystem = require("systems.projectile_system")
 local MovementSystem = require("systems/movement_system")
 local EnemyTurnSystem = require("systems/enemy_turn_system")
 local TurnBasedMovementSystem = require("systems/turn_based_movement_system")
+local CounterAttackSystem = require("systems.counter_attack_system")
 local PassiveSystem = require("systems.passive_system")
 local AttackResolutionSystem = require("systems.attack_resolution_system")
 local AetherfallSystem = require("systems.aetherfall_system")
@@ -29,6 +30,7 @@ local BloodrushSystem = require("systems.bloodrush_system")
 local CombatActions = require("modules/combat_actions")
 local EventBus = require("modules/event_bus")
 local Camera = require("modules.camera")
+local WispRegenerationSystem = require("systems/wisp_regeneration_system")
 local InputHandler = require("modules/input_handler")
 
 world = nil -- Will be initialized in love.load after assets are loaded
@@ -49,6 +51,7 @@ local update_systems = {
     TurnBasedMovementSystem,
     MovementSystem,
     AnimationSystem,
+    CounterAttackSystem,
     -- 3. AI and Player Actions (decide what to do)
     EnemyTurnSystem,
     -- 4. Update ongoing effects of actions
@@ -134,7 +137,7 @@ function love.update(dt)
 
         -- Main system update loop
         for _, system in ipairs(update_systems) do
-            system.update(dt, world)
+            if system and system.update then system.update(dt, world) end
         end
 
         -- Check if the turn should end, AFTER all systems have run for this frame.

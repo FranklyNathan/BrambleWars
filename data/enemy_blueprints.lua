@@ -3,31 +3,43 @@
 
 local EnemyBlueprints = {
     brawler = {
-        color = {0.7, 0.7, 0.7},
-        maxHp = 140,
-        attackStat = 60,
-        defenseStat = 50,
+        originType = "cavernborn",
+        HpStat = 12,
+        wispStat = 4,
+        attackStat = 10,
+        defenseStat = 10,
+        magicStat = 10,
+        resistanceStat = 10,
+        witStat = 8,
         movement = 5,
         weight = 7, -- Medium-Heavy
-        attacks = {"slash"}
+        attacks = {"froggy_rush", "slash"}
     },
     archer = {
-        color = {0.7, 0.7, 0.7},
-        maxHp = 110,
-        attackStat = 50,
-        defenseStat = 40,
+        originType = "cavernborn",
+        HpStat = 12,
+        wispStat = 4,
+        attackStat = 10,
+        defenseStat = 10,
+        magicStat = 10,
+        resistanceStat = 10,
+        witStat = 8,
         movement = 4,
         weight = 4, -- Light
-        attacks = {"fireball", "longshot"}
+        attacks = {"froggy_rush", "fireball", "longshot"}
     },
     punter = {
-        color = {0.7, 0.7, 0.7},
-        maxHp = 120,
-        attackStat = 50,
-        defenseStat = 40,
+        originType = "cavernborn",
+        HpStat = 12,
+        wispStat = 4,
+        attackStat = 10,
+        defenseStat = 10,
+        magicStat = 10,
+        resistanceStat = 10,
+        witStat = 8,
         movement = 5,
         weight = 8, -- Heavy
-        attacks = {"uppercut"}
+        attacks = {"froggy_rush", "uppercut"}
     }
 }
 

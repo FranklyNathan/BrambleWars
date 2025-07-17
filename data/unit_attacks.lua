@@ -10,6 +10,7 @@ local StatusEffectManager = require("modules.status_effect_manager")
 local Assets = require("modules.assets")
 local EntityFactory = require("data.entities")
 local AttackBlueprints = require("data.attack_blueprints")
+local CombatFormulas = require("modules.combat_formulas")
 
 local UnitAttacks = {}
 
@@ -74,61 +75,167 @@ local function executeCycleTargetProjectileAttack(attacker, power, world, isPier
     return true
 end
 
+
+-- Helper function to calculate hit chance based on attacker/defender stats and move accuracy
+local function calculate_hit_chance(attacker, defender, attackData)
+    local attackerWit = attacker.witStat
+    local defenderWit = defender.witStat
+    local moveAccuracy = attackData.Accuracy or 100 -- Default to 100 for safety.
+
+    -- Ensure the result is clamped between 0 and 1 for valid probability.
+    return math.max(0, math.min(1, CombatFormulas.calculateHitChance(attackerWit, defenderWit, moveAccuracy)))
+end
+
+-- Helper to calculate the chance of a critical hit
+local function calculate_crit_chance(attacker, defender, attackData)
+    local attackerWit = attacker.witStat
+    local defenderWit = defender.witStat
+    local moveCritChance = attackData.CritChance or 0 -- Default critical hit chance is 0.
+
+    return math.max(0, CombatFormulas.calculateCritChance(attackerWit, defenderWit, moveCritChance))
+end
+
+-- Executes attack hit and returns damage and crit flag.
+local function perform_attack_hit(attacker, defender, attackData, world, statusEffect)
+    local critChance = calculate_crit_chance(attacker, defender, attackData)
+    local isCrit = (love.math.random() < critChance)
+
+    local damage = CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isCrit)
+
+    -- Apply damage
+    --CombatActions.applyDirectDamage(defender, damage, isCrit, attacker)
+
+    if statusEffect then
+        -- Apply the status effect after copying it
+        local statusCopy = {
+           type = statusEffect.type,
+           duration = statusEffect.duration,
+           force = statusEffect.force,
+           attacker = attacker,
+           target = defender,
+        }
+        StatusEffectManager.applyStatusEffect(defender, statusCopy, world)
+    end
+end
+
+-- Helper for cycle_target attacks that deal damage.
+local function execute_cycle_target_damage_attack(attacker, world, statusEffect, powerOverride)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+
+    local attackName = world.selectedAttackName -- Assuming this is set correctly
+    local attackData = AttackBlueprints[attackName]
+
+    -- Calculate and apply the hit chance
+    local hitChance = calculate_hit_chance(attacker, target, attackData)
+    if love.math.random() < hitChance then
+        -- The attack hits:
+        perform_attack_hit(attacker, target, attackData, world, statusEffect)
+    else
+        -- The attack misses: You might want to add a visual or sound effect here for a miss
+        EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1}) -- Light Grey text
+    end
+
+    return true -- Attack (attempt) complete
+end
+
+-- Shared attack functions, now using the new formulas and structure:
+
+UnitAttacks.froggy_rush = function(attacker, power, world)
+    return execute_cycle_target_damage_attack(attacker, world)
+end
+
+UnitAttacks.quill_jab = function(attacker, power, world, target)
+    return execute_cycle_target_damage_attack(attacker, world)
+end
+
+UnitAttacks.snap = function(attacker, power, world, target)
+    return execute_cycle_target_damage_attack(attacker, world)
+end
+
+UnitAttacks.walnut_toss = function(attacker, power, world, target)
+    return execute_cycle_target_damage_attack(attacker, world)
+end
+
 UnitAttacks.slash = function(attacker, power, world)
-    return executeCycleTargetDamageAttack(attacker, power, world, nil)
+    return execute_cycle_target_damage_attack(attacker, world)
 end
 
-UnitAttacks.longshot = function(attacker, power, world)
-    return executeCycleTargetProjectileAttack(attacker, power, world, false)
-end
-
-UnitAttacks.fireball = function(attacker, power, world)
-    return executeCycleTargetProjectileAttack(attacker, power, world, true)
-end
-
-UnitAttacks.venom_stab = function(attacker, power, world)
+UnitAttacks.venom_stab = function(attacker, power, world, target)
     local status = {type = "poison", duration = 3} -- Lasts 3 turns
-    return executeCycleTargetDamageAttack(attacker, power, world, status)
+    return execute_cycle_target_damage_attack(attacker, world, status, power)
 end
 
-UnitAttacks.phantom_step = function(square, power, world)
-    -- 1. Get the selected target from the cycle targeting system.
-    if not world.cycleTargeting.active or not world.cycleTargeting.targets[world.cycleTargeting.selectedIndex] then
-        return false -- Failsafe, should not happen if called correctly.
+UnitAttacks.fireball = function(attacker, power, world, target)
+    -- Ranged attack with a piercing effect
+    -- Needs a different implementation or changes in EffectFactory.addAttackEffect.
+    -- For now, let's just apply damage to the first target hit as a placeholder.
+    local attackData = AttackBlueprints.fireball
+
+    local hitChance = calculate_hit_chance(attacker, target, attackData)
+    if love.math.random() < hitChance then
+        perform_attack_hit(attacker, target, attackData, world, nil, power)
+    else
+        EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1})
     end
-    local target = world.cycleTargeting.targets[world.cycleTargeting.selectedIndex]
-
-    -- 2. Calculate the destination tile behind the target.
-    local dx, dy = 0, 0
-    if target.lastDirection == "up" then dy = 1
-    elseif target.lastDirection == "down" then dy = -1
-    elseif target.lastDirection == "left" then dx = 1
-    elseif target.lastDirection == "right" then dx = -1
-    end
-    local teleportTileX, teleportTileY = target.tileX + dx, target.tileY + dy
-    local teleportX, teleportY = Grid.toPixels(teleportTileX, teleportTileY)
-
-    -- 3. Teleport the attacker. The input handler already validated this tile is empty.
-    square.x, square.y = teleportX, teleportY
-    square.targetX, square.targetY = teleportX, teleportY
-    square.tileX, square.tileY = teleportTileX, teleportTileY
-
-    -- 4. Make the attacker face the target from the new position.
-    square.lastDirection = (target.tileX > square.tileX and "right") or (target.tileX < square.tileX and "left") or (target.tileY > square.tileY and "down") or "up"
-
-    -- 5. Execute the attack on the target's tile.
-    local status = {type = "airborne", duration = 2, attacker = square} -- Ensure the duration is specified
-    local targetType = (square.type == "player") and "enemy" or "player"
-    EffectFactory.addAttackEffect(target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, square, power, false, targetType, nil, status) -- Applying airborne here
-
-
-
     return true
 end
 
-UnitAttacks.invigorating_aura = function(attacker, power, world)
-    local target = get_and_face_cycle_target(attacker, world)
+UnitAttacks.uppercut = function(attacker, power, world, target)
+    local status = {type = "airborne", duration = 2} -- Ensure the duration is specified
+    return execute_cycle_target_damage_attack(attacker, world, status, power)
+end
+
+-- The rest of your unit attack functions remain largely unchanged, as they don't directly involve damage calculation:
+
+UnitAttacks.longshot = function(attacker, power, world, target)
+    -- Projectile attack, visual effect only, damage handled on projectile collision
+    return executeCycleTargetProjectileAttack(attacker, power, world, false)
+end
+
+UnitAttacks.phantom_step = function(square, power, world, target)
+     -- 1. Get the selected target from the cycle targeting system.
+     if not world.cycleTargeting.active or not world.cycleTargeting.targets[world.cycleTargeting.selectedIndex] then
+         return false -- Failsafe, should not happen if called correctly.
+     end
+     target = world.cycleTargeting.targets[world.cycleTargeting.selectedIndex]
+ 
+     -- 2. Calculate the destination tile behind the target.
+     local dx, dy = 0, 0
+     if target.lastDirection == "up" then dy = 1
+     elseif target.lastDirection == "down" then dy = -1
+     elseif target.lastDirection == "left" then dx = 1
+     elseif target.lastDirection == "right" then dx = -1
+     end
+     local teleportTileX, teleportTileY = target.tileX + dx, target.tileY + dy
+     local teleportX, teleportY = Grid.toPixels(teleportTileX, teleportTileY)
+ 
+     -- 3. Teleport the attacker. The input handler already validated this tile is empty.
+     square.x, square.y = teleportX, teleportY
+     square.targetX, square.targetY = teleportX, teleportY
+     square.tileX, square.tileY = teleportTileX, teleportTileY
+ 
+     -- 4. Make the attacker face the target from the new position.
+     square.lastDirection = (target.tileX > square.tileX and "right") or (target.tileX < square.tileX and "left") or (target.tileY > square.tileY and "down") or "up"
+ 
+     -- No attack on the target's tile after teleport
+ 
+     return true
+ end
+
+UnitAttacks.invigorating_aura = function(attacker, power, world, target)
+    target = get_and_face_cycle_target(attacker, world)
     if not target then return false end
+
+    -- Support and Utility moves can now miss based on Wit.
+    local attackData = AttackBlueprints.invigorating_aura
+    local hitChance = calculate_hit_chance(attacker, target, attackData)
+
+    if love.math.random() > hitChance then
+        EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1}) -- Light Grey text
+        return true -- Attack misses, but turn is still consumed.
+    end
+
     -- 3. If the friendly target has already acted, refresh their turn.
     if target.hasActed then
         target.hasActed = false
@@ -140,7 +247,7 @@ UnitAttacks.invigorating_aura = function(attacker, power, world)
     return true
 end
 
-UnitAttacks.eruption = function(attacker, power, world)
+UnitAttacks.eruption = function(attacker, power, world, target)
     -- This is the new model for a ground_aim AoE attack.
     -- 1. Get the target tile from the ground aiming cursor.
     local targetTileX, targetTileY = world.mapCursorTile.x, world.mapCursorTile.y
@@ -162,14 +269,20 @@ UnitAttacks.eruption = function(attacker, power, world)
 end
 
 UnitAttacks.shockwave = function(attacker, power, world)    
-    -- The targeting and effect application is handled in the CombatActions module.
-    -- This function simply returns true to indicate the attack was triggered.
-    return CombatActions.executeShockwave(attacker, AttackBlueprints.shockwave, world)
-end
+    -- Shockwave now checks for hit/miss on each target individually.
+    local attackData = AttackBlueprints.shockwave
+    local targets = WorldQueries.findValidTargetsForAttack(attacker, "shockwave", world)
 
-UnitAttacks.uppercut = function(attacker, power, world)
-    local status = {type = "airborne", duration = 2} -- Ensure the duration is specified
-    return executeCycleTargetDamageAttack(attacker, power, world, status)
+    for _, target in ipairs(targets) do
+        local hitChance = calculate_hit_chance(attacker, target, attackData)
+        if love.math.random() < hitChance then
+            StatusEffectManager.applyStatusEffect(target, {type = "paralyzed", duration = 2, attacker = attacker}, world)
+        else
+            EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1})
+        end
+    end
+
+    return true -- Turn is consumed even if all attacks miss.
 end
 
 UnitAttacks.quick_step = function(attacker, power, world)

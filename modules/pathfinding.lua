@@ -39,7 +39,7 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
             
             -- Check if the neighbor is within map boundaries before proceeding.
             if nextTileX >= 0 and nextTileX < world.map.width and nextTileY >= 0 and nextTileY < world.map.height then
-                if nextCost <= startUnit.movement then
+                if startUnit.movement and nextCost <= startUnit.movement then
                     -- If we haven't visited this tile, or found a cheaper path to it
                     if not cost_so_far[nextPosKey] or nextCost < cost_so_far[nextPosKey] then
                         local isObstacle = WorldQueries.isTileAnObstacle(nextTileX, nextTileY, world)
