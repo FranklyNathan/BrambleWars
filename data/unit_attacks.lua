@@ -6,6 +6,7 @@ local WorldQueries = require("modules.world_queries")
 local CombatActions = require("modules.combat_actions")
 local AttackPatterns = require("modules.attack_patterns")
 local Grid = require("modules.grid")
+local StatusEffectManager = require("modules.status_effect_manager")
 local Assets = require("modules.assets")
 local EntityFactory = require("data.entities")
 local AttackBlueprints = require("data.attack_blueprints")
@@ -209,7 +210,7 @@ UnitAttacks.quick_step = function(attacker, power, world)
 
             for _, unitToHit in ipairs(targetsToCheck) do
                 if unitToHit.tileX == pathTileX and unitToHit.tileY == pathTileY and unitToHit.hp > 0 then                
-                    StatusEffectManager.applyStatusEffect(unitToHit, {type = "airborne", attacker = attacker}, world)
+                    StatusEffectManager.applyStatusEffect(unitToHit, {type = "airborne", duration = 2, attacker = attacker}, world)
                 end
             end
         end
