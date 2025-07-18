@@ -11,7 +11,7 @@ function EffectFactory.init(world)
     world_ref = world
 end
 
-function EffectFactory.addAttackEffect(effectX, effectY, effectWidth, effectHeight, effectColor, delay, attacker, power, isHeal, targetType, critChanceOverride, statusEffect, specialProperties)
+function EffectFactory.addAttackEffect(attacker, attackName, effectX, effectY, effectWidth, effectHeight, effectColor, delay, isHeal, targetType, critOverride, statusEffect, specialProperties)
     table.insert(world_ref.attackEffects, {
         x = effectX, y = effectY, width = effectWidth, height = effectHeight,
         color = effectColor,
@@ -19,9 +19,10 @@ function EffectFactory.addAttackEffect(effectX, effectY, effectWidth, effectHeig
         currentFlashTimer = Config.FLASH_DURATION,
         flashDuration = Config.FLASH_DURATION,
         attacker = attacker,
-        power = power,
-        amount = isHeal and power or nil, -- Keep amount for healing logic for now
-        critChanceOverride = critChanceOverride,
+        -- New centralized attack effect attributes
+        attackName = attackName, -- Attack name is required now
+        critOverride = critOverride, -- Instead of critChanceOverride
+        amount = isHeal and 5 or nil, -- Keep amount for healing logic for now - hardcoded for now
         isHeal = isHeal,
         effectApplied = false,
         targetType = targetType,

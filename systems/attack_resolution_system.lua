@@ -4,6 +4,7 @@
 -- of all active attack effects in the world.
 
 local CombatActions = require("modules.combat_actions")
+local AttackBlueprints = require("data.attack_blueprints")
 local CombatFormulas = require("modules.combat_formulas")
 local StatusEffectManager = require("modules.status_effect_manager")
 
@@ -39,17 +40,22 @@ function AttackResolutionSystem.update(dt, world)
                                 target.statusEffects.poison = nil
                             end
                         else -- It's a damage effect
-                            CombatActions.applyDirectDamage(target, effect.power, effect.critChanceOverride, effect.attacker)
+                            local attackData = AttackBlueprints[effect.attackName]
+                            if attackData then
+                                -- Calculate the damage
+                                local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, effect.critOverride)
+                                -- Apply Damage using centralized function
+                                CombatActions.applyDirectDamage(target, damage, effect.critOverride, effect.attacker)
 
-                            -- Handle status effects on successful hit.
-                            if effect.statusEffect then
-                                -- Directly use the status effect data from the effect object
-                                local statusCopy = {
-                                    type = effect.statusEffect.type,
-                                    duration = effect.statusEffect.duration,
+                                -- Handle status effects on successful hit.
+                                if effect.statusEffect then
+                                    -- Directly use the status effect data from the effect object
+                                    local statusCopy = {
+                                        type = effect.statusEffect.type,
+                                        duration = effect.statusEffect.duration,
                                     force = effect.statusEffect.force,
                                     attacker = effect.attacker,
-                                    -- Direction is calculated below
+                                        -- Direction is calculated below
                                 }
                                  -- Default direction is the attacker's facing. This is correct for most status effects and directional pushes.
                                 statusCopy.direction = effect.attacker.lastDirection
@@ -59,6 +65,7 @@ function AttackResolutionSystem.update(dt, world)
                                     statusCopy.direction = StatusEffectManager.calculateCareeningDirection(target, effect.x, effect.y, effect.width, effect.height)
                                 end
                                 StatusEffectManager.applyStatusEffect(target, statusCopy, world) -- Call StatusEffectManager directly
+                                end
                             end
                         end
                     end

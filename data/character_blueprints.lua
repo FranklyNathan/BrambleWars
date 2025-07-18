@@ -7,20 +7,20 @@ local CharacterBlueprints = {
     drapionsquare = {
         displayName = "Drapion",
         originType = "cavernborn",
-        HpStat = 12,
-        wispStat = 2,
-        attackStat = 10,
+        HpStat = 12, -- Multiply by 10 to get a charcter's maximum HP
+        wispStat = 2, -- Starting (and max) Wisp
+        attackStat = 10, -- Physical attacks use Attack/Defense stat in calcs
         defenseStat = 10,
-        magicStat = 10,
+        magicStat = 10, -- Magical attacks use Magic/Resistance stat
         resistanceStat = 10,
-        witStat = 8,
-        movement = 7,
+        witStat = 8, -- Used when calculating if a move hits/misses and if a move is a critical hit
+        movement = 7, -- How many tiles a character can move in a turn
         weight = 8, -- Heavy
         dominantColor = {0.5, 0.2, 0.8}, -- Drapion: Purple
-        passives = {"Bloodrush"},
+        passives = {"Bloodrush"}, -- Characters can have multiple 
         attacks = {
             "froggy_rush", "venom_stab", "phantom_step"
-        }
+        } --The first attack must always be a basic attack, the rest can be any attack(s) defined in attack_blueprints.lua
     },
     florgessquare = {
         displayName = "Florges",

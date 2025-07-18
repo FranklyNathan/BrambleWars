@@ -108,28 +108,35 @@ world.selectedUnit = unit
             world.attackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, world.reachableTiles)
             world.movementPath = {} -- Start with an empty path
 
-        elseif unit and unit.hasActed then
-           -- Toggle info menu for friendly units that have already acted
-           if world.unitInfoMenu.active and world.unitInfoMenu.unit == unit then
-               world.unitInfoMenu.active = false
-               world.unitInfoMenu.unit = nil
-           else
-               world.unitInfoMenu.active = true
-               world.unitInfoMenu.unit = unit
-           end
-        else
-           -- Check if the cursor is over a unit of the opposite type: toggle unit info menu.
-           local otherUnit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
-           if otherUnit and otherUnit.type ~= (unit and unit.type) then
-               if world.unitInfoMenu.active and world.unitInfoMenu.unit == otherUnit then
-                   world.unitInfoMenu.active = false; world.unitInfoMenu.unit = nil
-               else world.unitInfoMenu.active = true; world.unitInfoMenu.unit = otherUnit end
-           end
-       end
-   end
+            print("Selected unit:", unit.playerType)
+
+        else -- If not selecting a unit, check for other units to show info.
+            local otherUnit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
+            if otherUnit then
+                -- If the cursor is over a unit that is not selectable, toggle its info menu.
+                print("Found unit at cursor (not selectable):", otherUnit.displayName)
+                if world.unitInfoMenu.active and world.unitInfoMenu.unit == otherUnit then
+                    world.unitInfoMenu.active = false
+                    world.unitInfoMenu.unit = nil
+                    print("Closing info menu.")
+                else
+                    world.unitInfoMenu.active = true
+                    world.unitInfoMenu.unit = otherUnit
+                    print("Opening info menu for:", otherUnit.displayName)
+                end
+            end
+        end
+    end
 
     if not world.selectedUnit then
         local unit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
+        if unit then print("Cursor over unit (no selection):", unit.displayName) end
+    end
+
+    -- If there's no unit at the cursor, or we're interacting with one via the unit info menu, 
+    -- and the map menu isn't already open, open the map menu.
+    if key == "m" and not world.mapMenu.active and (not world.unitInfoMenu.active or world.unitInfoMenu.unit == nil) then
+        world.mapMenu.active = true; world.mapMenu.options = {{text = "End Turn", key = "end_turn"}}; world.mapMenu.selectedIndex = 1; world.playerTurnState = "map_menu"
     end
 end
 

@@ -9,7 +9,6 @@ local Grid = require("modules.grid")
 local StatusEffectManager = require("modules.status_effect_manager")
 local Assets = require("modules.assets")
 local EntityFactory = require("data.entities")
-local AttackBlueprints = require("data.attack_blueprints")
 local CombatFormulas = require("modules.combat_formulas")
 
 local UnitAttacks = {}
@@ -51,7 +50,7 @@ local function get_and_face_cycle_target(attacker, world)
 end
 
 -- Helper for cycle_target attacks that deal damage.
-local function executeCycleTargetDamageAttack(attacker, power, world, statusEffect)
+local function executeCycleTargetDamageAttack(attacker, attackName, world, statusEffect, critOverride)
     local target = get_and_face_cycle_target(attacker, world)
     if not target then return false end
 
@@ -59,12 +58,12 @@ local function executeCycleTargetDamageAttack(attacker, power, world, statusEffe
     local targetType = (attacker.type == "player") and "enemy" or "player"
 
     -- 3. Execute the attack effect directly on the target's tile.
-    EffectFactory.addAttackEffect(target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, attacker, power, false, targetType, nil, statusEffect)
+    EffectFactory.addAttackEffect(attacker, attackName, target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType, critOverride, statusEffect)
     return true
 end
 
 -- Helper for cycle_target attacks that fire a projectile.
-local function executeCycleTargetProjectileAttack(attacker, power, world, isPiercing)
+local function executeCycleTargetProjectileAttack(attacker, attackName, world, isPiercing)
     local target = get_and_face_cycle_target(attacker, world)
     if not target then return false end
 
@@ -86,14 +85,6 @@ local function calculate_hit_chance(attacker, defender, attackData)
     return math.max(0, math.min(1, CombatFormulas.calculateHitChance(attackerWit, defenderWit, moveAccuracy)))
 end
 
--- Helper to calculate the chance of a critical hit
-local function calculate_crit_chance(attacker, defender, attackData)
-    local attackerWit = attacker.witStat
-    local defenderWit = defender.witStat
-    local moveCritChance = attackData.CritChance or 0 -- Default critical hit chance is 0.
-
-    return math.max(0, CombatFormulas.calculateCritChance(attackerWit, defenderWit, moveCritChance))
-end
 
 -- Executes attack hit and returns damage and crit flag.
 local function perform_attack_hit(attacker, defender, attackData, world, statusEffect)

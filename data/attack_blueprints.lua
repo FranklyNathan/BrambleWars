@@ -15,15 +15,15 @@
 local AttackBlueprints = {
     -- Basic Attacks
     froggy_rush = {
-        power = 20,
-        wispCost = 0,
-        originType = "marshborn", 
-        Accuracy = 100,
-        CritChance = 5,
-        useType = "physical",
-        targeting_style = "cycle_target",
-        range = 1,
-        rangetype = "melee_only"
+        power = 20, -- Base power of the move, used in damage calculations
+        wispCost = 0, -- Cost of the move is Wisp, a resource used for attacks
+        originType = "marshborn", -- Similar to types in Pokemon. Currently marshborn, forestborn, cavernborn
+        Accuracy = 100, -- Odds of hitting, used in accuracy calculations
+        CritChance = 5, -- Odds of a critical hit (which does double damage), used in crit calculations
+        useType = "physical", -- Physical uses Attack/Defense stat in calcs, Magical uses Magic/Resistance stat, other options don't do damage
+        targeting_style = "cycle_target", --See above for targeting styles
+        range = 1, -- Range of the attack, in tiles
+        rangetype = "melee_only" -- Type of range, either melee_only, ranged_only, or standard_range. Range of the attack, in tiles. Needed to be added for counter attacks since there was no way to differentiate between 2 (hits 1-2) and 2 (only hits 2)
     },
 
     quill_jab = {

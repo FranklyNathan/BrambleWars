@@ -7,6 +7,7 @@ local Assets = require("modules.assets")
 local CharacterBlueprints = require("data.character_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
 local WorldQueries = require("modules.world_queries")
+local UnitInfoMenu = require("modules.unit_info_menu")
 local Renderer = {}
 
 --------------------------------------------------------------------------------
@@ -691,6 +692,9 @@ local function draw_screen_space_ui(world)
             love.graphics.print(option.text, menuX + 10, yPos)
         end
     end
+
+    -- Draw Unit Info Menu (This was missing)
+    UnitInfoMenu.draw(world)
 end
 
 --------------------------------------------------------------------------------

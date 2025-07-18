@@ -17,7 +17,8 @@ function UnitInfoMenu.draw(world)
         local menuHeight = 200 -- Starting height, will expand
 
         -- Dynamically calculate menu height based on content.
-        local numStats = 8 -- Number of stats to display
+        -- 8 stats + "Moves:" label + 1 line for bottom padding = 10 lines.
+        local numStats = 10
         local lineHeight = 18
         local contentHeight = 20 + numStats * lineHeight + (#unit.attacks) * lineHeight --Title + stats height
         menuHeight = math.max(menuHeight, contentHeight)
@@ -33,7 +34,15 @@ function UnitInfoMenu.draw(world)
         -- Set text color
         love.graphics.setColor(1, 1, 1, 1)
         -- Draw unit name and type at the top
-        love.graphics.print(unit.playerType .. " (" .. unit.originType .. ")", menuX + 10, menuY + 10)
+        local unitName = unit.displayName
+        if not unitName then
+           if unit.enemyType then
+               unitName = unit.enemyType -- For enemies
+           else
+               unitName = "Unit" -- Default label
+           end
+        end
+        love.graphics.print(unitName .. " (" .. unit.originType .. ")", menuX + 10, menuY + 10)
         local yOffset = menuY + 30
         love.graphics.print("HP: " .. math.floor(unit.hp) .. " / " .. unit.maxHp, menuX + 10, yOffset) yOffset = yOffset + lineHeight
         love.graphics.print("Wisp: " .. math.floor(unit.wisp) .. " / " .. unit.maxWisp, menuX + 10, yOffset) yOffset = yOffset + lineHeight

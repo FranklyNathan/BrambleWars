@@ -39,7 +39,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
         square.originType = blueprint.originType
         square.HpStat = blueprint.HpStat
-        square.maxHp = blueprint.HpStat * 100
+        square.maxHp = blueprint.HpStat * 10
         square.attackStat = blueprint.attackStat
         square.defenseStat = blueprint.defenseStat
         square.magicStat = blueprint.magicStat
@@ -81,13 +81,14 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         local blueprint = EnemyBlueprints[subType]
         square.originType = blueprint.originType
         square.HpStat = blueprint.HpStat
-        square.maxHp = blueprint.HpStat * 100
+        square.maxHp = blueprint.HpStat * 10
         square.attackStat = blueprint.attackStat
         square.defenseStat = blueprint.defenseStat
         square.magicStat = blueprint.magicStat
         square.resistanceStat = blueprint.resistanceStat
         square.witStat = blueprint.witStat
         square.maxWisp = blueprint.wispStat
+        square.weight = blueprint.weight
         square.attacks = blueprint.attacks
         square.displayName = subType -- Use enemy type as display name
 

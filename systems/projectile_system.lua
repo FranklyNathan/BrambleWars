@@ -2,6 +2,7 @@
 -- Handles the movement and collision logic for all projectiles.
 
 local Grid = require("modules.grid")
+local AttackBlueprints = require("data.attack_blueprints")
 local EffectFactory = require("modules.effect_factory")
 
 local ProjectileSystem = {}
@@ -20,7 +21,7 @@ function ProjectileSystem.update(dt, world)
             p.x, p.y = Grid.getDestination(p.x, p.y, projComp.direction, projComp.moveStep)
             local currentTileX, currentTileY = Grid.toTile(p.x, p.y)
 
-            -- Check for map boundary collision
+          -- Check for map boundary collision
             if currentTileX < 0 or currentTileX >= world.map.width or
                currentTileY < 0 or currentTileY >= world.map.height then
                 p.isMarkedForDeletion = true
@@ -46,7 +47,14 @@ function ProjectileSystem.update(dt, world)
                     for _, target in ipairs(targets) do
                         if target.hp > 0 and not projComp.hitTargets[target] and target.tileX == currentTileX and target.tileY == currentTileY then
                             -- Collision detected! Create an attack effect to deal damage.
-                            EffectFactory.addAttackEffect(target.x, target.y, target.size, target.size, {1, 0.5, 0, 1}, 0, projComp.attacker, projComp.power, false, targetType, nil, projComp.statusEffect)
+                            local attackName
+                            for k, v in pairs(AttackBlueprints) do
+                                if v.power == projComp.power then
+                                    attackName = k
+                                    break
+                                end
+                            end
+                            EffectFactory.addAttackEffect(projComp.attacker, attackName, target.x, target.y, target.size, target.size, {1, 0.5, 0, 1}, 0, false, targetType, false, projComp.statusEffect)
 
                             -- Mark target as hit to prevent re-hitting
                             projComp.hitTargets[target] = true
