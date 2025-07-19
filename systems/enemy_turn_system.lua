@@ -164,85 +164,133 @@ function EnemyTurnSystem.update(dt, world)
     end
 
     if actingEnemy then
-        local targetPlayer = findClosestPlayer(actingEnemy, world)
-        if not targetPlayer then actingEnemy.hasActed = true; return end
-
-        -- 1. Decide which attack to use (for now, always the first one).
-        local blueprint = EnemyBlueprints[actingEnemy.enemyType]
-        local attackName = blueprint and blueprint.attacks and blueprint.attacks[1]
-        if not attackName then actingEnemy.hasActed = true; return end
-        local attackData = AttackBlueprints[attackName]
-        if not attackData then actingEnemy.hasActed = true; return end
-
-        -- 2. Determine if an attack is possible and from where.
-        local canAttackNow = false
-        local bestAttackPosKey = nil
-        local reachableTiles, came_from = Pathfinding.calculateReachableTiles(actingEnemy, world)
-
-        -- If the enemy has no movement, it cannot move to attack.
-        local movementRange = WorldQueries.getUnitMovement(actingEnemy)
-        if movementRange == 0 then reachableTiles = {} end
-
-        if attackData.targeting_style == "cycle_target" then
-            -- Check if we can attack from the current position.
-            local currentTargets = WorldQueries.findValidTargetsForAttack(actingEnemy, attackName, world)
-            for _, t in ipairs(currentTargets) do if t == targetPlayer then canAttackNow = true; break end end
-
-            -- If not, find a better position.
-            if not canAttackNow then
-                bestAttackPosKey = findBestCycleTargetAttackPosition(actingEnemy, targetPlayer, attackName, reachableTiles, world)
-            end
-
-        elseif attackData.targeting_style == "directional_aim" then
-            local patternFunc = AttackPatterns[attackName]
-            if patternFunc and WorldQueries.isTargetInPattern(actingEnemy, patternFunc, {targetPlayer}, world) then
-                canAttackNow = true
-            else
-                bestAttackPosKey = findBestAttackPosition(actingEnemy, targetPlayer, patternFunc, reachableTiles, world)
-            end
-        elseif attackData.targeting_style == "auto_hit_all" then
-            -- For auto-hit attacks, just check if any valid targets exist from the current spot.
-            local currentTargets = WorldQueries.findValidTargetsForAttack(actingEnemy, attackName, world)
-            if #currentTargets > 0 then
-                canAttackNow = true
+        -- If the enemy just finished moving, check what to do next.
+        if not actingEnemy.components.movement_path then
+            if actingEnemy.components.ai and actingEnemy.components.ai.pending_attack then
+                -- Execute the pending attack.
+                local pending = actingEnemy.components.ai.pending_attack
+                world.cycleTargeting.active = true
+                world.cycleTargeting.targets = {pending.target}
+                world.cycleTargeting.selectedIndex = 1
+                world.selectedAttackName = pending.name
+                UnitAttacks[pending.name](actingEnemy, AttackBlueprints[pending.name].power, world)
+                world.cycleTargeting.active = false
+                world.selectedAttackName = nil
+                actingEnemy.components.ai.pending_attack = nil
+                actingEnemy.hasActed = true
+                return
+            elseif actingEnemy.components.ai and actingEnemy.components.ai.is_moving_to_reposition then
+                -- The repositioning move is complete. End the turn.
+                actingEnemy.components.ai.is_moving_to_reposition = nil
+                actingEnemy.hasActed = true
+                return
             end
         end
 
-        -- 3. Execute the chosen action.
-        if canAttackNow then
-            -- Attack from current position.
-            if attackData.targeting_style == "cycle_target" then
-                -- The AI needs to "select" its target for the attack function to work.
-                world.cycleTargeting.active = true
-                world.cycleTargeting.targets = {targetPlayer}
-                world.cycleTargeting.selectedIndex = 1
-            end
-            UnitAttacks[attackName](actingEnemy, attackData.power, world)
-            world.cycleTargeting.active = false -- Clean up
-            actingEnemy.hasActed = true
-            return
+        local targetPlayer = findClosestPlayer(actingEnemy, world)
+        if not targetPlayer then actingEnemy.hasActed = true; return end
 
-        elseif bestAttackPosKey then
-            -- Move to the best attack position. The AI will attack on its next update after moving.
-            local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-            local path = Pathfinding.reconstructPath(came_from, startKey, bestAttackPosKey)
-            if path and #path > 0 then actingEnemy.components.movement_path = path; return end
+        -- 1. Find the best possible action (attack and position)
+        local bestAction = nil
+        local bestScore = -1
 
-        else
-            -- Cannot attack, so just move closer. This consumes the turn.
-            local moveOnlyDestinationKey = findBestMoveOnlyTile(actingEnemy, targetPlayer, reachableTiles, world)
-            if moveOnlyDestinationKey then
-                local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-                local path = Pathfinding.reconstructPath(came_from, startKey, moveOnlyDestinationKey)
-                if path and #path > 0 then 
-                     -- Before assigning the path, double-check if the destination tile is still reachable and landable.
-                     if reachableTiles[moveOnlyDestinationKey] and reachableTiles[moveOnlyDestinationKey].landable then actingEnemy.components.movement_path = path end
+        local reachableTiles, came_from = Pathfinding.calculateReachableTiles(actingEnemy, world)
+        local movementRange = WorldQueries.getUnitMovement(actingEnemy)
+        if movementRange == 0 then reachableTiles = {} end
+
+        local blueprint = EnemyBlueprints[actingEnemy.enemyType]
+        if not blueprint or not blueprint.attacks then actingEnemy.hasActed = true; return end
+
+        for _, attackName in ipairs(blueprint.attacks) do
+            local attackData = AttackBlueprints[attackName]
+            if attackData and actingEnemy.wisp >= (attackData.wispCost or 0) then
+                -- A simple scoring heuristic: power minus a penalty for wisp cost.
+                local score = (attackData.power or 0) - (attackData.wispCost or 0) * 5
+
+                -- Check if we can attack from the current position.
+                local currentTargets = WorldQueries.findValidTargetsForAttack(actingEnemy, attackName, world)
+                local canAttackNow = false
+                for _, t in ipairs(currentTargets) do if t == targetPlayer then canAttackNow = true; break end end
+
+                if canAttackNow then
+                    if score > bestScore then
+                        bestScore = score
+                        bestAction = {
+                            type = "attack_now",
+                            attackName = attackName,
+                            attackData = attackData
+                        }
+                    end
+                end
+
+                -- Check if we can move to a position to attack.
+                -- For now, this AI logic only considers moving for cycle_target attacks.
+                if attackData.targeting_style == "cycle_target" then
+                    local bestMovePosKey = findBestCycleTargetAttackPosition(actingEnemy, targetPlayer, attackName, reachableTiles, world)
+                    if bestMovePosKey then
+                        -- A move-then-attack action is slightly less preferable than an attack-now action.
+                        local moveAttackScore = score - 1
+                        if moveAttackScore > bestScore then
+                            bestScore = moveAttackScore
+                            bestAction = {
+                                type = "move_and_attack",
+                                attackName = attackName,
+                                attackData = attackData,
+                                destinationKey = bestMovePosKey
+                            }
+                        end
+                    end
                 end
             end
         end
 
-        -- After moving (or failing to), the enemy's turn is over.
-        actingEnemy.hasActed = true
+        -- 2. Execute the chosen action
+        if bestAction then -- An optimal action was found
+            if bestAction.type == "attack_now" then
+                -- Attack from the current position.
+                world.cycleTargeting.active = true
+                world.cycleTargeting.targets = {targetPlayer}
+                world.cycleTargeting.selectedIndex = 1
+                world.selectedAttackName = bestAction.attackName -- Set the attack name for the attack function
+
+                UnitAttacks[bestAction.attackName](actingEnemy, bestAction.attackData.power, world)
+
+                world.cycleTargeting.active = false -- Clean up
+                world.selectedAttackName = nil
+                actingEnemy.hasActed = true
+                return
+
+            elseif bestAction.type == "move_and_attack" then
+                -- Move to the best attack position, and set a pending attack.
+                local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
+                local path = Pathfinding.reconstructPath(came_from, startKey, bestAction.destinationKey)
+                if path and #path > 0 then
+                    actingEnemy.components.movement_path = path
+                    -- Set the pending attack that will be executed after the move is complete.
+                    actingEnemy.components.ai.pending_attack = {
+                        name = bestAction.attackName,
+                        target = targetPlayer
+                    }
+                else
+                    -- Pathfinding failed for some reason, end turn.
+                    actingEnemy.hasActed = true
+                end
+                return
+            end
+        else -- No attack is possible, so just move closer to the target.
+            local moveDestinationKey = findBestMoveOnlyTile(actingEnemy, targetPlayer, reachableTiles, world)
+            if moveDestinationKey then
+                local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
+                local path = Pathfinding.reconstructPath(came_from, startKey, moveDestinationKey)
+                if path and #path > 0 then
+                    actingEnemy.components.movement_path = path
+                    actingEnemy.components.ai.is_moving_to_reposition = true
+                    return -- Let the movement system take over.
+                end
+            end
+            -- If no move is possible, end the turn.
+            actingEnemy.hasActed = true
+        end
     else
         -- No more enemies to act, which means the enemy turn is over.
         world.turnShouldEnd = true

@@ -1,0 +1,89 @@
+-- systems/battle_info_system.lua
+-- Calculates and updates the data for the battle forecast UI.
+
+local CombatFormulas = require("modules.combat_formulas")
+local AttackBlueprints = require("data.attack_blueprints")
+local CharacterBlueprints = require("data.character_blueprints")
+local EnemyBlueprints = require("data.enemy_blueprints")
+local AttackPatterns = require("modules.attack_patterns")
+
+local BattleInfoSystem = {}
+
+function BattleInfoSystem.update(dt, world)
+    local menu = world.battleInfoMenu
+    if not menu then return end
+
+    if world.playerTurnState == "cycle_targeting" and world.cycleTargeting.active then
+        local attacker = world.actionMenu.unit
+        local target = world.cycleTargeting.targets[world.cycleTargeting.selectedIndex]
+        local attackName = world.selectedAttackName
+        local attackData = attackName and AttackBlueprints[attackName]
+
+        if not (attacker and target and attackData) then
+            menu.active = false
+            return
+        end
+
+        menu.active = true
+        menu.attacker = attacker
+        menu.target = target
+        menu.targetName = target.displayName or target.enemyType
+
+        -- Current Health
+        menu.playerHP = math.floor(attacker.hp)
+        menu.enemyHP = math.floor(target.hp)
+
+        -- Player's attack forecast
+        local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false)
+        menu.playerDamage = tostring(playerDmg)
+        if CombatFormulas.calculateTypeEffectiveness(attackData.originType, target.originType) > 1 then
+            menu.playerDamage = menu.playerDamage .. "!"
+        end
+        local playerHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(attacker.witStat, target.witStat, attackData.Accuracy or 100)))
+        local playerCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(attacker.witStat, target.witStat, attackData.CritChance or 0)))
+        menu.playerHitChance = math.floor(playerHit * 100)
+        menu.playerCritChance = math.floor(playerCrit * 100)
+
+        -- Enemy's counter-attack forecast
+        local defenderBlueprint = (target.type == "player") and CharacterBlueprints[target.playerType] or EnemyBlueprints[target.enemyType] -- target is the defender
+        local counterAttackName = defenderBlueprint and defenderBlueprint.attacks and defenderBlueprint.attacks[1]
+
+        if not counterAttackName then
+            menu.enemyDamage, menu.enemyHitChance, menu.enemyCritChance = "--", "--", "--"
+            return
+        end
+
+        local counterAttackData = AttackBlueprints[counterAttackName]
+        local pattern = counterAttackData and AttackPatterns[counterAttackData.patternType]
+        local inCounterRange = false
+
+        if pattern and type(pattern) == "table" then
+            local dx = attacker.tileX - target.tileX
+            local dy = attacker.tileY - target.tileY
+            for _, p_coord in ipairs(pattern) do
+                if p_coord.dx == dx and p_coord.dy == dy then
+                    inCounterRange = true
+                    break
+                end
+            end
+        end
+
+        if inCounterRange then
+            local enemyDmg = CombatFormulas.calculateFinalDamage(target, attacker, counterAttackData, false)
+            menu.enemyDamage = tostring(enemyDmg)
+            if CombatFormulas.calculateTypeEffectiveness(counterAttackData.originType, attacker.originType) > 1 then
+                menu.enemyDamage = menu.enemyDamage .. "!"
+            end
+            local enemyHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(target.witStat, attacker.witStat, counterAttackData.Accuracy or 100)))
+            local enemyCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(target.witStat, attacker.witStat, counterAttackData.CritChance or 0)))
+            menu.enemyHitChance = math.floor(enemyHit * 100)
+            menu.enemyCritChance = math.floor(enemyCrit * 100)
+        else
+            menu.enemyDamage, menu.enemyHitChance, menu.enemyCritChance = "--", "--", "--"
+        end
+    else
+        menu.active = false
+    end
+end
+
+return BattleInfoSystem

@@ -4,6 +4,7 @@
 local Pathfinding = require("modules.pathfinding")
 local AttackPatterns = require("modules.attack_patterns")
 local AttackBlueprints = require("data.attack_blueprints")
+local EnemyBlueprints = require("data.enemy_blueprints")
 local CharacterBlueprints = require("data.character_blueprints")
 local Grid = require("modules.grid")
 local WorldQueries = require("modules.world_queries")
@@ -13,7 +14,7 @@ local RangeCalculator = {}
 -- Calculates all tiles a unit can attack from any of its reachable positions.
 -- It can also add new tiles to the reachableTiles table for special movement attacks like Phantom Step.
 function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
-    if not unit or not unit.movement or not unit.playerType or not reachableTiles then return {} end
+    if not unit or not unit.movement or not reachableTiles then return {} end
 
     local attackableTiles = {} -- The final set of red "danger zone" tiles.
     local processedReachable = {} -- A set to track tiles we've already processed to prevent infinite loops.
@@ -24,7 +25,12 @@ function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
         table.insert(tileQueue, posKey)
     end
 
-    local blueprint = CharacterBlueprints[unit.playerType]
+    local blueprint
+    if unit.type == "player" then
+        blueprint = CharacterBlueprints[unit.playerType]
+    elseif unit.type == "enemy" then
+        blueprint = EnemyBlueprints[unit.enemyType]
+    end
     if not blueprint or not blueprint.attacks then return {} end
 
     -- Create a temporary unit to simulate positions and directions.
@@ -83,19 +89,41 @@ function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
                             end
                         end
                     elseif attackData.targeting_style == "cycle_target" then
-                        -- Handle cycle_target attacks (like slash) by calculating their Manhattan distance range.
-                        local range = attackData.range
-                        local minRange = attackData.min_range or 1
-                        if range then
-                            -- From the current reachable tile (tileX, tileY), find all tiles within attack range.
-                            for dx = -range, range do
-                                for dy = -range, range do
-                                    local manhattanDist = math.abs(dx) + math.abs(dy)
-                                    if manhattanDist >= minRange and manhattanDist <= range then
-                                        local attackTileX, attackTileY = tileX + dx, tileY + dy
-                                        -- Check map bounds before adding.
-                                        if attackTileX >= 0 and attackTileX < world.map.width and attackTileY >= 0 and attackTileY < world.map.height then
-                                            attackableTiles[attackTileX .. "," .. attackTileY] = true
+                        local pattern = attackData.patternType and AttackPatterns[attackData.patternType]
+                        if pattern and type(pattern) == "table" then
+                            -- New: Use fixed-shape patterns for attacks like slash, walnut_toss, etc.
+                            for _, patternCoord in ipairs(pattern) do
+                                local attackTileX = tileX + patternCoord.dx
+                                local attackTileY = tileY + patternCoord.dy
+                                -- Check map bounds before adding.
+                                if attackTileX >= 0 and attackTileX < world.map.width and attackTileY >= 0 and attackTileY < world.map.height then
+                                    attackableTiles[attackTileX .. "," .. attackTileY] = true
+                                end
+                            end
+                        elseif pattern and type(pattern) == "function" then
+                            -- Handle functional patterns (like line_of_sight) which might be directional.
+                            for _, dir in ipairs(directions) do
+                                tempUnit.lastDirection = dir
+                                local attackShapes = pattern(tempUnit, world)
+                                -- Convert the shapes' pixel coordinates back to tiles and add to the set.
+                                for _, effectData in ipairs(attackShapes) do
+                                    local s = effectData.shape
+                                    local startTileX, startTileY = Grid.toTile(s.x, s.y)
+                                    local endTileX, endTileY = Grid.toTile(s.x + s.w - 1, s.y + s.h - 1)
+                                    for ty = startTileY, endTileY do for tx = startTileX, endTileX do attackableTiles[tx .. "," .. ty] = true end end
+                                end
+                            end
+                        else
+                            -- Fallback for cycle_target attacks without a pattern (e.g., hookshot using raw range).
+                            local range = attackData.range
+                            if range then
+                                for dx = -range, range do
+                                    for dy = -range, range do
+                                        if math.abs(dx) + math.abs(dy) <= range then
+                                            local attackTileX, attackTileY = tileX + dx, tileY + dy
+                                            if attackTileX >= 0 and attackTileX < world.map.width and attackTileY >= 0 and attackTileY < world.map.height then
+                                                attackableTiles[attackTileX .. "," .. attackTileY] = true
+                                            end
                                         end
                                     end
                                 end
@@ -109,35 +137,19 @@ function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
                                 for dy = -range, range do
                                     if math.abs(dx) + math.abs(dy) <= range then
                                         local aimTileX, aimTileY = tileX + dx, tileY + dy
-
-                                        -- Now, for each aim point, calculate the attack's AoE.
-                                        -- For Eruption, the final AoE is a 5x5 square.
-                                        -- We add a specific check for the attack name to avoid affecting other ground_aim attacks.
                                         if attackName == "eruption" then
+                                            -- For Eruption, the danger zone includes the AoE from every possible aim point.
                                             local aoeRadius = 2 -- 2 tiles in each direction for a 5x5 area.
                                             for aoeX = aimTileX - aoeRadius, aimTileX + aoeRadius do
                                                 for aoeY = aimTileY - aoeRadius, aimTileY + aoeRadius do
                                                     attackableTiles[aoeX .. "," .. aoeY] = true
                                                 end
                                             end
+                                        else
+                                            -- For other ground_aim attacks, the aimable tile itself is the danger zone.
+                                            attackableTiles[aimTileX .. "," .. aimTileY] = true
                                         end
                                     end
-                                end
-                            end
-                        end
-                    else -- Handle directional patterns
-                        local patternFunc = AttackPatterns[attackName]
-                        if patternFunc then
-                            -- ...in every possible direction.
-                            for _, dir in ipairs(directions) do
-                                tempUnit.lastDirection = dir
-                                local attackShapes = patternFunc(tempUnit, world)
-                                -- Convert the shapes' pixel coordinates back to tiles and add to the set.
-                                for _, effectData in ipairs(attackShapes) do
-                                    local s = effectData.shape
-                                    local startTileX, startTileY = Grid.toTile(s.x, s.y)
-                                    local endTileX, endTileY = Grid.toTile(s.x + s.w - 1, s.y + s.h - 1)
-                                    for ty = startTileY, endTileY do for tx = startTileX, endTileX do attackableTiles[tx .. "," .. ty] = true end end
                                 end
                             end
                         end

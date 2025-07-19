@@ -22,8 +22,7 @@ local AttackBlueprints = {
         CritChance = 5, -- Odds of a critical hit (which does double damage), used in crit calculations
         useType = "physical", -- Physical uses Attack/Defense stat in calcs, Magical uses Magic/Resistance stat, other options don't do damage
         targeting_style = "cycle_target", --See above for targeting styles
-        range = 1, -- Range of the attack, in tiles
-        rangetype = "melee_only" -- Type of range, either melee_only, ranged_only, or standard_range. Range of the attack, in tiles. Needed to be added for counter attacks since there was no way to differentiate between 2 (hits 1-2) and 2 (only hits 2)
+        patternType = "standard_melee" -- The 4 adjacent tiles.
     },
 
     quill_jab = {
@@ -34,8 +33,7 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        range = 2,
-        rangetype = "standard_range"
+        patternType = "standard_all" -- Can hit adjacent and standard ranged tiles.
     },
 
     snap = {
@@ -46,21 +44,20 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        range = 1,
-        rangetype = "melee_only"
+        patternType = "standard_melee" -- The 4 adjacent tiles.
     },
 
     walnut_toss = {
         power = 20,
-        wispCost = 1,
+        wispCost = 0,
         originType = "cavernborn", 
         Accuracy = 100,
         CritChance = 5,
         useType = "magical",
         targeting_style = "cycle_target",
-        range = 2,
-        rangetype = "ranged_only"
+        patternType = "standard_ranged" -- Can hit ranged tiles, but not adjacent ones.
     },
+
     -- Damaging Melee Attacks
     venom_stab = {
         power = 30,
@@ -70,8 +67,7 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        range = 1,
-        rangetype = "melee_only"
+        patternType = "standard_melee" -- The 4 adjacent tiles.
     },
     uppercut = {
         power = 40,
@@ -81,8 +77,7 @@ local AttackBlueprints = {
         CritChance = 10,
         useType = "physical",
         targeting_style = "cycle_target",
-        range = 1,
-        rangetype = "melee_only"
+        patternType = "standard_melee" -- The 4 adjacent tiles.
     },
     slash = {
         power = 35,
@@ -92,8 +87,7 @@ local AttackBlueprints = {
         CritChance = 15,
         useType = "physical",
         targeting_style = "cycle_target",
-        range = 1,
-        rangetype = "melee_only"
+        patternType = "standard_melee" -- The 4 adjacent tiles.
     },
     shunt = {
         power = 15,
@@ -103,8 +97,7 @@ local AttackBlueprints = {
         CritChance = 0,
         useType = "physical",
         targeting_style = "cycle_target",
-        range = 1,
-        rangetype = "melee_only"
+        patternType = "standard_melee" -- The 4 adjacent tiles.
     },
     shockstrike = {
         power = 20,
@@ -114,8 +107,7 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        range = 1,
-        rangetype = "melee_only"
+        patternType = "standard_melee" -- The 4 adjacent tiles.
     },
 
     -- Damaging Ranged Attacks
@@ -129,7 +121,8 @@ local AttackBlueprints = {
         targeting_style = "cycle_target",
         range = 6,
         affects = "enemies",
-        line_of_sight_only = true
+        line_of_sight_only = true,
+        patternType = "line_of_sight" -- For the attack preview.
     },
     longshot = {
         power = 50,
@@ -139,8 +132,7 @@ local AttackBlueprints = {
         CritChance = 20,
         useType = "physical",
         targeting_style = "cycle_target",
-        range = 4,
-        min_range = 3
+        patternType = "extended_range_only" -- Can only hit targets exactly 3 tiles away.
     },
     eruption = {
         power = 60,
@@ -150,7 +142,8 @@ local AttackBlueprints = {
         CritChance = 0,
         useType = "magical",
         targeting_style = "ground_aim",
-        range = 7
+        range = 7,
+        patternType = "eruption_aoe" -- The 5x5 ripple effect.
     },
 
     -- Damaging Special Attacks
@@ -159,9 +152,10 @@ local AttackBlueprints = {
         wispCost = 2,
         originType = "marshborn", 
         Accuracy = 100,
-        CritChance = 5,
+        CritChance = 0,
         useType = "utility",
-        targeting_style = "cycle_target"
+        targeting_style = "cycle_target",
+        affects = "enemies"
     }, -- Range is dynamic (user's movement stat)
 
     -- Support Attacks
@@ -169,19 +163,20 @@ local AttackBlueprints = {
         power = 0,
         wispCost = 1,
         originType = "cavernborn", 
+        Accuracy = 100,
         useType = "support",
         targeting_style = "cycle_target",
-        range = 1,
-        affects = "allies"
+        affects = "allies",
+        patternType = "standard_melee"
     },
     mend = {
         power = 0,
         wispCost = 1,
         originType = "cavernborn", 
+        Accuracy = 100,
         useType = "support",
         targeting_style = "cycle_target",
-        range = 1,
-        affects = "allies"
+        patternType = "standard_melee" -- The 4 adjacent tiles.
     },
 
     -- Status Attacks
@@ -190,8 +185,8 @@ local AttackBlueprints = {
         wispCost = 1,
         originType = "cavernborn", 
         useType = "utility",
-        targeting_style = "cycle_target",
-        range = 99,
+        targeting_style = "auto_hit_all",
+        range = 12,
         affects = "enemies"
     },
 
@@ -209,7 +204,7 @@ local AttackBlueprints = {
     -- Environment Attacks
     grovecall = {
         power = 0,
-        wispCost = 6,
+        wispCost = 1,
         originType = "cavernborn", 
         useType = "utility",
         targeting_style = "ground_aim",

@@ -22,6 +22,7 @@ function World.new(gameMap)
     self.attackEffects = {}
     self.particleEffects = {}
     self.damagePopups = {}
+    self.pendingCounters = {}
     self.new_entities = {}
     self.afterimageEffects = {}
 
@@ -35,6 +36,8 @@ function World.new(gameMap)
     self.movementPath = nil -- Will hold the list of nodes for the movement arrow
     self.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 } -- For post-move actions
     self.mapMenu = { active = false, options = {}, selectedIndex = 1 } -- For actions on empty tiles
+    self.hoverReachableTiles = nil -- For hover previews
+    self.hoverAttackableTiles = nil -- For hover previews
     self.selectedAttackName = nil -- The name of the attack being targeted
     self.attackAoETiles = nil -- The shape of the attack for the targeting preview
     self.attackableTiles = nil -- The full attack range of a selected unit
@@ -52,6 +55,7 @@ function World.new(gameMap)
         activeKey = nil
     }
 
+    self.battleInfoMenu = { active = false }
     self.unitInfoMenu = {active = false, unit = nil}
     self.turnShouldEnd = false -- New flag to defer ending the turn
     -- Game State and UI

@@ -111,19 +111,15 @@ world.selectedUnit = unit
             print("Selected unit:", unit.playerType)
 
         else -- If not selecting a unit, check for other units to show info.
-            local otherUnit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
-            if otherUnit then
-                -- If the cursor is over a unit that is not selectable, toggle its info menu.
-                print("Found unit at cursor (not selectable):", otherUnit.displayName)
-                if world.unitInfoMenu.active and world.unitInfoMenu.unit == otherUnit then
-                    world.unitInfoMenu.active = false
-                    world.unitInfoMenu.unit = nil
-                    print("Closing info menu.")
-                else
-                    world.unitInfoMenu.active = true
-                    world.unitInfoMenu.unit = otherUnit
-                    print("Opening info menu for:", otherUnit.displayName)
-                end
+            -- If not selecting a unit, check if the tile is empty.
+            -- Pressing 'J' on an enemy or an already-acted player does nothing.
+            local anyUnit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
+            if not anyUnit then
+                -- The tile is empty, so open the map menu.
+                world.mapMenu.active = true
+                world.mapMenu.options = {{text = "End Turn", key = "end_turn"}}
+                world.mapMenu.selectedIndex = 1
+                world.playerTurnState = "map_menu"
             end
         end
     end
@@ -133,11 +129,6 @@ world.selectedUnit = unit
         if unit then print("Cursor over unit (no selection):", unit.displayName) end
     end
 
-    -- If there's no unit at the cursor, or we're interacting with one via the unit info menu, 
-    -- and the map menu isn't already open, open the map menu.
-    if key == "m" and not world.mapMenu.active and (not world.unitInfoMenu.active or world.unitInfoMenu.unit == nil) then
-        world.mapMenu.active = true; world.mapMenu.options = {{text = "End Turn", key = "end_turn"}}; world.mapMenu.selectedIndex = 1; world.playerTurnState = "map_menu"
-    end
 end
 
 

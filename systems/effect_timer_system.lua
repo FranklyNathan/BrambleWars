@@ -15,6 +15,14 @@ function EffectTimerSystem.update(dt, world)
             end
         end
 
+        -- Update lunge timer
+        if s.components.lunge then
+            s.components.lunge.timer = s.components.lunge.timer - dt
+            if s.components.lunge.timer <= 0 then
+                s.components.lunge = nil
+            end
+        end
+
         -- Update time-based status effects like 'airborne'. This ensures the visual
         -- effect (like rotation) progresses smoothly over time, not just at turn ends.
         if s.statusEffects and s.statusEffects.airborne then

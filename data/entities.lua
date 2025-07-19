@@ -88,6 +88,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.resistanceStat = blueprint.resistanceStat
         square.witStat = blueprint.witStat
         square.maxWisp = blueprint.wispStat
+        square.movement = blueprint.movement or 5 -- Default movement range in tiles
         square.weight = blueprint.weight
         square.attacks = blueprint.attacks
         square.displayName = subType -- Use enemy type as display name
@@ -165,7 +166,7 @@ function EntityFactory.createGrappleHook(attacker, power, range)
     hook.y = attacker.y
     hook.size = Config.SQUARE_SIZE / 2 -- Make it smaller than a full tile
     hook.type = "grapple_hook" -- A new type for specific systems
-    hook.color = {0.6, 0.3, 0.1, 1} -- Brown
+    hook.color = {1, 0.4, 0.7, 1} -- Pink
 
     hook.components = {}
     hook.components.grapple_hook = {

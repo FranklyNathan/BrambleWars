@@ -6,8 +6,10 @@ local Camera = require("modules.camera")
 local Assets = require("modules.assets")
 local CharacterBlueprints = require("data.character_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
+local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local UnitInfoMenu = require("modules.unit_info_menu")
+local BattleInfoMenu = require("modules.battle_info_menu")
 local Renderer = {}
 
 --------------------------------------------------------------------------------
@@ -165,11 +167,33 @@ local function draw_entity(entity, world, is_active_player)
         local w, h = currentAnim:getDimensions()
 
         -- 2. Calculate drawing position and offsets
+        -- Base position is bottom-center of the entity's logical tile.
         local drawX = entity.x + entity.size / 2
         local baseDrawY = entity.y + entity.size
+
+        -- Apply lunge effect offset if present.
+        local lungeOffsetX, lungeOffsetY = 0, 0
+        if entity.components.lunge then
+            local lunge = entity.components.lunge
+            local max_lunge_amount = 10 -- The peak distance of the lunge.
+
+            -- Calculate the progress of the lunge animation (from 0 to 1).
+            local progress = 1 - (lunge.timer / lunge.initialTimer)
+            -- Use a sine wave to create a smooth out-and-back motion.
+            -- math.sin(progress * math.pi) goes from 0 -> 1 -> 0 as progress goes from 0 -> 1.
+            local current_lunge_amount = max_lunge_amount * math.sin(progress * math.pi)
+
+            if lunge.direction == "up" then lungeOffsetY = -current_lunge_amount end
+            if lunge.direction == "down" then lungeOffsetY = current_lunge_amount end
+            if lunge.direction == "left" then lungeOffsetX = -current_lunge_amount end
+            if lunge.direction == "right" then lungeOffsetX = current_lunge_amount end
+        end
+        drawX = drawX + lungeOffsetX
+        baseDrawY = baseDrawY + lungeOffsetY
+
         local finalDrawY, rotation = calculate_visual_offsets(entity, currentAnim, drawX, baseDrawY)
 
-        -- 3. Draw the base sprite
+        -- 3. Draw the base sprite at the final calculated position.
         love.graphics.setShader()
         love.graphics.setColor(1, 1, 1, 1)
         currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
@@ -298,13 +322,29 @@ local function draw_all_entities_and_effects(world)
 
             -- Draw the line from the attacker to the hook
             if attacker then
-                love.graphics.setColor(0.6, 0.3, 0.1, 1) -- Brown color for the grapple line
+                love.graphics.setColor(1, 0.4, 0.7, 1) -- Pink color for the grapple line
                 love.graphics.setLineWidth(2)
                 local x1, y1 = attacker.x + attacker.size / 2, attacker.y + attacker.size / 2
                 local x2, y2 = entity.x + entity.size / 2, entity.y + entity.size / 2
                 love.graphics.line(x1, y1, x2, y2)
                 love.graphics.setLineWidth(1) -- Reset
             end
+        end
+    end
+end
+
+-- Helper to draw a set of tiles with a specific color and transparency.
+local function draw_tile_set(tileSet, r, g, b, a)
+    if not tileSet then return end
+    love.graphics.setColor(r, g, b, a)
+    local BORDER_WIDTH = 1
+    local INSET_SIZE = Config.SQUARE_SIZE - (BORDER_WIDTH * 2)
+    for posKey, _ in pairs(tileSet) do
+        local tileX = tonumber(string.match(posKey, "(-?%d+)"))
+        local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+        if tileX and tileY then
+            local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+            love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
         end
     end
 end
@@ -316,30 +356,23 @@ local function draw_world_space_ui(world)
 
     if world.gameState == "gameplay" and world.turn == "player" then
         -- 1. Draw the full attack range for the selected unit (the "danger zone").
-        -- This is drawn first so that the blue movement range tiles can draw over it.
         if (world.playerTurnState == "unit_selected" or world.playerTurnState == "ground_aiming") and world.attackableTiles then
-            love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Faint, transparent red
-            for posKey, _ in pairs(world.attackableTiles) do
-                local tileX = tonumber(string.match(posKey, "(-?%d+)"))
-                local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
-                if tileX and tileY then
-                    local pixelX, pixelY = Grid.toPixels(tileX, tileY)
-                    love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
-                end
-            end
+            draw_tile_set(world.attackableTiles, 1, 0.2, 0.2, 0.3)
+        end
+
+        -- Draw hovered unit's danger zone (fainter)
+        if world.unitInfoMenu.active and world.hoverAttackableTiles then
+            draw_tile_set(world.hoverAttackableTiles, 1, 0.2, 0.2, 0.2)
+        end
+
+        -- Draw hovered unit's movement range
+        if world.unitInfoMenu.active and world.hoverReachableTiles then
+            draw_tile_set(world.hoverReachableTiles, 0.2, 0.4, 1, 0.2)
         end
 
         -- 2. Draw the movement range for the selected unit. This is drawn on top of the attack range.
         if world.playerTurnState == "unit_selected" and world.reachableTiles then
-            love.graphics.setColor(0.2, 0.4, 1, 0.6) -- Semi-transparent blue
-            for posKey, _ in pairs(world.reachableTiles) do
-                local tileX = tonumber(string.match(posKey, "(-?%d+)"))
-                local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
-                if tileX and tileY then
-                    local pixelX, pixelY = Grid.toPixels(tileX, tileY)
-                    love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
-                end
-            end
+            draw_tile_set(world.reachableTiles, 0.2, 0.4, 1, 0.6)
         end
 
         -- 3. Draw the movement path arrow.
@@ -415,7 +448,7 @@ local function draw_world_space_ui(world)
                         love.graphics.setColor(0.2, 1, 0.2, 0.3) -- Semi-transparent green.
                         love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                     elseif world.selectedAttackName == "phantom_step" then
-                        -- For phantom_step, shade the target red and the warp destination blue.
+                        -- Special preview for Phantom Step: show target and destination.
                         love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
                         love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                         local dx, dy = 0, 0
@@ -423,26 +456,25 @@ local function draw_world_space_ui(world)
                         elseif target.lastDirection == "down" then dy = -1
                         elseif target.lastDirection == "left" then dx = 1
                         elseif target.lastDirection == "right" then dx = -1
-                        end                        
+                        end
                         local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
                         local behindPixelX, behindPixelY = Grid.toPixels(behindTileX, behindTileY)
-
-                        -- Shade the destination tile blue.
                         love.graphics.setColor(0.2, 0.4, 1, 0.3) -- Semi-transparent blue
                         love.graphics.rectangle("fill", behindPixelX + BORDER_WIDTH, behindPixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
-                    elseif attackData.rangetype == "standard_range" then
+                    elseif attackData.patternType and type(AttackPatterns[attackData.patternType]) == "function" then
+                        -- New: Handle functional patterns like line_of_sight.
+                        -- The attacker's direction is already set by the targeting system.
+                        local patternFunc = AttackPatterns[attackData.patternType]
+                        local attackShapes = patternFunc(attacker, world)
                         love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
-                        love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
-                    elseif attackData.rangetype == "ranged_only" then
-                        -- Shade the target tile red.
-                        love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
-                        love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
-
-                        local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
-                        love.graphics.rectangle("fill", behindPixelX + BORDER_WIDTH, behindPixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+                        for _, effectData in ipairs(attackShapes) do
+                            local s = effectData.shape
+                            if s.type == "rect" then
+                                love.graphics.rectangle("fill", s.x, s.y, s.w, s.h)
+                            end
+                        end
                     elseif world.selectedAttackName == "hookshot" then
-
-                        -- Draw a red line preview for hookshot
+                        -- Special preview for Hookshot: draw a line to the target.
                         love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
                         local dist = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
 
@@ -459,31 +491,8 @@ local function draw_world_space_ui(world)
                                 love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                             end
                         end
-                    elseif world.selectedAttackName == "fireball" then
-                        -- Draw a red line preview for the piercing shot
-                        love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
-
-                        local dx = target.tileX - attacker.tileX
-                        local dy = target.tileY - attacker.tileY
-
-                        local direction
-                        if math.abs(dx) > math.abs(dy) then
-                            direction = (dx > 0) and "right" or "left"
-                        else
-                            direction = (dy > 0) and "down" or "up"
-                        end
-
-                        local currentTileX, currentTileY = attacker.tileX, attacker.tileY
-                        -- Loop until we go off the map
-                        while true do
-                            local nextX, nextY = Grid.getDestination(currentTileX, currentTileY, direction, 1)
-                            if nextX < 0 or nextX >= world.map.width or nextY < 0 or nextY >= world.map.height then break end
-                            local pixelX, pixelY = Grid.toPixels(nextX, nextY)
-                            love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
-                            currentTileX, currentTileY = nextX, nextY
-                        end
                     elseif world.selectedAttackName == "shockwave" then
-                        -- For shockwave, highlight the AoE around the attacker, not the target.
+                        -- Special preview for Shockwave: show the AoE around the attacker.
                         love.graphics.setColor(1, 0.2, 0.2, 0.6) -- Semi-transparent red
                         if attacker and attackData.range then
                             for dx = -attackData.range, attackData.range do
@@ -496,6 +505,11 @@ local function draw_world_space_ui(world)
                                 end
                             end
                         end
+                    else
+                        -- Default preview for all other attacks (standard melee, ranged, etc.):
+                        -- Just highlight the selected target tile.
+                        love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
+                        love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                     end
                 end
             end
@@ -600,7 +614,12 @@ local function draw_screen_space_ui(world)
         -- Dynamically calculate menu width based on the longest option text
         local maxTextWidth = 0 -- No title, so start with 0
         for _, option in ipairs(menu.options) do
-            maxTextWidth = math.max(maxTextWidth, font:getWidth(option.text))
+            local attackData = AttackBlueprints[option.key]
+            local wispString = ""
+            if attackData and attackData.wispCost and attackData.wispCost > 0 then
+                wispString = " " .. string.rep("♦", attackData.wispCost)
+            end
+            maxTextWidth = math.max(maxTextWidth, font:getWidth(option.text .. wispString))
         end
         local menuWidth = maxTextWidth + 20 -- 10px padding on each side
         local menuHeight = 10 + #menu.options * 20 -- 5px padding top and bottom
@@ -643,6 +662,19 @@ local function draw_screen_space_ui(world)
                 love.graphics.setColor(1, 1, 1, 1) -- White for others
             end
             love.graphics.print(option.text, menuX + 10, yPos)
+
+            -- Draw wisp cost diamonds
+            if attackData and attackData.wispCost and attackData.wispCost > 0 then
+                local wispString = string.rep("♦", attackData.wispCost)
+                local moveNameWidth = font:getWidth(option.text .. " ")
+                -- If the move is invalid, also grey out the wisp cost. Otherwise, it's white.
+                if not is_valid then
+                    love.graphics.setColor(0.5, 0.5, 0.5, 1)
+                else
+                    love.graphics.setColor(1, 1, 1, 1)
+                end
+                love.graphics.print(wispString, menuX + 10 + moveNameWidth, yPos)
+            end
         end
     end
 
@@ -695,6 +727,9 @@ local function draw_screen_space_ui(world)
 
     -- Draw Unit Info Menu (This was missing)
     UnitInfoMenu.draw(world)
+
+    -- Draw Battle Info Menu
+    BattleInfoMenu.draw(world)
 end
 
 --------------------------------------------------------------------------------

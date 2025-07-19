@@ -46,6 +46,9 @@ local function get_and_face_cycle_target(attacker, world)
     else
         attacker.lastDirection = (dy > 0) and "down" or "up"
     end
+
+    -- Add the lunge component for the visual effect.
+    attacker.components.lunge = { timer = 0.2, initialTimer = 0.2, direction = attacker.lastDirection }
     return target
 end
 
@@ -85,16 +88,25 @@ local function calculate_hit_chance(attacker, defender, attackData)
     return math.max(0, math.min(1, CombatFormulas.calculateHitChance(attackerWit, defenderWit, moveAccuracy)))
 end
 
+-- Helper function to calculate crit chance
+local function calculate_crit_chance(attacker, defender, attackData)
+    local attackerWit = attacker.witStat
+    local defenderWit = defender.witStat
+    local moveCritChance = attackData.CritChance or 0
+    -- Ensure the result is clamped between 0 and 1 for valid probability.
+    return math.max(0, math.min(1, CombatFormulas.calculateCritChance(attackerWit, defenderWit, moveCritChance)))
+end
+
 
 -- Executes attack hit and returns damage and crit flag.
-local function perform_attack_hit(attacker, defender, attackData, world, statusEffect)
+local function perform_attack_hit(attacker, defender, attackData, world, statusEffect, isCounterAttack)
     local critChance = calculate_crit_chance(attacker, defender, attackData)
     local isCrit = (love.math.random() < critChance)
 
     local damage = CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isCrit)
 
     -- Apply damage
-    --CombatActions.applyDirectDamage(defender, damage, isCrit, attacker)
+    CombatActions.applyDirectDamage(defender, damage, isCrit, attacker)
 
     if statusEffect then
         -- Apply the status effect after copying it
@@ -106,6 +118,51 @@ local function perform_attack_hit(attacker, defender, attackData, world, statusE
            target = defender,
         }
         StatusEffectManager.applyStatusEffect(defender, statusCopy, world)
+    end
+
+    -- Counter-attack logic
+    -- A unit can counter attack if the unit attacking them is within their basic attack's attack pattern.
+    -- Only trigger on the initial attack, not on a counter-attack itself.
+    if not isCounterAttack and defender.hp and defender.hp > 0 then
+        -- Get the defender's blueprint to find their basic attack.
+        local defenderBlueprint
+        if defender.type == "player" then
+            defenderBlueprint = CharacterBlueprints[defender.playerType]
+        elseif defender.type == "enemy" then
+            defenderBlueprint = EnemyBlueprints[defender.enemyType]
+        end
+
+        if defenderBlueprint and defenderBlueprint.attacks and defenderBlueprint.attacks[1] then
+            local basicAttackName = defenderBlueprint.attacks[1]
+            local basicAttackData = AttackBlueprints[basicAttackName]
+
+            if basicAttackData and basicAttackData.patternType then
+                local pattern = AttackPatterns[basicAttackData.patternType]
+
+                -- Check if the pattern is a fixed shape (a table of coordinates).
+                if pattern and type(pattern) == "table" then
+                    -- Check if the original attacker is within this pattern relative to the defender.
+                    local dx = attacker.tileX - defender.tileX
+                    local dy = attacker.tileY - defender.tileY
+                    local inCounterRange = false
+                    for _, patternCoord in ipairs(pattern) do
+                        if patternCoord.dx == dx and patternCoord.dy == dy then
+                            inCounterRange = true
+                            break
+                        end
+                    end
+
+                    if inCounterRange then
+                        print(defender.displayName .. " is preparing to counter-attack " .. attacker.displayName .. "!")
+                        table.insert(world.pendingCounters, {
+                            defender = defender,
+                            attacker = attacker,
+                            delay = 0.25 -- The delay before the counter animation starts
+                        })
+                    end
+                end
+            end
+        end
     end
 end
 
@@ -121,7 +178,7 @@ local function execute_cycle_target_damage_attack(attacker, world, statusEffect,
     local hitChance = calculate_hit_chance(attacker, target, attackData)
     if love.math.random() < hitChance then
         -- The attack hits:
-        perform_attack_hit(attacker, target, attackData, world, statusEffect)
+        perform_attack_hit(attacker, target, attackData, world, statusEffect, false)
     else
         -- The attack misses: You might want to add a visual or sound effect here for a miss
         EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1}) -- Light Grey text
@@ -136,15 +193,15 @@ UnitAttacks.froggy_rush = function(attacker, power, world)
     return execute_cycle_target_damage_attack(attacker, world)
 end
 
-UnitAttacks.quill_jab = function(attacker, power, world, target)
+UnitAttacks.quill_jab = function(attacker, power, world)
     return execute_cycle_target_damage_attack(attacker, world)
 end
 
-UnitAttacks.snap = function(attacker, power, world, target)
+UnitAttacks.snap = function(attacker, power, world)
     return execute_cycle_target_damage_attack(attacker, world)
 end
 
-UnitAttacks.walnut_toss = function(attacker, power, world, target)
+UnitAttacks.walnut_toss = function(attacker, power, world)
     return execute_cycle_target_damage_attack(attacker, world)
 end
 
@@ -152,27 +209,19 @@ UnitAttacks.slash = function(attacker, power, world)
     return execute_cycle_target_damage_attack(attacker, world)
 end
 
-UnitAttacks.venom_stab = function(attacker, power, world, target)
+UnitAttacks.venom_stab = function(attacker, power, world)
     local status = {type = "poison", duration = 3} -- Lasts 3 turns
     return execute_cycle_target_damage_attack(attacker, world, status, power)
 end
 
-UnitAttacks.fireball = function(attacker, power, world, target)
+UnitAttacks.fireball = function(attacker, power, world)
     -- Ranged attack with a piercing effect
     -- Needs a different implementation or changes in EffectFactory.addAttackEffect.
     -- For now, let's just apply damage to the first target hit as a placeholder.
-    local attackData = AttackBlueprints.fireball
-
-    local hitChance = calculate_hit_chance(attacker, target, attackData)
-    if love.math.random() < hitChance then
-        perform_attack_hit(attacker, target, attackData, world, nil, power)
-    else
-        EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1})
-    end
-    return true
+    return execute_cycle_target_damage_attack(attacker, world)
 end
 
-UnitAttacks.uppercut = function(attacker, power, world, target)
+UnitAttacks.uppercut = function(attacker, power, world)
     local status = {type = "airborne", duration = 2} -- Ensure the duration is specified
     return execute_cycle_target_damage_attack(attacker, world, status, power)
 end
@@ -249,7 +298,7 @@ UnitAttacks.eruption = function(attacker, power, world, target)
 
     -- 2. We can still use the ripple pattern generator, but we call it directly with the cursor's position.
     local rippleCenterSize = 1
-    local effects = AttackPatterns.ripple(centerX, centerY, rippleCenterSize)
+    local effects = AttackPatterns.eruption_aoe(centerX, centerY, rippleCenterSize)
     local color = {1, 0, 0, 1}
     local targetType = (attacker.type == "player" and "enemy" or "player")
 

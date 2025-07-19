@@ -17,6 +17,8 @@ local StatSystem = require("systems.stat_system")
 local EffectTimerSystem = require("systems.effect_timer_system")
 local ProjectileSystem = require("systems.projectile_system")
 local MovementSystem = require("systems/movement_system")
+local UnitInfoSystem = require("systems.unit_info_system")
+local BattleInfoSystem = require("systems/battle_info_system")
 local EnemyTurnSystem = require("systems/enemy_turn_system")
 local TurnBasedMovementSystem = require("systems/turn_based_movement_system")
 local CounterAttackSystem = require("systems.counter_attack_system")
@@ -47,16 +49,18 @@ local update_systems = {
     StatSystem,
     EffectTimerSystem,
     PassiveSystem,
+    UnitInfoSystem,
+    BattleInfoSystem,
     -- 2. Movement and Animation (update physical state)
     TurnBasedMovementSystem,
     MovementSystem,
-    AnimationSystem,
-    CounterAttackSystem,
+    AnimationSystem,    
     -- 3. AI and Player Actions (decide what to do)
     EnemyTurnSystem,
     -- 4. Update ongoing effects of actions
     ProjectileSystem,
     GrappleHookSystem,
+    CounterAttackSystem,
     CareeningSystem,
     AetherfallSystem,
     -- 5. Resolve the consequences of actions

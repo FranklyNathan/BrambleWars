@@ -121,10 +121,12 @@ function AetherfallSystem.update(dt, world)
                             if math.abs(dx) > math.abs(dy) then unit.lastDirection = (dx > 0) and "right" or "left"
                             else unit.lastDirection = (dy > 0) and "down" or "up" end
 
-                            -- Execute a "Slash" attack effect.
-                            local slashPower = AttackBlueprints.slash.power or 20
+                            -- Add the lunge component for the visual effect.
+                            unit.components.lunge = { timer = 0.2, initialTimer = 0.2, direction = unit.lastDirection }
+
+                            -- Execute a "Slash" attack.
                             local targetType = (unit.type == "player") and "enemy" or "player"
-                            EffectFactory.addAttackEffect(target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, unit, slashPower, false, targetType)
+                            EffectFactory.addAttackEffect(unit, "slash", target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType)
                         end
 
                         -- Update state for the next hit regardless of whether we attacked.

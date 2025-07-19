@@ -29,7 +29,9 @@ end
 
 -- Helper to calculate the chance of a critical hit
 function CombatFormulas.calculateCritChance(attackerWit, defenderWit, moveCritChance)
-    return (moveCritChance / 100) * (attackerWit - defenderWit)
+    -- The final crit chance is the move's base chance, modified by the difference in Wit.
+    -- A higher attacker Wit increases the chance, a higher defender Wit decreases it.
+    return (moveCritChance + (attackerWit - defenderWit)) / 100
 end
 
 -- Helper function to calculate hit chance
@@ -46,15 +48,20 @@ function CombatFormulas.calculateBaseDamage(attacker, defender, attackData)
     -- Apply the type effectiveness to the attack power + attacker's stat.
     local adjustedPower = (power + statUsed) * effectiveness
 
+    local rawDamage = 0
+    local defenseStatUsed = 0
     -- Calculate damage dealt by a physical attack.
     if attackData.useType == "physical" then
-        return math.max(0, adjustedPower - defender.defenseStat) -- Subtract defender's defense.
+        defenseStatUsed = defender.defenseStat
+        rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's defense.
     -- Calculate damage dealt by a magic attack.
     elseif attackData.useType == "magic" then
-        return math.max(0, adjustedPower - defender.resistanceStat) -- Subtract defender's resistance.
+        defenseStatUsed = defender.resistanceStat
+        rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's resistance.
     end
 
-    return 0 -- Base damage is 0 for non-damage or incorrectly defined attacks.
+    -- Base damage should always be a whole number.
+    return math.floor(rawDamage)
 end
 
 -- Helper to calculate final damage including base damage and critical hit multiplier
@@ -63,7 +70,7 @@ function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isC
     if isCrit then
         damage = damage * 2
     end
-    return damage
+    return math.floor(damage)
 end
 
 
