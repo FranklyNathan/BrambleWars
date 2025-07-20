@@ -33,53 +33,69 @@ function BattleInfoSystem.update(dt, world)
         menu.playerHP = math.floor(attacker.hp)
         menu.enemyHP = math.floor(target.hp)
 
-        -- Player's attack forecast
-        local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false)
-        menu.playerDamage = tostring(playerDmg)
-        if CombatFormulas.calculateTypeEffectiveness(attackData.originType, target.originType) > 1 then
-            menu.playerDamage = menu.playerDamage .. "!"
-        end
-        local playerHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(attacker.witStat, target.witStat, attackData.Accuracy or 100)))
-        local playerCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(attacker.witStat, target.witStat, attackData.CritChance or 0)))
-        menu.playerHitChance = math.floor(playerHit * 100)
-        menu.playerCritChance = math.floor(playerCrit * 100)
-
-        -- Enemy's counter-attack forecast
-        local defenderBlueprint = (target.type == "player") and CharacterBlueprints[target.playerType] or EnemyBlueprints[target.enemyType] -- target is the defender
-        local counterAttackName = defenderBlueprint and defenderBlueprint.attacks and defenderBlueprint.attacks[1]
-
-        if not counterAttackName then
+        if attackData.useType == "support" or attackData.useType == "utility" then
+            -- Forecast for support/utility moves, which cannot miss or crit.
+            if (attackData.power or 0) > 0 and attackData.useType == "support" then
+                menu.playerActionLabel = "Heal:"
+                local healAmount = CombatFormulas.calculateHealingAmount(attacker, attackData)
+                menu.playerDamage = tostring(healAmount)
+            else
+                menu.playerActionLabel = "Effect:"
+                menu.playerDamage = "--"
+            end
+            menu.playerHitChance = "--"
+            menu.playerCritChance = "--"
+            -- No counter-attack for these moves.
             menu.enemyDamage, menu.enemyHitChance, menu.enemyCritChance = "--", "--", "--"
-            return
-        end
+        else
+            -- Damage forecast
+            menu.playerActionLabel = "Damage:"
+            local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false)
+            menu.playerDamage = tostring(playerDmg)
+            if CombatFormulas.calculateTypeEffectiveness(attackData.originType, target.originType) > 1 then
+                menu.playerDamage = menu.playerDamage .. "!"
+            end
+            local playerHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(attacker.witStat, target.witStat, attackData.Accuracy or 100)))
+            local playerCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(attacker.witStat, target.witStat, attackData.CritChance or 0)))
+            menu.playerHitChance = math.floor(playerHit * 100)
+            menu.playerCritChance = math.floor(playerCrit * 100)
 
-        local counterAttackData = AttackBlueprints[counterAttackName]
-        local pattern = counterAttackData and AttackPatterns[counterAttackData.patternType]
-        local inCounterRange = false
+            -- Enemy's counter-attack forecast
+            local defenderBlueprint = (target.type == "player") and CharacterBlueprints[target.playerType] or EnemyBlueprints[target.enemyType] -- target is the defender
+            local counterAttackName = defenderBlueprint and defenderBlueprint.attacks and defenderBlueprint.attacks[1]
 
-        if pattern and type(pattern) == "table" then
-            local dx = attacker.tileX - target.tileX
-            local dy = attacker.tileY - target.tileY
-            for _, p_coord in ipairs(pattern) do
-                if p_coord.dx == dx and p_coord.dy == dy then
-                    inCounterRange = true
-                    break
+            if not counterAttackName then
+                menu.enemyDamage, menu.enemyHitChance, menu.enemyCritChance = "--", "--", "--"
+            else
+                local counterAttackData = AttackBlueprints[counterAttackName]
+                local pattern = counterAttackData and AttackPatterns[counterAttackData.patternType]
+                local inCounterRange = false
+
+                if pattern and type(pattern) == "table" then
+                    local dx = attacker.tileX - target.tileX
+                    local dy = attacker.tileY - target.tileY
+                    for _, p_coord in ipairs(pattern) do
+                        if p_coord.dx == dx and p_coord.dy == dy then
+                            inCounterRange = true
+                            break
+                        end
+                    end
+                end
+
+                if inCounterRange then
+                    local enemyDmg = CombatFormulas.calculateFinalDamage(target, attacker, counterAttackData, false)
+                    menu.enemyDamage = tostring(enemyDmg)
+                    if CombatFormulas.calculateTypeEffectiveness(counterAttackData.originType, attacker.originType) > 1 then
+                        menu.enemyDamage = menu.enemyDamage .. "!"
+                    end
+                    local enemyHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(target.witStat, attacker.witStat, counterAttackData.Accuracy or 100)))
+                    local enemyCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(target.witStat, attacker.witStat, counterAttackData.CritChance or 0)))
+                    menu.enemyHitChance = math.floor(enemyHit * 100)
+                    menu.enemyCritChance = math.floor(enemyCrit * 100)
+                else
+                    menu.enemyDamage, menu.enemyHitChance, menu.enemyCritChance = "--", "--", "--"
                 end
             end
-        end
-
-        if inCounterRange then
-            local enemyDmg = CombatFormulas.calculateFinalDamage(target, attacker, counterAttackData, false)
-            menu.enemyDamage = tostring(enemyDmg)
-            if CombatFormulas.calculateTypeEffectiveness(counterAttackData.originType, attacker.originType) > 1 then
-                menu.enemyDamage = menu.enemyDamage .. "!"
-            end
-            local enemyHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(target.witStat, attacker.witStat, counterAttackData.Accuracy or 100)))
-            local enemyCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(target.witStat, attacker.witStat, counterAttackData.CritChance or 0)))
-            menu.enemyHitChance = math.floor(enemyHit * 100)
-            menu.enemyCritChance = math.floor(enemyCrit * 100)
-        else
-            menu.enemyDamage, menu.enemyHitChance, menu.enemyCritChance = "--", "--", "--"
         end
     else
         menu.active = false

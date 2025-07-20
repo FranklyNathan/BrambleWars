@@ -69,7 +69,7 @@ function BattleInfoMenu.draw(world)
 
     love.graphics.setColor(1, 1, 1, 1)
     yOffset = yOffset + lineHeight
-    love.graphics.print("Damage:", menuX + 10, yOffset)
+    love.graphics.print(menu.playerActionLabel or "Damage:", menuX + 10, yOffset)
     love.graphics.setColor(0.6, 0.6, 1, 1)
     love.graphics.print(menu.playerDamage, playerColX, yOffset)
     love.graphics.setColor(1, 0.6, 0.6, 1)

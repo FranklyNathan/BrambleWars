@@ -47,13 +47,7 @@ function ProjectileSystem.update(dt, world)
                     for _, target in ipairs(targets) do
                         if target.hp > 0 and not projComp.hitTargets[target] and target.tileX == currentTileX and target.tileY == currentTileY then
                             -- Collision detected! Create an attack effect to deal damage.
-                            local attackName
-                            for k, v in pairs(AttackBlueprints) do
-                                if v.power == projComp.power then
-                                    attackName = k
-                                    break
-                                end
-                            end
+                            local attackName = projComp.attackName
                             EffectFactory.addAttackEffect(projComp.attacker, attackName, target.x, target.y, target.size, target.size, {1, 0.5, 0, 1}, 0, false, targetType, false, projComp.statusEffect)
 
                             -- Mark target as hit to prevent re-hitting

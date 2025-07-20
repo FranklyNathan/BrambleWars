@@ -73,5 +73,14 @@ function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isC
     return math.floor(damage)
 end
 
+-- Calculates the amount of HP restored by a healing move.
+-- Formula: (User's Magic Stat) + (Healing Move Power)
+function CombatFormulas.calculateHealingAmount(attacker, attackData)
+    if not attacker or not attackData then return 0 end
+    local magicStat = attacker.magicStat or 0
+    local movePower = attackData.power or 0
+    local healing = magicStat + movePower
+    return math.floor(healing)
+end
 
 return CombatFormulas

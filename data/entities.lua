@@ -133,7 +133,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
     return square
 end
 
-function EntityFactory.createProjectile(x, y, direction, attacker, power, isEnemy, statusEffect, isPiercing)
+function EntityFactory.createProjectile(x, y, direction, attacker, attackName, power, isEnemy, statusEffect, isPiercing)
     local projectile = {}
     projectile.x = x
     projectile.y = y
@@ -147,6 +147,7 @@ function EntityFactory.createProjectile(x, y, direction, attacker, power, isEnem
         moveDelay = 0.05,
         timer = 0.05,
         attacker = attacker,
+        attackName = attackName,
         power = power,
         isEnemyProjectile = isEnemy,
         statusEffect = statusEffect,

@@ -159,7 +159,7 @@ local AttackBlueprints = {
     }, -- Range is dynamic (user's movement stat)
 
     -- Support Attacks
-    invigorating_aura = {
+    invigoration = {
         power = 0,
         wispCost = 1,
         originType = "cavernborn", 
@@ -170,13 +170,14 @@ local AttackBlueprints = {
         patternType = "standard_melee"
     },
     mend = {
-        power = 0,
+        power = 20,
         wispCost = 1,
         originType = "cavernborn", 
         Accuracy = 100,
         useType = "support",
         targeting_style = "cycle_target",
-        patternType = "standard_melee" -- The 4 adjacent tiles.
+        patternType = "standard_melee", -- The 4 adjacent tiles.
+        affects = "all" -- Can target allies and enemies.
     },
 
     -- Status Attacks

@@ -7,6 +7,7 @@ local AttackHandler = require("modules.attack_handler")
 local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local Grid = require("modules.grid")
+local RescueHandler = require("modules.rescue_handler")
 
 local InputHandler = {}
 
@@ -110,11 +111,18 @@ world.selectedUnit = unit
 
             print("Selected unit:", unit.playerType)
 
-        else -- If not selecting a unit, check for other units to show info.
-            -- If not selecting a unit, check if the tile is empty.
-            -- Pressing 'J' on an enemy or an already-acted player does nothing.
+        else
             local anyUnit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
-            if not anyUnit then
+            if anyUnit and anyUnit.type == "enemy" then
+                -- Pressing 'J' on an enemy now shows their range.
+                world.playerTurnState = "enemy_range_display"
+                local display = world.enemyRangeDisplay
+                display.active = true
+                display.unit = anyUnit
+                local reachable, _ = Pathfinding.calculateReachableTiles(anyUnit, world)
+                display.reachableTiles = reachable
+                display.attackableTiles = RangeCalculator.calculateAttackableTiles(anyUnit, world, reachable)
+            elseif not anyUnit then
                 -- The tile is empty, so open the map menu.
                 world.mapMenu.active = true
                 world.mapMenu.options = {{text = "End Turn", key = "end_turn"}}
@@ -216,6 +224,42 @@ local function handle_action_menu_input(key, world)
                 -- Leave the cursor on the unit that just acted.
                 world.mapCursorTile.x = menu.unit.tileX
                 world.mapCursorTile.y = menu.unit.tileY
+            end
+        elseif selectedOption.key == "rescue" then
+            local unit = menu.unit
+            local rescuableUnits = WorldQueries.findRescuableUnits(unit, world)
+            if #rescuableUnits > 0 then
+                world.playerTurnState = "rescue_targeting"
+                world.rescueTargeting.active = true
+                world.rescueTargeting.targets = rescuableUnits
+                world.rescueTargeting.selectedIndex = 1
+                menu.active = false
+                -- Snap cursor to first target
+                local firstTarget = rescuableUnits[1]
+                world.mapCursorTile.x = firstTarget.tileX
+                world.mapCursorTile.y = firstTarget.tileY
+            end
+        elseif selectedOption.key == "drop" then
+            local unit = menu.unit
+            local adjacentTiles = {}
+            local neighbors = {{dx = 0, dy = -1}, {dx = 0, dy = 1}, {dx = -1, dy = 0}, {dx = 1, dy = 0}}
+            for _, move in ipairs(neighbors) do
+                local tileX, tileY = unit.tileX + move.dx, unit.tileY + move.dy
+                if not WorldQueries.isTileOccupied(tileX, tileY, nil, world) and tileX >= 0 and tileX < world.map.width and tileY >= 0 and tileY < world.map.height then
+                    table.insert(adjacentTiles, {tileX = tileX, tileY = tileY})
+                end
+            end
+
+            if #adjacentTiles > 0 then
+                world.playerTurnState = "drop_targeting"
+                world.dropTargeting.active = true
+                world.dropTargeting.tiles = adjacentTiles
+                world.dropTargeting.selectedIndex = 1
+                menu.active = false
+                -- Snap cursor to first tile
+                local firstTile = adjacentTiles[1]
+                world.mapCursorTile.x = firstTile.tileX
+                world.mapCursorTile.y = firstTile.tileY
             end
         else -- It's an attack.
             local attackName = selectedOption.key
@@ -466,6 +510,110 @@ local function handle_cycle_targeting_input(key, world)
     end
 end
 
+-- Handles input when the player is cycling through units to rescue.
+local function handle_rescue_targeting_input(key, world)
+    local rescue = world.rescueTargeting
+    if not rescue.active then return end
+
+    local indexChanged = false
+    if key == "a" or key == "d" then -- Cycle targets
+        if key == "a" then
+            rescue.selectedIndex = rescue.selectedIndex - 1
+            if rescue.selectedIndex < 1 then rescue.selectedIndex = #rescue.targets end
+        else -- key == "d"
+            rescue.selectedIndex = rescue.selectedIndex + 1
+            if rescue.selectedIndex > #rescue.targets then rescue.selectedIndex = 1 end
+        end
+        indexChanged = true
+    elseif key == "k" then -- Cancel
+        world.playerTurnState = "action_menu"
+        world.actionMenu.active = true
+        rescue.active = false
+        rescue.targets = {}
+    elseif key == "j" then -- Confirm
+        local rescuer = world.actionMenu.unit
+        local target = rescue.targets[rescue.selectedIndex]
+
+        if RescueHandler.rescue(rescuer, target, world) then
+            rescuer.hasActed = true
+            world.playerTurnState = "free_roam"
+            -- Reset menus and targeting states
+            world.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 }
+            rescue.active = false
+            rescue.targets = {}
+
+            if allPlayersHaveActed(world) then
+                world.turnShouldEnd = true
+            else
+                -- Leave cursor on the rescuer
+                world.mapCursorTile.x, world.mapCursorTile.y = rescuer.tileX, rescuer.tileY
+            end
+        end
+    end
+
+    if indexChanged then
+        local newTarget = rescue.targets[rescue.selectedIndex]
+        if newTarget then
+            world.mapCursorTile.x, world.mapCursorTile.y = newTarget.tileX, newTarget.tileY
+        end
+    end
+end
+
+-- Handles input when the player is cycling through tiles to drop a unit.
+local function handle_drop_targeting_input(key, world)
+    local drop = world.dropTargeting
+    if not drop.active then return end
+
+    local indexChanged = false
+    if key == "a" or key == "d" then -- Cycle tiles
+        if key == "a" then
+            drop.selectedIndex = drop.selectedIndex - 1
+            if drop.selectedIndex < 1 then drop.selectedIndex = #drop.tiles end
+        else -- key == "d"
+            drop.selectedIndex = drop.selectedIndex + 1
+            if drop.selectedIndex > #drop.tiles then drop.selectedIndex = 1 end
+        end
+        indexChanged = true
+    elseif key == "k" then -- Cancel
+        world.playerTurnState = "action_menu"
+        world.actionMenu.active = true
+        drop.active = false
+        drop.tiles = {}
+    elseif key == "j" then -- Confirm
+        local rescuer = world.actionMenu.unit
+        local tile = drop.tiles[drop.selectedIndex]
+
+        if RescueHandler.drop(rescuer, tile.tileX, tile.tileY, world) then
+            rescuer.hasActed = true
+            world.playerTurnState = "free_roam"
+            world.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 }
+            drop.active = false
+            drop.tiles = {}
+        end
+    end
+
+    if indexChanged then
+        local newTile = drop.tiles[drop.selectedIndex]
+        if newTile then
+            world.mapCursorTile.x, world.mapCursorTile.y = newTile.tileX, newTile.tileY
+        end
+    end
+end
+
+-- Handles input when an enemy's range is being displayed.
+local function handle_enemy_range_display_input(key, world)
+    -- Pressing J or K will cancel the display and return to free roam.
+    if key == "j" or key == "k" then
+        world.playerTurnState = "free_roam"
+        local display = world.enemyRangeDisplay
+        display.active = false
+        display.unit = nil
+        display.reachableTiles = nil
+        display.attackableTiles = nil
+    end
+    -- Cursor movement is handled by the main gameplay handler.
+    -- No other input is processed in this state.
+end
 
 
 
@@ -492,7 +640,7 @@ stateHandlers.gameplay = function(key, world)
     if world.turn ~= "player" then return end -- Only accept input on the player's turn
 
     -- Handle cursor movement for states that allow it. This is for single key taps.
-    if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" then
+    if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" or world.playerTurnState == "enemy_range_display" then
         if key == "w" then move_cursor(0, -1, world)
         elseif key == "s" then move_cursor(0, 1, world)
         elseif key == "a" then move_cursor(-1, 0, world)
@@ -520,6 +668,12 @@ stateHandlers.gameplay = function(key, world)
         handle_ground_aiming_input(key, world)
     elseif world.playerTurnState == "cycle_targeting" then
         handle_cycle_targeting_input(key, world)
+    elseif world.playerTurnState == "rescue_targeting" then
+        handle_rescue_targeting_input(key, world)
+    elseif world.playerTurnState == "drop_targeting" then
+        handle_drop_targeting_input(key, world)
+    elseif world.playerTurnState == "enemy_range_display" then
+        handle_enemy_range_display_input(key, world)
     elseif world.playerTurnState == "map_menu" then
         handle_map_menu_input(key, world)
     end
@@ -630,9 +784,10 @@ end
 -- This function handles continuous key-down checks for cursor movement.
 function InputHandler.handle_continuous_input(dt, world)
     -- This function should only run during the player's turn in specific states.
-    if world.turn ~= "player" or (world.playerTurnState ~= "free_roam" and
-                                  world.playerTurnState ~= "unit_selected" and
-                                  world.playerTurnState ~= "ground_aiming") then
+    local state = world.playerTurnState
+    local movement_allowed = state == "free_roam" or state == "unit_selected" or state == "ground_aiming" or state == "enemy_range_display"
+
+    if world.turn ~= "player" or not movement_allowed then
         world.cursorInput.activeKey = nil -- Reset when not in a valid state
         return
     end

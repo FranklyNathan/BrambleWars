@@ -10,7 +10,7 @@ local originTypeColors = {
     forestborn = {0.1, 0.5, 0.2, 1}  -- Dark Green
 }
 
--- Helper to format attack names into Title Case (e.g., "invigorating_aura" -> "Invigorating Aura").
+-- Helper to format attack names into Title Case (e.g., "invigoration" -> "Invigoration").
 local function formatAttackName(name)
     if not name then return "" end
     local s = name:gsub("_", " ")
@@ -33,9 +33,9 @@ function UnitInfoMenu.draw(world)
         local font = love.graphics.getFont()
 
         -- Menu dimensions
-        local menuX = Config.VIRTUAL_WIDTH - 190 -- Position from the right edge
+        local menuX = Config.VIRTUAL_WIDTH - 160 -- Position from the right edge
         local menuY = 10 -- Position from the top
-        local menuWidth = 180
+        local menuWidth = 150
 
         -- Dynamically calculate menu height based on content.
         local lineHeight = 18
@@ -50,7 +50,7 @@ function UnitInfoMenu.draw(world)
         if unit.type == "player" then
             love.graphics.setColor(0.6, 0.6, 1, 1) -- Player Blue
         else -- enemy
-            love.graphics.setColor(1, 0.6, 0.6, 1) -- Enemy Red
+            love.graphics.setColor(1, 0.3, 0.3, 1) -- Enemy Red
         end
         love.graphics.setLineWidth(2)
         love.graphics.rectangle("line", menuX, menuY, menuWidth, menuHeight)
@@ -77,6 +77,15 @@ function UnitInfoMenu.draw(world)
         end
         love.graphics.print(unitName, xPos, yPos)
 
+        -- If the unit is carrying another unit, draw a small icon next to their name.
+        if unit.carriedUnit then
+            local nameWidth = font:getWidth(unitName)
+            -- Position the icon to the right of the name.
+            local iconX = xPos + nameWidth + 8
+            love.graphics.setColor(1, 0.8, 0.2, 1) -- A gold/yellow color to stand out
+            love.graphics.print("[+1]", iconX, yPos) -- Simple text icon for clarity
+        end
+
         -- Draw origin type with its color on a new line
         yPos = yPos + lineHeight
         local originColor = originTypeColors[unit.originType] or {1, 1, 1, 1}
@@ -87,7 +96,7 @@ function UnitInfoMenu.draw(world)
         love.graphics.setColor(1, 1, 1, 1)
         local yOffset = yPos + lineHeight * 2 -- Add a blank line after the header
         local labelX = menuX + 5
-        local valueX = menuX + 75
+        local valueX = menuX + 60
 
         love.graphics.print("HP:", labelX, yOffset); love.graphics.print(math.floor(unit.hp) .. "/" .. unit.maxHp, valueX, yOffset); yOffset = yOffset + lineHeight
         love.graphics.print("Wisp:", labelX, yOffset); love.graphics.print(math.floor(unit.wisp) .. "/" .. unit.maxWisp, valueX, yOffset); yOffset = yOffset + lineHeight
@@ -128,6 +137,33 @@ function UnitInfoMenu.draw(world)
             end
         end
         love.graphics.setColor(1, 1, 1, 1) -- Reset color after drawing moves
+
+        -- If the unit is carrying another unit, also draw a mini-info box for them.
+        if unit.carriedUnit then
+            local carriedUnit = unit.carriedUnit
+            -- Define mini-menu properties, positioned below the main menu.
+            local miniMenuHeight = 10 + 3 * lineHeight -- Padding + 3 lines (Title, Name, HP)
+            local miniMenuX = menuX
+            local miniMenuY = menuY + menuHeight + 5 -- 5px gap below the main menu
+
+            -- Draw mini-menu background
+            love.graphics.setColor(0.1, 0.1, 0.1, 0.8)
+            love.graphics.rectangle("fill", miniMenuX, miniMenuY, menuWidth, miniMenuHeight)
+            love.graphics.setColor(1, 0.8, 0.2, 1) -- Gold border to indicate it's related to rescue
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle("line", miniMenuX, miniMenuY, menuWidth, miniMenuHeight)
+            love.graphics.setLineWidth(1)
+
+            -- Draw content
+            local miniXPos = miniMenuX + 10
+            local miniYPos = miniMenuY + 5
+
+            love.graphics.setColor(1, 0.8, 0.2, 1) -- Gold title
+            love.graphics.print("Carrying:", miniXPos, miniYPos); miniYPos = miniYPos + lineHeight
+            love.graphics.setColor(1, 1, 1, 1) -- White text for the rest
+            love.graphics.print(carriedUnit.displayName, miniXPos, miniYPos); miniYPos = miniYPos + lineHeight
+            love.graphics.print("HP: " .. math.floor(carriedUnit.hp) .. "/" .. carriedUnit.maxHp, miniXPos, miniYPos)
+        end
     end
 end
 

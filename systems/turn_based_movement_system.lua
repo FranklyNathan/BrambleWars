@@ -3,10 +3,12 @@
 
 local Grid = require("modules.grid")
 local WorldQueries = require("modules.world_queries")
+local CharacterBlueprints = require("data.character_blueprints")
+local AttackBlueprints = require("data.attack_blueprints")
 
 local TurnBasedMovementSystem = {}
 
--- Helper to format attack names into Title Case (e.g., "invigorating_aura" -> "Invigorating Aura").
+-- Helper to format attack names into Title Case (e.g., "invigoration" -> "Invigoration").
 local function formatAttackName(name)
     local s = name:gsub("_", " ")
     s = s:gsub("^%l", string.upper)
@@ -78,6 +80,18 @@ function TurnBasedMovementSystem.update(dt, world)
                                 end
                             end
                         end
+
+                        -- If the unit is carrying someone, add a "Drop" option.
+                        if entity.carriedUnit then
+                            table.insert(menuOptions, {text = "Drop", key = "drop"})
+                        else
+                            -- If not carrying, check if they can rescue someone.
+                            local rescuableUnits = WorldQueries.findRescuableUnits(entity, world)
+                            if #rescuableUnits > 0 then
+                                table.insert(menuOptions, {text = "Rescue", key = "rescue"})
+                            end
+                        end
+
                         table.insert(menuOptions, {text = "Wait", key = "wait"})
 
                         world.actionMenu.active = true

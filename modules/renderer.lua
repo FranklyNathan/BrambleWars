@@ -211,6 +211,25 @@ local function draw_entity(entity, world, is_active_player)
     -- 7. Draw the health bar on top of everything
     drawAllBars(entity)
 
+    -- 8. If the unit is carrying another unit, draw an icon on the map sprite.
+    if entity.carriedUnit then
+        local iconRadius = 5
+        -- Position it in the bottom-right corner of the tile, just above the health bars.
+        local iconX = entity.x + entity.size - iconRadius - 2
+        local iconY = entity.y + entity.size - iconRadius - 2
+
+        -- Draw a background for the icon to make it stand out.
+        love.graphics.setColor(1, 0.8, 0.2, 1) -- Opaque Gold/yellow
+        love.graphics.circle("fill", iconX, iconY, iconRadius)
+
+        -- Draw a '+' symbol inside the circle.
+        love.graphics.setColor(0, 0, 0, 1) -- Black for contrast
+        love.graphics.setLineWidth(1.5)
+        love.graphics.line(iconX - 2.5, iconY, iconX + 2.5, iconY) -- Horizontal line
+        love.graphics.line(iconX, iconY - 2.5, iconX, iconY + 2.5) -- Vertical line
+        love.graphics.setLineWidth(1) -- Reset line width
+    end
+
     love.graphics.pop()
 end
 
@@ -371,8 +390,14 @@ local function draw_world_space_ui(world)
         end
 
         -- 2. Draw the movement range for the selected unit. This is drawn on top of the attack range.
-        if world.playerTurnState == "unit_selected" and world.reachableTiles then
+        if world.playerTurnState == "unit_selected" and world.reachableTiles then 
             draw_tile_set(world.reachableTiles, 0.2, 0.4, 1, 0.6)
+        end
+
+        -- Draw enemy range display if active
+        if world.enemyRangeDisplay.active then
+            draw_tile_set(world.enemyRangeDisplay.attackableTiles, 1, 0.2, 0.2, 0.4) -- Red for attack
+            draw_tile_set(world.enemyRangeDisplay.reachableTiles, 0.2, 0.4, 1, 0.4) -- Blue for movement
         end
 
         -- 3. Draw the movement path arrow.
@@ -392,7 +417,10 @@ local function draw_world_space_ui(world)
 
         -- 4. Draw the map cursor.
         if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" or
-           world.playerTurnState == "cycle_targeting" or world.playerTurnState == "ground_aiming" then
+           world.playerTurnState == "cycle_targeting" or world.playerTurnState == "ground_aiming" or 
+           world.playerTurnState == "enemy_range_display" or
+           world.playerTurnState == "rescue_targeting" or world.playerTurnState == "drop_targeting"
+           then
             love.graphics.setColor(1, 1, 1, 1) -- White cursor outline
             love.graphics.setLineWidth(2)
             local cursorPixelX, cursorPixelY
@@ -511,6 +539,45 @@ local function draw_world_space_ui(world)
                         love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
                         love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                     end
+                end
+            end
+        end
+
+        -- 7. Draw Rescue/Drop Targeting UI
+        if world.playerTurnState == "rescue_targeting" and world.rescueTargeting.active then
+            local rescue = world.rescueTargeting
+            -- Draw all potential targets with a base color
+            love.graphics.setColor(0.2, 1, 0.2, 0.4) -- Semi-transparent green
+            for _, target in ipairs(rescue.targets) do
+                local pixelX, pixelY = Grid.toPixels(target.tileX, target.tileY)
+                love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+            end
+
+            -- Draw the selected target with a brighter color
+            if #rescue.targets > 0 then
+                local selectedTarget = rescue.targets[rescue.selectedIndex]
+                if selectedTarget then
+                    love.graphics.setColor(0.2, 1, 0.2, 0.7) -- Brighter green
+                    local pixelX, pixelY = Grid.toPixels(selectedTarget.tileX, selectedTarget.tileY)
+                    love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+                end
+            end
+        elseif world.playerTurnState == "drop_targeting" and world.dropTargeting.active then
+            local drop = world.dropTargeting
+            -- Draw all potential drop tiles with a base color
+            love.graphics.setColor(1, 0.8, 0.2, 0.4) -- Semi-transparent yellow/gold
+            for _, tile in ipairs(drop.tiles) do
+                local pixelX, pixelY = Grid.toPixels(tile.tileX, tile.tileY)
+                love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+            end
+
+            -- Draw the selected tile with a brighter color
+            if #drop.tiles > 0 then
+                local selectedTile = drop.tiles[drop.selectedIndex]
+                if selectedTile then
+                    love.graphics.setColor(1, 0.8, 0.2, 0.7) -- Brighter yellow/gold
+                    local pixelX, pixelY = Grid.toPixels(selectedTile.tileX, selectedTile.tileY)
+                    love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                 end
             end
         end

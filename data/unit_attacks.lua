@@ -14,23 +14,31 @@ local CombatFormulas = require("modules.combat_formulas")
 local UnitAttacks = {}
 
 --------------------------------------------------------------------------------
--- ATTACK IMPLEMENTATIONS
+-- HELPER FUNCTIONS
 --------------------------------------------------------------------------------
 
--- Helper function to execute attacks based on a pattern generator.
--- This reduces code duplication by handling the common logic of iterating
--- through a pattern's effects and creating the corresponding attack visuals/logic.
-local function executePatternAttack(square, power, patternFunc, isHeal, targetType, statusEffect, specialProperties)
-    local effects = patternFunc(square)
-    local color = isHeal and {0.5, 1, 0.5, 1} or {1, 0, 0, 1}
-    -- If targetType isn't specified, determine it based on the attacker's type.
-    targetType = targetType or (isHeal and "all" or (square.type == "player" and "enemy" or "player"))
+-- Helper function to calculate hit chance based on attacker/defender stats and move accuracy
+local function calculate_hit_chance(attacker, defender, attackData)
+    local attackerWit = attacker.witStat
+    local defenderWit = defender.witStat
+    local moveAccuracy = attackData.Accuracy or 100 -- Default to 100 for safety.
 
-    for _, effectData in ipairs(effects) do
-        local s = effectData.shape
-        EffectFactory.addAttackEffect(s.x, s.y, s.w, s.h, color, effectData.delay, square, power, isHeal, targetType, nil, statusEffect, specialProperties)
-    end
+    -- Ensure the result is clamped between 0 and 1 for valid probability.
+    return math.max(0, math.min(1, CombatFormulas.calculateHitChance(attackerWit, defenderWit, moveAccuracy)))
 end
+
+-- Helper function to calculate crit chance
+local function calculate_crit_chance(attacker, defender, attackData)
+    local attackerWit = attacker.witStat
+    local defenderWit = defender.witStat
+    local moveCritChance = attackData.CritChance or 0
+    -- Ensure the result is clamped between 0 and 1 for valid probability.
+    return math.max(0, math.min(1, CombatFormulas.calculateCritChance(attackerWit, defenderWit, moveCritChance)))
+end
+
+--------------------------------------------------------------------------------
+-- ATTACK IMPLEMENTATIONS
+--------------------------------------------------------------------------------
 
 -- Helper to get the currently selected target and make the attacker face them.
 local function get_and_face_cycle_target(attacker, world)
@@ -65,6 +73,26 @@ local function executeCycleTargetDamageAttack(attacker, attackName, world, statu
     return true
 end
 
+-- Helper for cycle_target attacks that heal.
+local function execute_cycle_target_heal_attack(attacker, world)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+
+    local attackName = world.selectedAttackName
+    local attackData = AttackBlueprints[attackName]
+
+    -- Healing moves always hit.
+    local healAmount = CombatFormulas.calculateHealingAmount(attacker, attackData)
+    if CombatActions.applyDirectHeal(target, healAmount) then
+        -- Create a visual effect on the target tile.
+        EffectFactory.addAttackEffect(attacker, attackName, target.x, target.y, target.size, target.size, {0.5, 1, 0.5, 0.7}, 0, true, "none")
+        -- Create a popup number for the healing.
+        EffectFactory.createDamagePopup(target, healAmount, false, {0.5, 1, 0.5, 1}) -- Green text
+    end
+
+    return true -- Turn is consumed.
+end
+
 -- Helper for cycle_target attacks that fire a projectile.
 local function executeCycleTargetProjectileAttack(attacker, attackName, world, isPiercing)
     local target = get_and_face_cycle_target(attacker, world)
@@ -76,27 +104,6 @@ local function executeCycleTargetProjectileAttack(attacker, attackName, world, i
     world:queue_add_entity(newProjectile)
     return true
 end
-
-
--- Helper function to calculate hit chance based on attacker/defender stats and move accuracy
-local function calculate_hit_chance(attacker, defender, attackData)
-    local attackerWit = attacker.witStat
-    local defenderWit = defender.witStat
-    local moveAccuracy = attackData.Accuracy or 100 -- Default to 100 for safety.
-
-    -- Ensure the result is clamped between 0 and 1 for valid probability.
-    return math.max(0, math.min(1, CombatFormulas.calculateHitChance(attackerWit, defenderWit, moveAccuracy)))
-end
-
--- Helper function to calculate crit chance
-local function calculate_crit_chance(attacker, defender, attackData)
-    local attackerWit = attacker.witStat
-    local defenderWit = defender.witStat
-    local moveCritChance = attackData.CritChance or 0
-    -- Ensure the result is clamped between 0 and 1 for valid probability.
-    return math.max(0, math.min(1, CombatFormulas.calculateCritChance(attackerWit, defenderWit, moveCritChance)))
-end
-
 
 -- Executes attack hit and returns damage and crit flag.
 local function perform_attack_hit(attacker, defender, attackData, world, statusEffect, isCounterAttack)
@@ -226,6 +233,10 @@ UnitAttacks.uppercut = function(attacker, power, world)
     return execute_cycle_target_damage_attack(attacker, world, status, power)
 end
 
+UnitAttacks.mend = function(attacker, power, world)
+    return execute_cycle_target_heal_attack(attacker, world)
+end
+
 -- The rest of your unit attack functions remain largely unchanged, as they don't directly involve damage calculation:
 
 UnitAttacks.longshot = function(attacker, power, world, target)
@@ -263,27 +274,18 @@ UnitAttacks.phantom_step = function(square, power, world, target)
      return true
  end
 
-UnitAttacks.invigorating_aura = function(attacker, power, world, target)
+UnitAttacks.invigoration = function(attacker, power, world, target)
     target = get_and_face_cycle_target(attacker, world)
     if not target then return false end
 
-    -- Support and Utility moves can now miss based on Wit.
-    local attackData = AttackBlueprints.invigorating_aura
-    local hitChance = calculate_hit_chance(attacker, target, attackData)
-
-    if love.math.random() > hitChance then
-        EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1}) -- Light Grey text
-        return true -- Attack misses, but turn is still consumed.
-    end
-
-    -- 3. If the friendly target has already acted, refresh their turn.
+    -- If the friendly target has already acted, refresh their turn.
     if target.hasActed then
         target.hasActed = false
         EffectFactory.createDamagePopup(target, "Refreshed!", false, {0.5, 1, 0.5, 1}) -- Green text
     end
 
-    -- 4. Create a visual effect on the target tile so the player sees the action.
-    EffectFactory.addAttackEffect(target.x, target.y, target.size, target.size, {0.5, 1, 0.5, 0.7}, 0, attacker, 0, true, "none")
+    -- Create a visual effect on the target tile so the player sees the action.
+    EffectFactory.addAttackEffect(attacker, "invigoration", target.x, target.y, target.size, target.size, {0.5, 1, 0.5, 0.7}, 0, true, "none")
     return true
 end
 
@@ -303,26 +305,20 @@ UnitAttacks.eruption = function(attacker, power, world, target)
     local targetType = (attacker.type == "player" and "enemy" or "player")
 
     for _, effectData in ipairs(effects) do
-        EffectFactory.addAttackEffect(effectData.shape.x, effectData.shape.y, effectData.shape.w, effectData.shape.h, color, effectData.delay, attacker, power, false, targetType)
+        EffectFactory.addAttackEffect(attacker, "eruption", effectData.shape.x, effectData.shape.y, effectData.shape.w, effectData.shape.h, color, effectData.delay, false, targetType)
     end
     return true
 end
 
 UnitAttacks.shockwave = function(attacker, power, world)    
-    -- Shockwave now checks for hit/miss on each target individually.
-    local attackData = AttackBlueprints.shockwave
+    -- Shockwave now always hits all valid targets.
     local targets = WorldQueries.findValidTargetsForAttack(attacker, "shockwave", world)
 
     for _, target in ipairs(targets) do
-        local hitChance = calculate_hit_chance(attacker, target, attackData)
-        if love.math.random() < hitChance then
-            StatusEffectManager.applyStatusEffect(target, {type = "paralyzed", duration = 2, attacker = attacker}, world)
-        else
-            EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1})
-        end
+        StatusEffectManager.applyStatusEffect(target, {type = "paralyzed", duration = 2, attacker = attacker}, world)
     end
 
-    return true -- Turn is consumed even if all attacks miss.
+    return true -- Turn is consumed.
 end
 
 UnitAttacks.quick_step = function(attacker, power, world)
@@ -407,7 +403,7 @@ UnitAttacks.grovecall = function(square, power, world)
     world:queue_add_entity(newObstacle)
 
     -- Create a visual effect on the target tile so the player sees the action.
-    EffectFactory.addAttackEffect(landX, landY, Config.SQUARE_SIZE, Config.SQUARE_SIZE, {0.2, 0.8, 0.3, 0.7}, 0, square, 0, false, "none")
+    EffectFactory.addAttackEffect(square, "grovecall", landX, landY, Config.SQUARE_SIZE, Config.SQUARE_SIZE, {0.2, 0.8, 0.3, 0.7}, 0, false, "none")
 
     return true -- Attack succeeds, turn is consumed.
 end

@@ -24,6 +24,7 @@ local TurnBasedMovementSystem = require("systems/turn_based_movement_system")
 local CounterAttackSystem = require("systems.counter_attack_system")
 local PassiveSystem = require("systems.passive_system")
 local AttackResolutionSystem = require("systems.attack_resolution_system")
+local RescueAnimationSystem = require("systems/rescue_animation_system")
 local AetherfallSystem = require("systems.aetherfall_system")
 local GrappleHookSystem = require("systems/grapple_hook_system")
 local DeathSystem = require("systems.death_system")
@@ -54,7 +55,8 @@ local update_systems = {
     -- 2. Movement and Animation (update physical state)
     TurnBasedMovementSystem,
     MovementSystem,
-    AnimationSystem,    
+    AnimationSystem,
+    RescueAnimationSystem,
     -- 3. AI and Player Actions (decide what to do)
     EnemyTurnSystem,
     -- 4. Update ongoing effects of actions

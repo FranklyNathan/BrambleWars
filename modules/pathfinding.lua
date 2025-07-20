@@ -19,6 +19,8 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
     -- The starting tile is always a valid "landing" spot. The value is now a table.
     reachable[startPosKey] = { cost = 0, landable = true }
 
+    local unitMovement = WorldQueries.getUnitMovement(startUnit)
+
     local head = 1
     while head <= #frontier do
         local current = frontier[head]
@@ -38,8 +40,8 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
             local nextPosKey = nextTileX .. "," .. nextTileY
             
             -- Check if the neighbor is within map boundaries before proceeding.
-            if nextTileX >= 0 and nextTileX < world.map.width and nextTileY >= 0 and nextTileY < world.map.height then
-                if startUnit.movement and nextCost <= startUnit.movement then
+            if nextTileX >= 0 and nextTileX < world.map.width and nextTileY >= 0 and nextTileY < world.map.height then                
+                if nextCost <= unitMovement then
                     -- If we haven't visited this tile, or found a cheaper path to it
                     if not cost_so_far[nextPosKey] or nextCost < cost_so_far[nextPosKey] then
                         local isObstacle = WorldQueries.isTileAnObstacle(nextTileX, nextTileY, world)

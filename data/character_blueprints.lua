@@ -9,7 +9,7 @@ local CharacterBlueprints = {
         originType = "cavernborn",
         HpStat = 12, -- Multiply by 10 to get a charcter's maximum HP
         wispStat = 2, -- Starting (and max) Wisp
-        attackStat = 10, -- Physical attacks use Attack/Defense stat in calcs
+        attackStat = 15, -- Physical attacks use Attack/Defense stat in calcs
         defenseStat = 10,
         magicStat = 10, -- Magical attacks use Magic/Resistance stat
         resistanceStat = 10,
@@ -24,26 +24,26 @@ local CharacterBlueprints = {
     },
     florgessquare = {
         displayName = "Florges",
-        originType = "cavernborn",
-        HpStat = 12,
+        originType = "forestborn",
+        HpStat = 10,
         wispStat = 8,
-        attackStat = 10,
-        defenseStat = 10,
-        magicStat = 10,
-        resistanceStat = 10,
+        attackStat = 4,
+        defenseStat = 7,
+        magicStat = 13,
+        resistanceStat = 17,
         witStat = 8,
         movement = 5,
         weight = 3, -- Light
         dominantColor = {1.0, 0.6, 0.8}, -- Florges: Light Florges
         passives = {"HealingWinds"},
         attacks = {
-            "quill_jab", "invigorating_aura"
+            "quill_jab", "mend", "invigoration"
         }
     },
     venusaursquare = {
         displayName = "Venusaur",
         originType = "cavernborn",
-        HpStat = 12,
+        HpStat = 10,
         wispStat = 4,
         attackStat = 10,
         defenseStat = 10,
@@ -61,11 +61,11 @@ local CharacterBlueprints = {
     magnezonesquare = {
         displayName = "Magnezone",
         originType = "cavernborn",
-        HpStat = 12,
+        HpStat = 11,
         wispStat = 4,
-        attackStat = 10,
-        defenseStat = 10,
-        magicStat = 10,
+        attackStat = 7,
+        defenseStat = 12,
+        magicStat = 13,
         resistanceStat = 10,
         witStat = 8,
         movement = 4,
@@ -96,7 +96,7 @@ local CharacterBlueprints = {
     },
     tangrowthsquare = {
         displayName = "Tangrowth",
-        originType = "cavernborn",
+        originType = "marshborn",
         HpStat = 12,
         wispStat = 4,
         attackStat = 10,
@@ -114,7 +114,7 @@ local CharacterBlueprints = {
     },
     sceptilesquare = {
         displayName = "Sceptile",
-        originType = "cavernborn",
+        originType = "marshborn",
         HpStat = 12,
         wispStat = 4,
         attackStat = 10,
@@ -132,7 +132,7 @@ local CharacterBlueprints = {
     },
     pidgeotsquare = {
         displayName = "Pidgeot",
-        originType = "cavernborn",
+        originType = "forestborn",
         HpStat = 12,
         wispStat = 4,
         attackStat = 10,

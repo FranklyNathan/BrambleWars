@@ -63,21 +63,23 @@ local function findBestCycleTargetAttackPosition(enemy, target, attackName, reac
     local tempEnemy = {}
     for k, v in pairs(enemy) do tempEnemy[k] = v end
     
-    for posKey, _ in pairs(reachableTiles) do
-        local tileX = tonumber(string.match(posKey, "(-?%d+)"))
-        local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
-        tempEnemy.tileX, tempEnemy.tileY = tileX, tileY
-        
-        local validTargets = WorldQueries.findValidTargetsForAttack(tempEnemy, attackName, world)
-        for _, validTarget in ipairs(validTargets) do
-            if validTarget == target then
-                -- This is a valid attack spot. Is it the best one so far (closest to target)?
-                local distSq = (tileX - target.tileX)^2 + (tileY - target.tileY)^2
-                if distSq < closestDistSq then
-                    closestDistSq = distSq
-                    bestPosKey = posKey
+    for posKey, data in pairs(reachableTiles) do
+        if data.landable then
+            local tileX = tonumber(string.match(posKey, "(-?%d+)"))
+            local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+            tempEnemy.tileX, tempEnemy.tileY = tileX, tileY
+            
+            local validTargets = WorldQueries.findValidTargetsForAttack(tempEnemy, attackName, world)
+            for _, validTarget in ipairs(validTargets) do
+                if validTarget == target then
+                    -- This is a valid attack spot. Is it the best one so far (closest to target)?
+                    local distSq = (tileX - target.tileX)^2 + (tileY - target.tileY)^2
+                    if distSq < closestDistSq then
+                        closestDistSq = distSq
+                        bestPosKey = posKey
+                    end
+                    break -- Found a valid spot for this tile, no need to check other targets from this same tile.
                 end
-                break -- Found a valid spot for this tile, no need to check other targets from this same tile.
             end
         end
     end
@@ -88,12 +90,14 @@ end
 -- This is a simple greedy approach and is used as a fallback.
 local function findClosestReachableTileByDistance(enemy, target, reachableTiles)
     local closestKey, closestDistSq = nil, math.huge
-    for posKey, _ in pairs(reachableTiles) do
-        if posKey ~= (enemy.tileX .. "," .. enemy.tileY) then
+    for posKey, data in pairs(reachableTiles) do
+        if data.landable and posKey ~= (enemy.tileX .. "," .. enemy.tileY) then
             local tileX = tonumber(string.match(posKey, "(-?%d+)"))
             local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
             local distSq = (tileX - target.tileX)^2 + (tileY - target.tileY)^2
-            if distSq < closestDistSq then closestDistSq, closestKey = distSq, posKey end
+            if distSq < closestDistSq then 
+                closestDistSq, closestKey = distSq, posKey 
+            end
         end
     end
     return closestKey
@@ -117,8 +121,8 @@ local function findBestMoveOnlyTile(enemy, target, reachableTiles, world)
         head = head + 1
 
         local currentKey = current.tileX .. "," .. current.tileY
-        -- Check if the current tile in our search is one the enemy can actually move to this turn.
-        if reachableTiles[currentKey] and currentKey ~= (enemy.tileX .. "," .. enemy.tileY) then
+        -- Check if the current tile in our search is one the enemy can actually land on this turn.
+        if reachableTiles[currentKey] and reachableTiles[currentKey].landable and currentKey ~= (enemy.tileX .. "," .. enemy.tileY) then
             -- Success! We found a reachable tile that is on a valid path from the target.
             return currentKey
         end

@@ -79,11 +79,18 @@ end
 -- A helper function to get a unit's final movement range, accounting for status effects.
 -- This should be used by the pathfinding system when calculating reachable tiles.
 function WorldQueries.getUnitMovement(unit)
+    if not unit or not unit.movement then return 0 end
+
+    -- Start with the unit's base movement.
+    local finalMovement = unit.movement
+
+    -- Apply status effect penalties.
     if unit and unit.statusEffects and unit.statusEffects.paralyzed then
-        return 0
+        return 0 -- Paralysis completely stops movement.
     end
-    -- In the future, this could also account for buffs/debuffs.
-    return unit and unit.movement or 0
+
+    -- Apply rescue penalty and ensure movement doesn't go below zero.
+    return math.max(0, finalMovement - (unit.rescuePenalty or 0))
 end
 
 -- Helper to get a list of potential targets based on an attack's 'affects' property.
@@ -124,6 +131,11 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
             for _, target in ipairs(potentialTargets) do
                 local isSelf = (target == attacker)
                 local canBeTargeted = not isSelf and not (target.hp and target.hp <= 0)
+
+                -- For healing moves, don't target units at full health.
+                if attackData.useType == "support" and (attackData.power or 0) > 0 and target.hp >= target.maxHp then
+                    canBeTargeted = false
+                end
 
                 if canBeTargeted then
                     local dx = target.tileX - attacker.tileX
@@ -254,6 +266,28 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
     end
 
     return validTargets    
+end
+
+-- Finds all adjacent, lighter player units that can be rescued by the given unit.
+function WorldQueries.findRescuableUnits(rescuer, world)
+    local rescuableUnits = {}
+    if not rescuer then return rescuableUnits end
+
+    -- Iterate through all player units to see who can be rescued.
+    for _, potentialTarget in ipairs(world.players) do
+        -- A unit cannot rescue itself, and must be alive.
+        if potentialTarget ~= rescuer and potentialTarget.hp > 0 then
+            -- Check if the target is adjacent (Manhattan distance of 1).
+            local distance = math.abs(rescuer.tileX - potentialTarget.tileX) + math.abs(rescuer.tileY - potentialTarget.tileY)
+            
+            -- Check if the target has lower weight.
+            if distance == 1 and potentialTarget.weight < rescuer.weight then
+                table.insert(rescuableUnits, potentialTarget)
+            end
+        end
+    end
+
+    return rescuableUnits
 end
 
 return WorldQueries

@@ -48,6 +48,23 @@ function World.new(gameMap)
         selectedIndex = 1
 
     }
+    self.rescueTargeting = { -- For selecting a unit to rescue
+        active = false,
+        targets = {},
+        selectedIndex = 1
+    }
+    self.dropTargeting = { -- For selecting a tile to drop a unit
+        active = false,
+        tiles = {},
+        selectedIndex = 1
+
+    }
+    self.enemyRangeDisplay = { -- For showing a single enemy's movement/attack range
+        active = false,
+        unit = nil,
+        reachableTiles = nil,
+        attackableTiles = nil
+    }
     self.cursorInput = {
         timer = 0,
         initialDelay = 0.35, -- Time before repeat starts
@@ -274,6 +291,19 @@ function World:_add_entity(entity)
     if not entity.components then
         entity.components = {}
     end
+
+    -- Initialize properties for the rescue system, if it's a unit.
+    -- This ensures all units have these fields when they are first added or re-added.
+    if entity.type == "player" or entity.type == "enemy" then
+        -- baseWeight should be set once from the blueprint's weight.
+        if entity.weight and not entity.baseWeight then
+            entity.baseWeight = entity.weight
+        end
+        entity.carriedUnit = entity.carriedUnit or nil
+        entity.rescuePenalty = entity.rescuePenalty or 0
+        entity.isCarried = entity.isCarried or false
+    end
+
     table.insert(self.all_entities, entity)
     if entity.type == "player" then
         table.insert(self.players, entity)
