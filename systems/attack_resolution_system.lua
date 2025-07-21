@@ -7,6 +7,11 @@ local CombatActions = require("modules.combat_actions")
 local AttackBlueprints = require("data.attack_blueprints")
 local CombatFormulas = require("modules.combat_formulas")
 local StatusEffectManager = require("modules.status_effect_manager")
+local CharacterBlueprints = require("data.character_blueprints")
+local EnemyBlueprints = require("data.enemy_blueprints")
+local AttackPatterns = require("modules.attack_patterns")
+local EffectFactory = require("modules.effect_factory")
+
 
 local AttackResolutionSystem = {}
 
@@ -42,29 +47,64 @@ function AttackResolutionSystem.update(dt, world)
                         else -- It's a damage effect
                             local attackData = AttackBlueprints[effect.attackName]
                             if attackData then
-                                -- Calculate the damage
-                                local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, effect.critOverride)
-                                -- Apply Damage using centralized function
-                                CombatActions.applyDirectDamage(target, damage, effect.critOverride, effect.attacker)
+                                -- Centralized logic: Check for hit chance first.
+                                local hitChance = CombatFormulas.calculateHitChance(effect.attacker.witStat, target.witStat, attackData.Accuracy or 100)
+                                if love.math.random() < hitChance then
+                                    -- The attack hits.
+                                    local critChance = CombatFormulas.calculateCritChance(effect.attacker.witStat, target.witStat, attackData.CritChance or 0)
+                                    local isCrit = (love.math.random() < critChance) or effect.critOverride
+local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit)
+                                    CombatActions.applyDirectDamage(target, damage, isCrit, effect.attacker)
 
-                                -- Handle status effects on successful hit.
-                                if effect.statusEffect then
-                                    -- Directly use the status effect data from the effect object
-                                    local statusCopy = {
-                                        type = effect.statusEffect.type,
-                                        duration = effect.statusEffect.duration,
-                                    force = effect.statusEffect.force,
-                                    attacker = effect.attacker,
-                                        -- Direction is calculated below
-                                }
-                                 -- Default direction is the attacker's facing. This is correct for most status effects and directional pushes.
-                                statusCopy.direction = effect.attacker.lastDirection
+                                    -- Handle status effects on successful hit.
+                                    if effect.statusEffect then
+                                        local statusCopy = {
+                                            type = effect.statusEffect.type,
+                                            duration = effect.statusEffect.duration,
+                                            force = effect.statusEffect.force,
+                                            attacker = effect.attacker,
+                                        }
+                                        statusCopy.direction = effect.attacker.lastDirection
+                                        if statusCopy.type == "careening" and not effect.statusEffect.useAttackerDirection then
+                                            statusCopy.direction = StatusEffectManager.calculateCareeningDirection(target, effect.x, effect.y, effect.width, effect.height)
+                                        end
+                                        StatusEffectManager.applyStatusEffect(target, statusCopy, world)
+                                    end
 
-                                -- For "explosive" careening effects, calculate the direction based on the effect's center.
-                                if statusCopy.type == "careening" and not effect.statusEffect.useAttackerDirection then
-                                    statusCopy.direction = StatusEffectManager.calculateCareeningDirection(target, effect.x, effect.y, effect.width, effect.height)
-                                end
-                                StatusEffectManager.applyStatusEffect(target, statusCopy, world) -- Call StatusEffectManager directly
+                                    -- New: Check for counter-attacks right after a successful hit.
+                                    local isCounter = effect.specialProperties and effect.specialProperties.isCounterAttack
+                                    if not isCounter and target.hp and target.hp > 0 and not target.statusEffects.stunned and not target.statusEffects.airborne then
+                                        local defenderBlueprint = (target.type == "player") and CharacterBlueprints[target.playerType] or EnemyBlueprints[target.enemyType]
+                                        if defenderBlueprint and defenderBlueprint.attacks and defenderBlueprint.attacks[1] then
+                                            local basicAttackName = defenderBlueprint.attacks[1]
+                                            local basicAttackData = AttackBlueprints[basicAttackName]
+                                            if basicAttackData and basicAttackData.patternType then
+                                                local pattern = AttackPatterns[basicAttackData.patternType]
+                                                if pattern and type(pattern) == "table" then
+                                                    local dx = effect.attacker.tileX - target.tileX
+                                                    local dy = effect.attacker.tileY - target.tileY
+                                                    local inCounterRange = false
+                                                    for _, p_coord in ipairs(pattern) do
+                                                        if p_coord.dx == dx and p_coord.dy == dy then
+                                                            inCounterRange = true
+                                                            break
+                                                        end
+                                                    end
+
+                                                    if inCounterRange then
+                                                        table.insert(world.pendingCounters, {
+                                                            defender = target,
+                                                            attacker = effect.attacker,
+                                                            delay = 0.25
+                                                        })
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                else
+                                    -- The attack misses.
+                                    EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1})
                                 end
                             end
                         end

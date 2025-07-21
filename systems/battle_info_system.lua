@@ -33,22 +33,23 @@ function BattleInfoSystem.update(dt, world)
         menu.playerHP = math.floor(attacker.hp)
         menu.enemyHP = math.floor(target.hp)
 
-        if attackData.useType == "support" or attackData.useType == "utility" then
-            -- Forecast for support/utility moves, which cannot miss or crit.
-            if (attackData.power or 0) > 0 and attackData.useType == "support" then
-                menu.playerActionLabel = "Heal:"
-                local healAmount = CombatFormulas.calculateHealingAmount(attacker, attackData)
-                menu.playerDamage = tostring(healAmount)
-            else
-                menu.playerActionLabel = "Effect:"
-                menu.playerDamage = "--"
-            end
+        if attackData.useType == "support" then
+            -- Healing forecast
+            menu.playerActionLabel = "Heal:"
+            local healAmount = CombatFormulas.calculateHealingAmount(attacker, attackData)
+            menu.playerDamage = tostring(healAmount)
             menu.playerHitChance = "--"
             menu.playerCritChance = "--"
-            -- No counter-attack for these moves.
+            menu.enemyDamage, menu.enemyHitChance, menu.enemyCritChance = "--", "--", "--"
+        elseif attackData.useType == "utility" and (attackData.power or 0) == 0 then
+            -- Non-damaging utility forecast
+            menu.playerActionLabel = "Effect:"
+            menu.playerDamage = "--"
+            menu.playerHitChance = "--"
+            menu.playerCritChance = "--"
             menu.enemyDamage, menu.enemyHitChance, menu.enemyCritChance = "--", "--", "--"
         else
-            -- Damage forecast
+            -- Damage forecast for physical, magical, and damaging utility
             menu.playerActionLabel = "Damage:"
             local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false)
             menu.playerDamage = tostring(playerDmg)

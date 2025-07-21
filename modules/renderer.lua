@@ -19,15 +19,29 @@ local Renderer = {}
 
 local function drawHealthBar(square)
     local barWidth, barHeight, barYOffset = square.size, 3, square.size + 2
-    love.graphics.setColor(0.2, 0.2, 0.2, 1) -- Dark grey background for clarity
+    -- Draw background first
+    love.graphics.setColor(0.2, 0.2, 0.2, 1) -- Dark grey background
     love.graphics.rectangle("fill", square.x, square.y + barYOffset, barWidth, barHeight)
-    local currentHealthWidth = (square.hp / square.maxHp) * barWidth
-    if square.type == "enemy" then
-        love.graphics.setColor(1, 0, 0, 1) -- Red for enemies
+
+    local healthColor = (square.type == "enemy") and {1, 0, 0, 1} or {0, 1, 0, 1} -- Red for enemies, Green for players
+
+    if square.components.pending_damage and square.components.pending_damage.displayAmount then
+        local pending = square.components.pending_damage
+        -- 1. Draw the "draining" white part first. This represents the health before the drain animation finishes.
+        local totalHealthBeforeDrainWidth = ((square.hp + pending.displayAmount) / square.maxHp) * barWidth
+        love.graphics.setColor(1, 1, 1, 1) -- White for pending damage
+        love.graphics.rectangle("fill", square.x, square.y + barYOffset, totalHealthBeforeDrainWidth, barHeight)
+
+        -- 2. Draw the current (final) health portion on top of the white bar.
+        local currentHealthWidth = (square.hp / square.maxHp) * barWidth
+        love.graphics.setColor(healthColor)
+        love.graphics.rectangle("fill", square.x, square.y + barYOffset, currentHealthWidth, barHeight)
     else
-        love.graphics.setColor(0, 1, 0, 1) -- Green for players
+        -- No pending damage, draw the health bar normally.
+        local currentHealthWidth = (square.hp / square.maxHp) * barWidth
+        love.graphics.setColor(healthColor)
+        love.graphics.rectangle("fill", square.x, square.y + barYOffset, currentHealthWidth, barHeight)
     end
-    love.graphics.rectangle("fill", square.x, square.y + barYOffset, currentHealthWidth, barHeight)
 
     -- If shielded, draw an outline around the health bar.
     if square.components.shielded then
@@ -101,16 +115,16 @@ local function calculate_visual_offsets(entity, currentAnim, drawX, baseDrawY)
     return finalDrawY, rotation
 end
 
--- Draws shader-based overlays for status effects like poison, paralysis, and stun.
-local function draw_status_overlays(entity, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation)
+-- Draws shader-based overlays for visual effects like damage tint and status effects.
+local function draw_visual_effect_overlays(entity, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, baseAlpha)
     if not Assets.shaders.solid_color then return end
 
     -- If poisoned, draw a semi-transparent pulsating overlay on top.
     if entity.statusEffects.poison then
         love.graphics.setShader(Assets.shaders.solid_color)
         local pulse = (math.sin(love.timer.getTime() * 8) + 1) / 2
-        local alpha = 0.2 + pulse * 0.3
-        Assets.shaders.solid_color:send("solid_color", {0.6, 0.2, 0.8, alpha})
+        local effectAlpha = 0.2 + pulse * 0.3
+        Assets.shaders.solid_color:send("solid_color", {0.6, 0.2, 0.8, effectAlpha * baseAlpha})
         currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
     end
 
@@ -118,21 +132,34 @@ local function draw_status_overlays(entity, currentAnim, spriteSheet, w, h, draw
     if entity.statusEffects.paralyzed then
         love.graphics.setShader(Assets.shaders.solid_color)
         local pulse = (math.sin(love.timer.getTime() * 6) + 1) / 2
-        local alpha = 0.1 + pulse * 0.3
-        Assets.shaders.solid_color:send("solid_color", {1.0, 1.0, 0.2, alpha})
+        local effectAlpha = 0.1 + pulse * 0.3
+        Assets.shaders.solid_color:send("solid_color", {1.0, 1.0, 0.2, effectAlpha * baseAlpha})
         currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
     end
 
     -- If stunned, draw a static purple overlay.
     if entity.statusEffects.stunned then
         love.graphics.setShader(Assets.shaders.solid_color)
-        Assets.shaders.solid_color:send("solid_color", {0.5, 0, 0.5, 0.5})
+        Assets.shaders.solid_color:send("solid_color", {0.5, 0, 0.5, 0.5 * baseAlpha})
+        currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
+    end
+
+    -- If the unit just took damage, draw a brief white flash that fades out.
+    -- This is drawn last so it appears on top of other status overlays.
+    if entity.components.damage_tint then
+        love.graphics.setShader(Assets.shaders.solid_color)
+        -- The flash fades out as the timer runs down.
+        local effectAlpha = (entity.components.damage_tint.timer / entity.components.damage_tint.initialTimer)
+        Assets.shaders.solid_color:send("solid_color", {1, 1, 1, effectAlpha * baseAlpha}) -- White flash
         currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
     end
 end
 
 -- Draws shader-based overlays for game states, like "has acted" or "is selected".
 local function draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation)
+    -- Dying units should not have state overlays.
+    if entity.components.fade_out then return end
+
     -- If the unit has acted, draw a greyscale version on top of everything else.
     if entity.hasActed and Assets.shaders.greyscale then
         love.graphics.setShader(Assets.shaders.greyscale)
@@ -193,13 +220,19 @@ local function draw_entity(entity, world, is_active_player)
 
         local finalDrawY, rotation = calculate_visual_offsets(entity, currentAnim, drawX, baseDrawY)
 
+        -- Calculate the base alpha for the entity. This will be 1 unless the unit is fading out.
+        local baseAlpha = 1
+        if entity.components.fade_out then
+            baseAlpha = entity.components.fade_out.timer / entity.components.fade_out.initialTimer
+        end
+
         -- 3. Draw the base sprite at the final calculated position.
         love.graphics.setShader()
-        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setColor(1, 1, 1, baseAlpha)
         currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
 
-        -- 4. Draw overlays for status effects (poison, paralysis, etc.)
-        draw_status_overlays(entity, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation)
+        -- 4. Draw overlays for visual effects (damage tint, poison, etc.)
+        draw_visual_effect_overlays(entity, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, baseAlpha)
 
         -- 5. Draw overlays for game state (acted, selected)
         draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation)
@@ -208,8 +241,10 @@ local function draw_entity(entity, world, is_active_player)
         love.graphics.setShader()
     end
 
-    -- 7. Draw the health bar on top of everything
-    drawAllBars(entity)
+    -- 7. Draw the health bar on top of everything, but only if the unit is not fading out.
+    if not entity.components.fade_out then
+        drawAllBars(entity)
+    end
 
     -- 8. If the unit is carrying another unit, draw an icon on the map sprite.
     if entity.carriedUnit then
@@ -300,10 +335,14 @@ local function draw_all_entities_and_effects(world)
     for _, effect in ipairs(world.attackEffects) do
         -- Only draw if the initial delay has passed
         if effect.initialDelay <= 0 then
-            -- Calculate alpha for flashing effect (e.g., fade out)
-            local alpha = effect.currentFlashTimer / effect.flashDuration
-            love.graphics.setColor(effect.color[1], effect.color[2], effect.color[3], alpha) -- Use effect's color
-            love.graphics.rectangle("fill", effect.x, effect.y, effect.width, effect.height)
+            -- Check the attack's blueprint to see if it should draw a tile.
+            local attackData = effect.attackName and AttackBlueprints[effect.attackName]
+            if attackData and attackData.drawsTile then
+                -- Calculate alpha for flashing effect (e.g., fade out)
+                local alpha = effect.currentFlashTimer / effect.flashDuration
+                love.graphics.setColor(effect.color[1], effect.color[2], effect.color[3], alpha) -- Use effect's color
+                love.graphics.rectangle("fill", effect.x, effect.y, effect.width, effect.height)
+            end
         end
     end
 
@@ -374,8 +413,26 @@ local function draw_world_space_ui(world)
     local INSET_SIZE = Config.SQUARE_SIZE - (BORDER_WIDTH * 2)
 
     if world.gameState == "gameplay" and world.turn == "player" then
+        -- Draw the action menu's attack preview
+        if world.actionMenu.active and world.actionMenu.previewAttackableTiles then
+            draw_tile_set(world.actionMenu.previewAttackableTiles, 1, 0.2, 0.2, 0.5) -- Brighter red
+        end
+
+        -- Draw the action menu's AoE preview for ground-targeted attacks
+        if world.actionMenu.active and world.actionMenu.previewAoeShapes then
+            love.graphics.setColor(1, 0.2, 0.2, 0.6) -- Semi-transparent red, same as ground_aiming preview
+            for _, effectData in ipairs(world.actionMenu.previewAoeShapes) do
+                local s = effectData.shape
+                if s.type == "rect" then
+                    love.graphics.rectangle("fill", s.x, s.y, s.w, s.h)
+                end
+            end
+            love.graphics.setColor(1, 1, 1, 1) -- Reset color
+        end
+
         -- 1. Draw the full attack range for the selected unit (the "danger zone").
-        if (world.playerTurnState == "unit_selected" or world.playerTurnState == "ground_aiming") and world.attackableTiles then
+        local showDangerZone = world.playerTurnState == "unit_selected" or world.playerTurnState == "ground_aiming" or world.playerTurnState == "cycle_targeting"
+        if showDangerZone and world.attackableTiles then
             draw_tile_set(world.attackableTiles, 1, 0.2, 0.2, 0.3)
         end
 
@@ -419,7 +476,8 @@ local function draw_world_space_ui(world)
         if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" or
            world.playerTurnState == "cycle_targeting" or world.playerTurnState == "ground_aiming" or 
            world.playerTurnState == "enemy_range_display" or
-           world.playerTurnState == "rescue_targeting" or world.playerTurnState == "drop_targeting"
+           world.playerTurnState == "rescue_targeting" or world.playerTurnState == "drop_targeting" or
+           world.playerTurnState == "shove_targeting" or world.playerTurnState == "take_targeting"
            then
             love.graphics.setColor(1, 1, 1, 1) -- White cursor outline
             love.graphics.setLineWidth(2)
@@ -577,6 +635,53 @@ local function draw_world_space_ui(world)
                 if selectedTile then
                     love.graphics.setColor(1, 0.8, 0.2, 0.7) -- Brighter yellow/gold
                     local pixelX, pixelY = Grid.toPixels(selectedTile.tileX, selectedTile.tileY)
+                    love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+                end
+            end
+        elseif world.playerTurnState == "shove_targeting" and world.shoveTargeting.active then
+            local shove = world.shoveTargeting
+            -- Draw all potential targets with a base color
+            love.graphics.setColor(0.2, 0.8, 1, 0.4) -- Semi-transparent cyan
+            for _, target in ipairs(shove.targets) do
+                local pixelX, pixelY = Grid.toPixels(target.tileX, target.tileY)
+                love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+            end
+
+            -- Draw the selected target with a brighter color
+            if #shove.targets > 0 then
+                local selectedTarget = shove.targets[shove.selectedIndex]
+                if selectedTarget then
+                    -- Highlight the target itself with a bright cyan
+                    love.graphics.setColor(0.2, 0.8, 1, 0.7)
+                    local pixelX, pixelY = Grid.toPixels(selectedTarget.tileX, selectedTarget.tileY)
+                    love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+
+                    -- Also highlight the destination tile with the same color
+                    local shover = world.actionMenu.unit
+                    if shover then
+                        local dx = selectedTarget.tileX - shover.tileX
+                        local dy = selectedTarget.tileY - shover.tileY
+                        local destTileX, destTileY = selectedTarget.tileX + dx, selectedTarget.tileY + dy
+                        local destPixelX, destPixelY = Grid.toPixels(destTileX, destTileY)
+                        love.graphics.rectangle("fill", destPixelX + BORDER_WIDTH, destPixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+                    end
+                end
+            end
+        elseif world.playerTurnState == "take_targeting" and world.takeTargeting.active then
+            local take = world.takeTargeting
+            -- Draw all potential targets with a base color
+            love.graphics.setColor(0.8, 0.2, 0.8, 0.4) -- Semi-transparent magenta
+            for _, target in ipairs(take.targets) do
+                local pixelX, pixelY = Grid.toPixels(target.tileX, target.tileY)
+                love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+            end
+
+            -- Draw the selected target with a brighter color
+            if #take.targets > 0 then
+                local selectedTarget = take.targets[take.selectedIndex]
+                if selectedTarget then
+                    love.graphics.setColor(0.8, 0.2, 0.8, 0.7) -- Brighter magenta
+                    local pixelX, pixelY = Grid.toPixels(selectedTarget.tileX, selectedTarget.tileY)
                     love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                 end
             end

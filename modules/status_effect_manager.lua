@@ -10,6 +10,12 @@ local StatusEffectManager = {}
 
 -- Apply a status effect to a target.
 function StatusEffectManager.apply(target, effectData, world)
+    -- If totalDuration isn't specified, set it to the initial duration.
+    -- This is crucial for animations that depend on the original duration.
+    if effectData.duration and not effectData.totalDuration then
+        effectData.totalDuration = effectData.duration
+    end
+
     -- Apply effect.
     target.statusEffects[effectData.type] = effectData
     effectData.target = target

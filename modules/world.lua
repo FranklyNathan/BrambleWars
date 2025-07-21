@@ -25,6 +25,7 @@ function World.new(gameMap)
     self.pendingCounters = {}
     self.new_entities = {}
     self.afterimageEffects = {}
+    self.enemyPathfindingCache = {} -- Cache for AI pathfinding data for the current turn.
 
     -- Turn-based state
     self.turn = "player" -- "player" or "enemy"
@@ -58,6 +59,16 @@ function World.new(gameMap)
         tiles = {},
         selectedIndex = 1
 
+    }
+    self.shoveTargeting = { -- For selecting a unit to shove
+        active = false,
+        targets = {},
+        selectedIndex = 1
+    }
+    self.takeTargeting = { -- For selecting a unit to take from
+        active = false,
+        targets = {},
+        selectedIndex = 1
     }
     self.enemyRangeDisplay = { -- For showing a single enemy's movement/attack range
         active = false,
@@ -261,6 +272,8 @@ function World:endTurn()
            -- Store the starting position for this turn, in case of move cancellation.
            player.startOfTurnTileX, player.startOfTurnTileY = player.tileX, player.tileY
         end
+        -- Clear the AI pathfinding cache for the next enemy turn.
+        self.enemyPathfindingCache = {}
 
         -- At the start of the player's turn, move the cursor to the first available unit.
         for _, p in ipairs(self.players) do

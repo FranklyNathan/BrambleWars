@@ -136,8 +136,18 @@ local function findBestMoveOnlyTile(enemy, target, reachableTiles, world)
                nextTileX >= 0 and nextTileX < world.map.width and
                nextTileY >= 0 and nextTileY < world.map.height then
                 
-                -- The path for the BFS should not go through tiles occupied by other units.
-                if not WorldQueries.isTileOccupied(nextTileX, nextTileY, enemy, world) then
+                -- The path for the BFS should not go through obstacles or opponents. It CAN go through allies.
+                local canPass = true
+                if WorldQueries.isTileAnObstacle(nextTileX, nextTileY, world) then
+                    canPass = false -- Can't path through obstacles.
+                else
+                    local occupyingUnit = WorldQueries.getUnitAt(nextTileX, nextTileY, enemy, world)
+                    if occupyingUnit and occupyingUnit.type ~= enemy.type then
+                        canPass = false -- Can't path through opponents.
+                    end
+                end
+
+                if canPass then
                     visited[nextKey] = true
                     table.insert(frontier, {tileX = nextTileX, tileY = nextTileY})
                 end
@@ -152,11 +162,9 @@ end
 function EnemyTurnSystem.update(dt, world)
     if world.turn ~= "enemy" then return end
 
-    -- If any unit is currently moving or an attack is resolving, wait.
-    for _, entity in ipairs(world.all_entities) do if entity.components.movement_path then return end end
-    if #world.attackEffects > 0 then
-        return
-    end
+    -- print("--- EnemyTurnSystem Frame ---")
+    -- If any action is ongoing (animations, projectiles, etc.), wait for it to resolve.
+    if WorldQueries.isActionOngoing(world) then return end
 
     -- Find the next enemy that has not yet acted.
     local actingEnemy = nil
@@ -168,7 +176,8 @@ function EnemyTurnSystem.update(dt, world)
     end
 
     if actingEnemy then
-        -- If the enemy just finished moving, check what to do next.
+        -- This block handles post-move logic. If a unit has no movement path,
+        -- it could be at the start of its turn, or it could have just finished moving.
         if not actingEnemy.components.movement_path then
             if actingEnemy.components.ai and actingEnemy.components.ai.pending_attack then
                 -- Execute the pending attack.
@@ -177,18 +186,20 @@ function EnemyTurnSystem.update(dt, world)
                 world.cycleTargeting.targets = {pending.target}
                 world.cycleTargeting.selectedIndex = 1
                 world.selectedAttackName = pending.name
-                UnitAttacks[pending.name](actingEnemy, AttackBlueprints[pending.name].power, world)
+                UnitAttacks[pending.name](actingEnemy, world)
+                actingEnemy.components.ai.pending_attack = nil
                 world.cycleTargeting.active = false
                 world.selectedAttackName = nil
-                actingEnemy.components.ai.pending_attack = nil
-                actingEnemy.hasActed = true
+                actingEnemy.components.action_in_progress = true
                 return
-            elseif actingEnemy.components.ai and actingEnemy.components.ai.is_moving_to_reposition then
-                -- The repositioning move is complete. End the turn.
-                actingEnemy.components.ai.is_moving_to_reposition = nil
-                actingEnemy.hasActed = true
+            elseif actingEnemy.components.action_in_progress then
+                -- The unit just finished a move-only action. Its turn is over.
+                -- The action_finalization_system will set hasActed. We just need to stop here
+                -- to prevent the AI from running again this frame.
                 return
             end
+        else
+            return -- Has a movement path, so it's currently moving. Do nothing.
         end
 
         local targetPlayer = findClosestPlayer(actingEnemy, world)
@@ -198,7 +209,19 @@ function EnemyTurnSystem.update(dt, world)
         local bestAction = nil
         local bestScore = -1
 
-        local reachableTiles, came_from = Pathfinding.calculateReachableTiles(actingEnemy, world)
+        -- Get pathfinding data from the cache, or calculate and store it if not present.
+        -- This prevents recalculating movement range from a new position mid-turn.
+        local pathData = world.enemyPathfindingCache[actingEnemy]
+        if not pathData then
+            local reachable, came, cost = Pathfinding.calculateReachableTiles(actingEnemy, world)
+            pathData = { reachableTiles = reachable, came_from = came, cost_so_far = cost }
+            world.enemyPathfindingCache[actingEnemy] = pathData
+        end
+
+        local reachableTiles = pathData.reachableTiles
+        local came_from = pathData.came_from
+        local cost_so_far = pathData.cost_so_far
+
         local movementRange = WorldQueries.getUnitMovement(actingEnemy)
         if movementRange == 0 then reachableTiles = {} end
 
@@ -255,19 +278,18 @@ function EnemyTurnSystem.update(dt, world)
                 world.cycleTargeting.active = true
                 world.cycleTargeting.targets = {targetPlayer}
                 world.cycleTargeting.selectedIndex = 1
-                world.selectedAttackName = bestAction.attackName -- Set the attack name for the attack function
+                world.selectedAttackName = bestAction.attackName
+                UnitAttacks[bestAction.attackName](actingEnemy, world)
 
-                UnitAttacks[bestAction.attackName](actingEnemy, bestAction.attackData.power, world)
-
-                world.cycleTargeting.active = false -- Clean up
+                world.cycleTargeting.active = false
                 world.selectedAttackName = nil
-                actingEnemy.hasActed = true
+                actingEnemy.components.action_in_progress = true
                 return
 
             elseif bestAction.type == "move_and_attack" then
                 -- Move to the best attack position, and set a pending attack.
                 local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-                local path = Pathfinding.reconstructPath(came_from, startKey, bestAction.destinationKey)
+                local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, bestAction.destinationKey)
                 if path and #path > 0 then
                     actingEnemy.components.movement_path = path
                     -- Set the pending attack that will be executed after the move is complete.
@@ -277,7 +299,7 @@ function EnemyTurnSystem.update(dt, world)
                     }
                 else
                     -- Pathfinding failed for some reason, end turn.
-                    actingEnemy.hasActed = true
+                    actingEnemy.components.action_in_progress = true
                 end
                 return
             end
@@ -285,15 +307,14 @@ function EnemyTurnSystem.update(dt, world)
             local moveDestinationKey = findBestMoveOnlyTile(actingEnemy, targetPlayer, reachableTiles, world)
             if moveDestinationKey then
                 local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-                local path = Pathfinding.reconstructPath(came_from, startKey, moveDestinationKey)
+                local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, moveDestinationKey)
                 if path and #path > 0 then
                     actingEnemy.components.movement_path = path
-                    actingEnemy.components.ai.is_moving_to_reposition = true
                     return -- Let the movement system take over.
                 end
             end
             -- If no move is possible, end the turn.
-            actingEnemy.hasActed = true
+            actingEnemy.components.action_in_progress = true
         end
     else
         -- No more enemies to act, which means the enemy turn is over.

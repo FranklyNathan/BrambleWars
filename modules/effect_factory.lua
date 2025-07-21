@@ -69,7 +69,7 @@ end
 
 function EffectFactory.createRippleEffect(attacker, centerX, centerY, power, rippleCenterSize, targetType, statusEffect)
     -- Use the centralized ripple pattern generator
-    local ripplePattern = AttackPatterns.ripple(centerX, centerY, rippleCenterSize)
+    local ripplePattern = AttackPatterns.eruption_aoe(centerX, centerY, rippleCenterSize)
 
     for _, effectData in ipairs(ripplePattern) do
         local s = effectData.shape

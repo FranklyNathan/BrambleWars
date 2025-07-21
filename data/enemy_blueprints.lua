@@ -26,7 +26,7 @@ local EnemyBlueprints = {
         witStat = 8,
         movement = 4,
         weight = 4, -- Light
-        attacks = {"froggy_rush", "fireball", "longshot"}
+        attacks = {"walnut_toss", "fireball", "longshot"}
     },
     punter = {
         originType = "cavernborn",

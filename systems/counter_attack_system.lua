@@ -35,11 +35,11 @@ function CounterAttackSystem.update(dt, world)
             if basicAttackName then
                 -- Create a visual effect for the counter-attack. This will handle damage resolution.
                 local targetType = (defender.type == "player") and "enemy" or "player"
-                -- No delay here, because the animation delay is already done.
-                EffectFactory.addAttackEffect(defender, basicAttackName, attacker.x, attacker.y, attacker.size, attacker.size, {1, 0, 0, 1}, 0, false, targetType)
+                -- Mark this effect as a counter-attack so it doesn't trigger another counter.
+                EffectFactory.addAttackEffect(defender, basicAttackName, attacker.x, attacker.y, attacker.size, attacker.size, {1, 0, 0, 1}, 0, false, targetType, nil, nil, {isCounterAttack = true})
             end
 
-            -- Remove from list
+            -- Remove the counter from the pending list.
             table.remove(world.pendingCounters, i)
         end
     end

@@ -4,6 +4,7 @@
 local Grid = require("modules.grid")
 local WorldQueries = require("modules.world_queries")
 local CharacterBlueprints = require("data.character_blueprints")
+local RangeCalculator = require("modules.range_calculator")
 local AttackBlueprints = require("data.attack_blueprints")
 
 local TurnBasedMovementSystem = {}
@@ -92,12 +93,33 @@ function TurnBasedMovementSystem.update(dt, world)
                             end
                         end
 
+                        -- Check if the unit can shove an ally.
+                        local shoveTargets = WorldQueries.findShoveTargets(entity, world)
+                        if #shoveTargets > 0 then
+                            table.insert(menuOptions, {text = "Shove", key = "shove"})
+                        end
+
+                        -- Check if the unit can take a carried unit from an ally.
+                        local takeTargets = WorldQueries.findTakeTargets(entity, world)
+                        if #takeTargets > 0 then
+                            table.insert(menuOptions, {text = "Take", key = "take"})
+                        end
+
                         table.insert(menuOptions, {text = "Wait", key = "wait"})
 
                         world.actionMenu.active = true
                         world.actionMenu.unit = entity
                         world.actionMenu.options = menuOptions
                         world.actionMenu.selectedIndex = 1
+                    elseif entity.type == "enemy" then
+                        -- If an enemy finishes moving, decide what to do.
+                        if entity.components.ai and entity.components.ai.pending_attack then
+                            -- The enemy has a pending attack. Let the enemy_turn_system handle it.
+                            entity.components.action_in_progress = true
+                        else
+                            -- The enemy just finished a move-only action. Their turn is over.
+                            entity.hasActed = true
+                        end
                     end
                 end
             end

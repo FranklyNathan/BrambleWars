@@ -119,10 +119,11 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "magical",
         targeting_style = "cycle_target",
-        range = 6,
+        range = 99, -- Set to a very large number to simulate infinite range.
         affects = "enemies",
         line_of_sight_only = true,
-        patternType = "line_of_sight" -- For the attack preview.
+        patternType = "line_of_sight", -- For the attack preview.
+        drawsTile = true
     },
     longshot = {
         power = 50,
@@ -132,7 +133,7 @@ local AttackBlueprints = {
         CritChance = 20,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "extended_range_only" -- Can only hit targets exactly 3 tiles away.
+        patternType = "longshot_range" -- Can hit targets 2-3 tiles away.
     },
     eruption = {
         power = 60,
@@ -143,12 +144,13 @@ local AttackBlueprints = {
         useType = "magical",
         targeting_style = "ground_aim",
         range = 7,
-        patternType = "eruption_aoe" -- The 5x5 ripple effect.
+        patternType = "eruption_aoe", -- The 5x5 ripple effect.
+        drawsTile = true
     },
 
     -- Damaging Special Attacks
     phantom_step = {
-        power = 0, -- This attack does no damage, it is for movement.
+        power = 15, -- A light utility attack.
         wispCost = 2,
         originType = "marshborn", 
         Accuracy = 100,
@@ -167,7 +169,8 @@ local AttackBlueprints = {
         useType = "support",
         targeting_style = "cycle_target",
         affects = "allies",
-        patternType = "standard_melee"
+        patternType = "standard_melee",
+        drawsTile = true
     },
     mend = {
         power = 20,
@@ -177,7 +180,8 @@ local AttackBlueprints = {
         useType = "support",
         targeting_style = "cycle_target",
         patternType = "standard_melee", -- The 4 adjacent tiles.
-        affects = "all" -- Can target allies and enemies.
+        affects = "all", -- Can target allies and enemies.
+        drawsTile = true
     },
 
     -- Status Attacks
@@ -209,7 +213,8 @@ local AttackBlueprints = {
         originType = "cavernborn", 
         useType = "utility",
         targeting_style = "ground_aim",
-        range = 6
+        range = 6,
+        drawsTile = true
     },
 
     -- Shared Attacks

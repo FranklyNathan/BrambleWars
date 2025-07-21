@@ -58,10 +58,9 @@ local function check_and_trigger_aetherfall(airborne_target, reacting_team_type,
                     target = airborne_target,
                     hitLocations = openTiles,
                     hitsRemaining = #openTiles,
-                    hitTimer = 1, -- Wait 1 second for the airborne animation to play out.
+                    hitTimer = 0.6, -- Wait for the airborne animation to reach its peak.
                     hitDelay = 0.2, -- Time between subsequent hits
                 }
-
                 -- One unit reacts, that's enough.
                 break
             end

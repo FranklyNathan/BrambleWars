@@ -7,7 +7,9 @@ local AttackHandler = require("modules.attack_handler")
 local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local Grid = require("modules.grid")
+local ShoveHandler = require("modules/shove_handler")
 local RescueHandler = require("modules.rescue_handler")
+local TakeHandler = require("modules/take_handler")
 
 local InputHandler = {}
 
@@ -53,14 +55,19 @@ local function move_cursor(dx, dy, world)
     world.mapCursorTile.x = newTileX
     world.mapCursorTile.y = newTileY
 
+    world.cursorPath = world.cursorPath or {}
     -- If a unit is selected, update the movement path
     if world.playerTurnState == "unit_selected" then
         local goalPosKey = world.mapCursorTile.x .. "," .. world.mapCursorTile.y
         -- Check if the tile is reachable AND landable.
         if world.reachableTiles and world.reachableTiles[goalPosKey] and world.reachableTiles[goalPosKey].landable then
             local startPosKey = world.selectedUnit.tileX .. "," .. world.selectedUnit.tileY
-            world.movementPath = Pathfinding.reconstructPath(world.came_from, startPosKey, goalPosKey)
+            world.movementPath = Pathfinding.reconstructPath(world.came_from, world.cost_so_far, world.cursorPath, startPosKey, goalPosKey)
+
+            table.insert(world.cursorPath, {x = world.mapCursorTile.x, y = world.mapCursorTile.y})
+
         else
+            world.cursorPath = {}
             world.movementPath = nil -- Cursor is on an unreachable or non-landable tile
         end
     end
@@ -76,26 +83,6 @@ local function getPlayerUnitAt(tileX, tileY, world)
     return nil
 end
 
--- Helper to generate AoE preview for ground-targeted attacks.
-local function get_ground_aim_aoe_preview(attackName, cursorTileX, cursorTileY)
-    local pixelX, pixelY = Grid.toPixels(cursorTileX, cursorTileY)
-
-    if attackName == "grovecall" then
-        -- A simple 1x1 tile preview.
-        return {{shape = {type = "rect", x = pixelX, y = pixelY, w = Config.SQUARE_SIZE, h = Config.SQUARE_SIZE}, delay = 0}}
-    elseif attackName == "eruption" then
-        -- Center the ripple on the middle of the target tile.
-        local centerX = pixelX + Config.SQUARE_SIZE / 2
-        local centerY = pixelY + Config.SQUARE_SIZE / 2
-        return AttackPatterns.ripple(centerX, centerY, 1)
-    elseif attackName == "quick_step" then
-        -- A simple 1x1 tile preview for the dash destination.
-        return {{shape = {type = "rect", x = pixelX, y = pixelY, w = Config.SQUARE_SIZE, h = Config.SQUARE_SIZE}, delay = 0}}
-    end
-
-    return {} -- Default to no preview
-end
-
 -- Handles input when the player is freely moving the cursor around the map.
 local function handle_free_roam_input(key, world)
     if key == "j" then -- Universal "Confirm" / "Action" key
@@ -105,9 +92,10 @@ local function handle_free_roam_input(key, world)
 world.selectedUnit = unit
             world.playerTurnState = "unit_selected"
             -- Calculate movement range and pathing data
-            world.reachableTiles, world.came_from = Pathfinding.calculateReachableTiles(unit, world)
+            world.reachableTiles, world.came_from, world.cost_so_far = Pathfinding.calculateReachableTiles(unit, world)
             world.attackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, world.reachableTiles)
             world.movementPath = {} -- Start with an empty path
+            world.cursorPath = {} -- Start with an empty cursor path
 
             print("Selected unit:", unit.playerType)
 
@@ -167,6 +155,9 @@ local function handle_unit_selected_input(key, world)
         world.reachableTiles = nil
         world.attackableTiles = nil
         world.movementPath = nil
+        world.cursorPath = nil
+        world.came_from = nil
+        world.cost_so_far = nil
         return -- Exit to prevent cursor update on cancel
     end
 end
@@ -193,18 +184,20 @@ local function handle_action_menu_input(key, world)
             -- Re-select the unit and allow them to move again
             world.playerTurnState = "unit_selected"
             world.selectedUnit = unit
-            world.reachableTiles, world.came_from = Pathfinding.calculateReachableTiles(unit, world)
+            world.reachableTiles, world.came_from, world.cost_so_far = Pathfinding.calculateReachableTiles(unit, world)
             world.attackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, world.reachableTiles)
 
             -- Close the action menu
             menu.active = false
 
+            -- Reset the cursor path since the move was undone.
+            world.cursorPath = {}
             -- After undoing the move, immediately recalculate the path to the current cursor position.
             -- This makes the UI feel more responsive and matches user expectation.
             local goalPosKey = world.mapCursorTile.x .. "," .. world.mapCursorTile.y
             if world.reachableTiles and world.reachableTiles[goalPosKey] and world.reachableTiles[goalPosKey].landable then
                 local startPosKey = unit.tileX .. "," .. unit.tileY
-                world.movementPath = Pathfinding.reconstructPath(world.came_from, startPosKey, goalPosKey)
+                world.movementPath = Pathfinding.reconstructPath(world.came_from, world.cost_so_far, world.cursorPath, startPosKey, goalPosKey)
             else
                 world.movementPath = nil -- No valid path to the current cursor tile.
             end
@@ -215,8 +208,9 @@ local function handle_action_menu_input(key, world)
         if not selectedOption then return end
 
         if selectedOption.key == "wait" then
-            menu.unit.hasActed = true
+            menu.unit.components.action_in_progress = true
             menu.active = false
+            world.attackableTiles = nil
             world.playerTurnState = "free_roam"
             if allPlayersHaveActed(world) then
                 world.turnShouldEnd = true
@@ -261,6 +255,34 @@ local function handle_action_menu_input(key, world)
                 world.mapCursorTile.x = firstTile.tileX
                 world.mapCursorTile.y = firstTile.tileY
             end
+        elseif selectedOption.key == "shove" then
+            local unit = menu.unit
+            local shoveTargets = WorldQueries.findShoveTargets(unit, world)
+            if #shoveTargets > 0 then
+                world.playerTurnState = "shove_targeting"
+                world.shoveTargeting.active = true
+                world.shoveTargeting.targets = shoveTargets
+                world.shoveTargeting.selectedIndex = 1
+                menu.active = false
+                -- Snap cursor to first target
+                local firstTarget = shoveTargets[1]
+                world.mapCursorTile.x = firstTarget.tileX
+                world.mapCursorTile.y = firstTarget.tileY
+            end
+        elseif selectedOption.key == "take" then
+            local unit = menu.unit
+            local takeTargets = WorldQueries.findTakeTargets(unit, world)
+            if #takeTargets > 0 then
+                world.playerTurnState = "take_targeting"
+                world.takeTargeting.active = true
+                world.takeTargeting.targets = takeTargets
+                world.takeTargeting.selectedIndex = 1
+                menu.active = false
+                -- Snap cursor to first target
+                local firstTarget = takeTargets[1]
+                world.mapCursorTile.x = firstTarget.tileX
+                world.mapCursorTile.y = firstTarget.tileY
+            end
         else -- It's an attack.
             local attackName = selectedOption.key
             local attackData = getAttackDataByName(attackName)
@@ -268,6 +290,9 @@ local function handle_action_menu_input(key, world)
 
             world.selectedAttackName = attackName
             menu.active = false
+
+            -- Calculate the range for this specific attack to be displayed during targeting.
+            world.attackableTiles = RangeCalculator.calculateSingleAttackRange(unit, attackName, world)
 
             print("Selected attack:", attackName)
             if attackData.targeting_style == "cycle_target" then
@@ -301,7 +326,7 @@ local function handle_action_menu_input(key, world)
                 world.playerTurnState = "ground_aiming"
                 -- The cursor is already on the unit, which is a fine starting point for aiming.
                 -- Immediately calculate the AoE preview for the starting position.
-                world.attackAoETiles = get_ground_aim_aoe_preview(attackName, unit.tileX, unit.tileY)
+                world.attackAoETiles = AttackPatterns.getGroundAimPreviewShapes(attackName, unit.tileX, unit.tileY)
 
                 -- Calculate the grid of valid aiming tiles, if the attack has a range.
                 if attackData.range then
@@ -334,7 +359,7 @@ local function handle_action_menu_input(key, world)
             -- Directional and no-target attacks execute immediately without further aiming.
             elseif attackData.targeting_style == "no_target" or attackData.targeting_style == "directional_aim" or attackData.targeting_style == "auto_hit_all" then
                 AttackHandler.execute(unit, attackName, world)
-                print("AttackHandler.execute called for", attackName)
+                unit.components.action_in_progress = true
                 world.playerTurnState = "free_roam"
                 world.selectedAttackName = nil
                 if allPlayersHaveActed(world) then
@@ -410,7 +435,7 @@ local function move_ground_aim_cursor(dx, dy, world)
     world.mapCursorTile.y = newTileY
 
     -- After moving, update the AoE preview
-    world.attackAoETiles = get_ground_aim_aoe_preview(world.selectedAttackName, newTileX, newTileY)
+    world.attackAoETiles = AttackPatterns.getGroundAimPreviewShapes(world.selectedAttackName, newTileX, newTileY)
 end
 
 -- Handles input when the player is aiming an attack at a ground tile.
@@ -426,12 +451,13 @@ local function handle_ground_aiming_input(key, world)
         -- The attack implementation itself will validate the target tile.
         -- AttackHandler.execute returns true if the attack was successful.
         if AttackHandler.execute(unit, attackName, world) then
-            unit.hasActed = true
+            unit.components.action_in_progress = true
             world.playerTurnState = "free_roam"
             world.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 }
             world.selectedAttackName = nil
             world.attackAoETiles = nil
             world.groundAimingGrid = nil -- Clear the grid
+            world.attackableTiles = nil
             if allPlayersHaveActed(world) then
                 world.turnShouldEnd = true
             else
@@ -477,12 +503,13 @@ local function handle_cycle_targeting_input(key, world)
         AttackHandler.execute(attacker, attackName, world)
 
         -- Reset state after execution
-        attacker.hasActed = true
+        attacker.components.action_in_progress = true
         world.playerTurnState = "free_roam"
         world.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 }
         world.selectedAttackName = nil
         cycle.active = false
         cycle.targets = {}
+        world.attackableTiles = nil
 
         if allPlayersHaveActed(world) then
             world.turnShouldEnd = true
@@ -535,12 +562,13 @@ local function handle_rescue_targeting_input(key, world)
         local target = rescue.targets[rescue.selectedIndex]
 
         if RescueHandler.rescue(rescuer, target, world) then
-            rescuer.hasActed = true
+            rescuer.components.action_in_progress = true
             world.playerTurnState = "free_roam"
             -- Reset menus and targeting states
             world.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 }
             rescue.active = false
             rescue.targets = {}
+            world.attackableTiles = nil
 
             if allPlayersHaveActed(world) then
                 world.turnShouldEnd = true
@@ -584,11 +612,12 @@ local function handle_drop_targeting_input(key, world)
         local tile = drop.tiles[drop.selectedIndex]
 
         if RescueHandler.drop(rescuer, tile.tileX, tile.tileY, world) then
-            rescuer.hasActed = true
+            rescuer.components.action_in_progress = true
             world.playerTurnState = "free_roam"
             world.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 }
             drop.active = false
             drop.tiles = {}
+            world.attackableTiles = nil
         end
     end
 
@@ -596,6 +625,105 @@ local function handle_drop_targeting_input(key, world)
         local newTile = drop.tiles[drop.selectedIndex]
         if newTile then
             world.mapCursorTile.x, world.mapCursorTile.y = newTile.tileX, newTile.tileY
+        end
+    end
+end
+
+-- Handles input when the player is cycling through units to shove.
+local function handle_shove_targeting_input(key, world)
+    local shove = world.shoveTargeting
+    if not shove.active then return end
+
+    local indexChanged = false
+    if key == "a" or key == "d" then -- Cycle targets
+        if key == "a" then
+            shove.selectedIndex = shove.selectedIndex - 1
+            if shove.selectedIndex < 1 then shove.selectedIndex = #shove.targets end
+        else -- key == "d"
+            shove.selectedIndex = shove.selectedIndex + 1
+            if shove.selectedIndex > #shove.targets then shove.selectedIndex = 1 end
+        end
+        indexChanged = true
+    elseif key == "k" then -- Cancel
+        world.playerTurnState = "action_menu"
+        world.actionMenu.active = true
+        shove.active = false
+        shove.targets = {}
+    elseif key == "j" then -- Confirm
+        local shover = world.actionMenu.unit
+        local target = shove.targets[shove.selectedIndex]
+
+        -- Make the shover face the target before shoving for the lunge animation.
+        local dx, dy = target.tileX - shover.tileX, target.tileY - shover.tileY
+        if math.abs(dx) > math.abs(dy) then shover.lastDirection = (dx > 0) and "right" or "left"
+        else shover.lastDirection = (dy > 0) and "down" or "up" end
+
+        if ShoveHandler.shove(shover, target, world) then
+            shover.components.action_in_progress = true
+            world.playerTurnState = "free_roam"
+            -- Reset menus and targeting states
+            world.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 }
+            shove.active = false
+            shove.targets = {}
+            world.attackableTiles = nil
+
+            if allPlayersHaveActed(world) then
+                world.turnShouldEnd = true
+            end
+        end
+    end
+
+    if indexChanged then
+        local newTarget = shove.targets[shove.selectedIndex]
+        if newTarget then
+            world.mapCursorTile.x, world.mapCursorTile.y = newTarget.tileX, newTarget.tileY
+        end
+    end
+end
+
+-- Handles input when the player is cycling through units to take from.
+local function handle_take_targeting_input(key, world)
+    local take = world.takeTargeting
+    if not take.active then return end
+
+    local indexChanged = false
+    if key == "a" or key == "d" then -- Cycle targets
+        if key == "a" then
+            take.selectedIndex = take.selectedIndex - 1
+            if take.selectedIndex < 1 then take.selectedIndex = #take.targets end
+        else -- key == "d"
+            take.selectedIndex = take.selectedIndex + 1
+            if take.selectedIndex > #take.targets then take.selectedIndex = 1 end
+        end
+        indexChanged = true
+    elseif key == "k" then -- Cancel
+        world.playerTurnState = "action_menu"
+        world.actionMenu.active = true
+        take.active = false
+        take.targets = {}
+    elseif key == "j" then -- Confirm
+        local taker = world.actionMenu.unit
+        local carrier = take.targets[take.selectedIndex]
+
+        if TakeHandler.take(taker, carrier, world) then
+            taker.components.action_in_progress = true
+            world.playerTurnState = "free_roam"
+            -- Reset menus and targeting states
+            world.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 }
+            take.active = false
+            take.targets = {}
+            world.attackableTiles = nil
+
+            if allPlayersHaveActed(world) then
+                world.turnShouldEnd = true
+            end
+        end
+    end
+
+    if indexChanged then
+        local newTarget = take.targets[take.selectedIndex]
+        if newTarget then
+            world.mapCursorTile.x, world.mapCursorTile.y = newTarget.tileX, newTarget.tileY
         end
     end
 end
@@ -672,6 +800,10 @@ stateHandlers.gameplay = function(key, world)
         handle_rescue_targeting_input(key, world)
     elseif world.playerTurnState == "drop_targeting" then
         handle_drop_targeting_input(key, world)
+    elseif world.playerTurnState == "shove_targeting" then
+        handle_shove_targeting_input(key, world)
+    elseif world.playerTurnState == "take_targeting" then
+        handle_take_targeting_input(key, world)
     elseif world.playerTurnState == "enemy_range_display" then
         handle_enemy_range_display_input(key, world)
     elseif world.playerTurnState == "map_menu" then

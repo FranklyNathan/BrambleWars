@@ -50,8 +50,8 @@ function AttackHandler.execute(square, attackName, world)
         if not AttackHandler.deductWispCost(square, attackData) then return false end
     end
 
-    -- Execute the attack.
-    local result = UnitAttacks[attackName](square, attackData.power, world, target) -- Target is only used by cycle-targeting
+    -- Execute the attack. The attack function now only needs the attacker and the world state.
+    local result = UnitAttacks[attackName](square, world)
     -- If the attack function returns a boolean, use it. Otherwise, assume it fired successfully.
     if type(result) == "boolean" then
         return result

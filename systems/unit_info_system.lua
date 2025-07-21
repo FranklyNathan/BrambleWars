@@ -11,6 +11,15 @@ function UnitInfoSystem.update(dt, world)
     local menu = world.unitInfoMenu
     if not menu then return end
 
+    -- If any combat or movement animation is in progress, hide the hover UI.
+    if WorldQueries.isActionOngoing(world) then
+        menu.active = false
+        menu.unit = nil
+        world.hoverReachableTiles = nil
+        world.hoverAttackableTiles = nil
+        return -- Exit early to prevent UI from showing.
+    end
+
     -- Only show the hover menu in specific states.
     if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" then
         local unit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
@@ -20,9 +29,9 @@ function UnitInfoSystem.update(dt, world)
             menu.active = true
             menu.unit = unit
             print("[UnitInfoSystem] Hovering over: " .. (unit.displayName or unit.enemyType))
-            -- Calculate and store hover ranges, but only if the unit isn't the currently selected one
-            -- to avoid drawing two sets of ranges for the same unit.
-            if unit ~= world.selectedUnit then
+            -- Calculate and store hover ranges, but only if the unit isn't the currently selected one (to avoid double-drawing)
+            -- and is not a player unit that has already acted.
+            if unit ~= world.selectedUnit and not (unit.type == "player" and unit.hasActed) then
                 print("[UnitInfoSystem] Calculating hover ranges...")
                 local reachable, _ = Pathfinding.calculateReachableTiles(unit, world)
                 world.hoverReachableTiles = reachable

@@ -162,4 +162,84 @@ function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
     return attackableTiles
 end
 
+-- Calculates the attack range for a single, specific attack from the unit's current position.
+function RangeCalculator.calculateSingleAttackRange(unit, attackName, world)
+    local attackData = AttackBlueprints[attackName]
+    if not attackData then return {} end
+
+    local attackableTiles = {}
+    local tempUnit = { -- Use a temp unit to avoid modifying the real one's direction
+        tileX = unit.tileX,
+        tileY = unit.tileY,
+        x = unit.x,
+        y = unit.y,
+        size = unit.size,
+        lastDirection = unit.lastDirection,
+        type = unit.type
+    }
+    local directions = {"up", "down", "left", "right"}
+
+    if attackData.targeting_style == "cycle_target" then
+        local pattern = attackData.patternType and AttackPatterns[attackData.patternType]
+        if pattern and type(pattern) == "table" then
+            -- Fixed-shape patterns (melee, longshot_range, etc.)
+            for _, patternCoord in ipairs(pattern) do
+                local attackTileX = tempUnit.tileX + patternCoord.dx
+                local attackTileY = tempUnit.tileY + patternCoord.dy
+                if attackTileX >= 0 and attackTileX < world.map.width and attackTileY >= 0 and attackTileY < world.map.height then
+                    attackableTiles[attackTileX .. "," .. attackTileY] = true
+                end
+            end
+        elseif pattern and type(pattern) == "function" then
+            -- Functional patterns (line_of_sight)
+            for _, dir in ipairs(directions) do
+                tempUnit.lastDirection = dir
+                local attackShapes = pattern(tempUnit, world)
+                for _, effectData in ipairs(attackShapes) do
+                    local s = effectData.shape
+                    local startTileX, startTileY = Grid.toTile(s.x, s.y)
+                    local endTileX, endTileY = Grid.toTile(s.x + s.w - 1, s.y + s.h - 1)
+                    for ty = startTileY, endTileY do
+                        for tx = startTileX, endTileX do
+                            attackableTiles[tx .. "," .. ty] = true
+                        end
+                    end
+                end
+            end
+        end
+    elseif attackData.targeting_style == "ground_aim" then
+        local range = attackData.range
+        if range then
+            -- For ground_aim, the "danger zone" is the set of all tiles that can be aimed at.
+            for dx = -range, range do
+                for dy = -range, range do
+                    if math.abs(dx) + math.abs(dy) <= range then
+                        local aimTileX, aimTileY = tempUnit.tileX + dx, tempUnit.tileY + dy
+                        if aimTileX >= 0 and aimTileX < world.map.width and aimTileY >= 0 and aimTileY < world.map.height then
+                            attackableTiles[aimTileX .. "," .. aimTileY] = true
+                        end
+                    end
+                end
+            end
+        end
+    elseif attackData.targeting_style == "auto_hit_all" then
+        -- For auto_hit_all, the danger zone is all tiles within range.
+        local range = attackData.range
+        if range then
+            for dx = -range, range do
+                for dy = -range, range do
+                    if math.abs(dx) + math.abs(dy) <= range then
+                        local attackTileX, attackTileY = tempUnit.tileX + dx, tempUnit.tileY + dy
+                        if attackTileX >= 0 and attackTileX < world.map.width and attackTileY >= 0 and attackTileY < world.map.height then
+                            attackableTiles[attackTileX .. "," .. attackTileY] = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return attackableTiles
+end
+
 return RangeCalculator

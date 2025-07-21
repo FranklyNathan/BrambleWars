@@ -37,6 +37,17 @@ AttackPatterns.extended_range_only = {
     {dx = -2, dy = -1}, {dx = -2, dy = 1}, {dx = 2, dy = -1}, {dx = 2, dy = 1},
 }
 
+-- Can hit targets 2-3 tiles away (Manhattan distance).
+AttackPatterns.longshot_range = {
+    -- Range 2
+    {dx = 0, dy = -2}, {dx = 0, dy = 2}, {dx = -2, dy = 0}, {dx = 2, dy = 0},
+    {dx = -1, dy = -1}, {dx = -1, dy = 1}, {dx = 1, dy = -1}, {dx = 1, dy = 1},
+    -- Range 3
+    {dx = 0, dy = -3}, {dx = 0, dy = 3}, {dx = -3, dy = 0}, {dx = 3, dy = 0},
+    {dx = -1, dy = -2}, {dx = -1, dy = 2}, {dx = 1, dy = -2}, {dx = 1, dy = 2},
+    {dx = -2, dy = -1}, {dx = -2, dy = 1}, {dx = 2, dy = -1}, {dx = 2, dy = 1},
+}
+
 --------------------------------------------------------------------------------
 -- DYNAMIC PATTERNS (FUNCTIONS)
 --------------------------------------------------------------------------------
@@ -73,6 +84,26 @@ function AttackPatterns.eruption_aoe(centerX, centerY, rippleCenterSize)
         {shape = {type = "rect", x = centerX - size2 / 2, y = centerY - size2 / 2, w = size2, h = size2}, delay = Config.FLASH_DURATION},
         {shape = {type = "rect", x = centerX - size3 / 2, y = centerY - size3 / 2, w = size3, h = size3}, delay = Config.FLASH_DURATION * 2},
     }
+end
+
+-- Generates preview shapes for ground-targeted attacks.
+function AttackPatterns.getGroundAimPreviewShapes(attackName, centerTileX, centerTileY)
+    local pixelX, pixelY = Grid.toPixels(centerTileX, centerTileY)
+
+    if attackName == "grovecall" then
+        -- A simple 1x1 tile preview.
+        return {{shape = {type = "rect", x = pixelX, y = pixelY, w = Config.SQUARE_SIZE, h = Config.SQUARE_SIZE}, delay = 0}}
+    elseif attackName == "eruption" then
+        -- Center the ripple on the middle of the target tile.
+        local centerX = pixelX + Config.SQUARE_SIZE / 2
+        local centerY = pixelY + Config.SQUARE_SIZE / 2
+        return AttackPatterns.eruption_aoe(centerX, centerY, 1)
+    elseif attackName == "quick_step" then
+        -- A simple 1x1 tile preview for the dash destination.
+        return {{shape = {type = "rect", x = pixelX, y = pixelY, w = Config.SQUARE_SIZE, h = Config.SQUARE_SIZE}, delay = 0}}
+    end
+
+    return {} -- Default to no preview
 end
 
 return AttackPatterns

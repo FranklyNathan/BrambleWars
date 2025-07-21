@@ -54,10 +54,13 @@ function CombatFormulas.calculateBaseDamage(attacker, defender, attackData)
     if attackData.useType == "physical" then
         defenseStatUsed = defender.defenseStat
         rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's defense.
-    -- Calculate damage dealt by a magic attack.
-    elseif attackData.useType == "magic" then
+    elseif attackData.useType == "magical" then
         defenseStatUsed = defender.resistanceStat
         rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's resistance.
+    elseif attackData.useType == "utility" and power > 0 then
+        -- Utility moves with power use physical stats by default.
+        defenseStatUsed = defender.defenseStat
+        rawDamage = math.max(0, adjustedPower - defenseStatUsed)
     end
 
     -- Base damage should always be a whole number.

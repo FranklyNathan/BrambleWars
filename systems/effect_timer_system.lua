@@ -23,6 +23,35 @@ function EffectTimerSystem.update(dt, world)
             end
         end
 
+        -- Update damage tint timer
+        if s.components.damage_tint then
+            s.components.damage_tint.timer = s.components.damage_tint.timer - dt
+            if s.components.damage_tint.timer <= 0 then
+                s.components.damage_tint = nil
+            end
+        end
+
+        -- Update fade_out timer
+        if s.components.fade_out then
+            s.components.fade_out.timer = s.components.fade_out.timer - dt
+            if s.components.fade_out.timer <= 0 then
+                s.isMarkedForDeletion = true -- Mark for deletion now that the fade is complete.
+                s.components.fade_out = nil
+            end
+        end
+
+        -- Update pending_damage timer for health bar animation
+        if s.components.pending_damage then
+            local pending = s.components.pending_damage
+            pending.timer = pending.timer - dt
+            if pending.timer <= 0 then
+                s.components.pending_damage = nil
+            else
+                -- This value will be read by the renderer to draw the white "draining" part of the bar.
+                pending.displayAmount = pending.amount * (pending.timer / pending.initialTimer)
+            end
+        end
+
         -- Update time-based status effects like 'airborne'. This ensures the visual
         -- effect (like rotation) progresses smoothly over time, not just at turn ends.
         if s.statusEffects and s.statusEffects.airborne then

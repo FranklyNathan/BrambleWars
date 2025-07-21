@@ -14,7 +14,7 @@ local CharacterBlueprints = {
         magicStat = 10, -- Magical attacks use Magic/Resistance stat
         resistanceStat = 10,
         witStat = 8, -- Used when calculating if a move hits/misses and if a move is a critical hit
-        movement = 7, -- How many tiles a character can move in a turn
+        movement = 6, -- How many tiles a character can move in a turn
         weight = 8, -- Heavy
         dominantColor = {0.5, 0.2, 0.8}, -- Drapion: Purple
         passives = {"Bloodrush"}, -- Characters can have multiple 
@@ -73,7 +73,7 @@ local CharacterBlueprints = {
         dominantColor = {0.6, 0.6, 0.7}, -- Magnezone: Steel Grey
         passives = {},
         attacks = {
-            "snap", "slash", "fireball"
+            "walnut_toss", "slash", "fireball"
         }
     },
     electiviresquare = {
@@ -86,7 +86,7 @@ local CharacterBlueprints = {
         magicStat = 10,
         resistanceStat = 10,
         witStat = 8,
-        movement = 6,
+        movement = 5,
         weight = 7, -- Medium-Heavy
         dominantColor = {1.0, 0.8, 0.1}, -- Electivire: Electric Venusaur
         passives = {},
@@ -122,7 +122,7 @@ local CharacterBlueprints = {
         magicStat = 10,
         resistanceStat = 10,
         witStat = 8,
-        movement = 8,
+        movement = 6,
         weight = 6, -- Medium
         dominantColor = {0.1, 0.8, 0.3}, -- Sceptile: Leaf Green
         passives = {},
@@ -140,7 +140,7 @@ local CharacterBlueprints = {
         magicStat = 10,
         resistanceStat = 10,
         witStat = 8,
-        movement = 9,
+        movement = 8,
         weight = 5, -- Medium-Light
         isFlying = true,
         dominantColor = {0.8, 0.7, 0.4}, -- Pidgeot: Sandy Brown

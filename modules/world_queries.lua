@@ -191,16 +191,20 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
                                     local dirY = (target.tileY > attacker.tileY) and 1 or -1
                                     for i = 1, dist - 1 do
                                         if WorldQueries.isTileOccupied(attacker.tileX, attacker.tileY + i * dirY, attacker, world) then
-                                            if attackName ~= "fireball" then isBlocked = true end
-                                            break
+                                            if attackName ~= "fireball" then
+                                                isBlocked = true
+                                                break
+                                            end
                                         end
                                     end
                                 else -- Horizontal line
                                     local dirX = (target.tileX > attacker.tileX) and 1 or -1
                                     for i = 1, dist - 1 do
                                         if WorldQueries.isTileOccupied(attacker.tileX + i * dirX, attacker.tileY, attacker, world) then
-                                            if attackName ~= "fireball" then isBlocked = true end
-                                            break
+                                            if attackName ~= "fireball" then
+                                                isBlocked = true
+                                                break
+                                            end
                                         end
                                     end
                                 end
@@ -288,6 +292,81 @@ function WorldQueries.findRescuableUnits(rescuer, world)
     end
 
     return rescuableUnits
+end
+
+-- Finds all adjacent, lighter allied units that can be shoved by the given unit.
+function WorldQueries.findShoveTargets(shover, world)
+    local validTargets = {}
+    if not shover then return validTargets end
+
+    -- Iterate through all player units to see who can be shoved.
+    for _, potentialTarget in ipairs(world.players) do
+        -- A unit cannot shove itself, and must be alive.
+        if potentialTarget ~= shover and potentialTarget.hp > 0 then
+            -- Check if the target is adjacent (Manhattan distance of 1).
+            local distance = math.abs(shover.tileX - potentialTarget.tileX) + math.abs(shover.tileY - potentialTarget.tileY)
+            
+            -- Check if the target has lower weight.
+            if distance == 1 and shover.weight > potentialTarget.weight then
+                -- Calculate the destination tile for the shoved unit.
+                local dx = potentialTarget.tileX - shover.tileX
+                local dy = potentialTarget.tileY - shover.tileY
+                local destTileX, destTileY = potentialTarget.tileX + dx, potentialTarget.tileY + dy
+
+                -- Check if the destination tile is within map bounds and is unoccupied.
+                if destTileX >= 0 and destTileX < world.map.width and destTileY >= 0 and destTileY < world.map.height and not WorldQueries.isTileOccupied(destTileX, destTileY, nil, world) then
+                    table.insert(validTargets, potentialTarget)
+                end
+            end
+        end
+    end
+
+    return validTargets
+end
+
+-- Finds all adjacent player units who are carrying a unit that the 'taker' can take.
+function WorldQueries.findTakeTargets(taker, world)
+    local validTargets = {}
+    if not taker or taker.carriedUnit then return validTargets end -- A unit already carrying someone cannot take.
+
+    -- Iterate through all player units to see who we can take from.
+    for _, potentialCarrier in ipairs(world.players) do
+        -- A unit cannot take from itself, and the carrier must be alive and carrying someone.
+        if potentialCarrier ~= taker and potentialCarrier.hp > 0 and potentialCarrier.carriedUnit then
+            -- Check if the potential carrier is adjacent.
+            local distance = math.abs(taker.tileX - potentialCarrier.tileX) + math.abs(taker.tileY - potentialCarrier.tileY)
+            
+            if distance == 1 then
+                local carriedUnit = potentialCarrier.carriedUnit
+                -- Check if the taker is heavier than the unit being carried.
+                if taker.baseWeight > carriedUnit.baseWeight then
+                    table.insert(validTargets, potentialCarrier)
+                end
+            end
+        end
+    end
+    return validTargets
+end
+
+-- Checks if any major game action (attack, movement, animation) is currently in progress.
+-- This is used to lock UI elements and delay turn finalization.
+function WorldQueries.isActionOngoing(world)
+    -- An action is considered ongoing if there are active global effects...
+    if #world.attackEffects > 0 or #world.pendingCounters > 0 or #world.projectiles > 0 then
+        return true
+    end
+
+    -- ...or if any single unit is still performing a visual action.
+    for _, entity in ipairs(world.all_entities) do
+        -- Check for animations like lunges, careening, or any entity that is currently moving towards a target pixel.
+        if entity.components.lunge or
+           (entity.statusEffects and entity.statusEffects.careening) or
+           (entity.targetX and (math.abs(entity.x - entity.targetX) > 0.5 or math.abs(entity.y - entity.targetY) > 0.5)) then
+            return true -- Found a busy unit.
+        end
+    end
+
+    return false -- No ongoing actions found.
 end
 
 return WorldQueries

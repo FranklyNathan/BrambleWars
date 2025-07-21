@@ -31,13 +31,18 @@ function CombatActions.applyDirectDamage(target, damageAmount, isCrit, attacker,
     local roundedDamage = math.floor(damageAmount)
     if roundedDamage > 0 then
         local wasAlive = target.hp > 0
-        target.hp = target.hp - roundedDamage
+        local hp_before_damage = target.hp
+        target.hp = math.max(0, target.hp - roundedDamage)
         -- Only create the default popup if not explicitly told otherwise.
         if options.createPopup ~= false then
             EffectFactory.createDamagePopup(target, roundedDamage, isCrit)
         end
         target.components.shake = { timer = 0.2, intensity = 2 }
-        if target.hp < 0 then target.hp = 0 end
+        target.components.damage_tint = { timer = 0.3, initialTimer = 0.3 } -- Add red tint effect
+
+        -- Add the pending_damage component for the health bar animation.
+        local actualDamageDealt = hp_before_damage - target.hp
+        target.components.pending_damage = { amount = actualDamageDealt, timer = 0.8, initialTimer = 0.8 }
 
         -- If the unit was alive and is now at 0 HP, it just died.
         if wasAlive and target.hp <= 0 then

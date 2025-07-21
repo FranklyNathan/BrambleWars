@@ -23,7 +23,9 @@ local EnemyTurnSystem = require("systems/enemy_turn_system")
 local TurnBasedMovementSystem = require("systems/turn_based_movement_system")
 local CounterAttackSystem = require("systems.counter_attack_system")
 local PassiveSystem = require("systems.passive_system")
+local ActionFinalizationSystem = require("systems/action_finalization_system")
 local AttackResolutionSystem = require("systems.attack_resolution_system")
+local ActionMenuPreviewSystem = require("systems.action_menu_preview_system")
 local RescueAnimationSystem = require("systems/rescue_animation_system")
 local AetherfallSystem = require("systems.aetherfall_system")
 local GrappleHookSystem = require("systems/grapple_hook_system")
@@ -52,6 +54,7 @@ local update_systems = {
     PassiveSystem,
     UnitInfoSystem,
     BattleInfoSystem,
+    ActionMenuPreviewSystem,
     -- 2. Movement and Animation (update physical state)
     TurnBasedMovementSystem,
     MovementSystem,
@@ -67,6 +70,8 @@ local update_systems = {
     AetherfallSystem,
     -- 5. Resolve the consequences of actions
     AttackResolutionSystem,
+    -- 6. Finalize the turn state after all actions are resolved
+    ActionFinalizationSystem,
 }
 
 -- love.load() is called once when the game starts.
