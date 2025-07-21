@@ -352,9 +352,9 @@ end
 -- This is used to lock UI elements and delay turn finalization.
 function WorldQueries.isActionOngoing(world)
     -- An action is considered ongoing if there are active global effects...
-    if #world.attackEffects > 0 or #world.pendingCounters > 0 or #world.projectiles > 0 then
-        return true
-    end
+    -- An action is ongoing if a projectile is in flight, or a counter-attack is pending.
+    -- We don't check attackEffects here, as those are purely visual and shouldn't block game state.
+    if #world.projectiles > 0 or #world.pendingCounters > 0 then return true end
 
     -- ...or if any single unit is still performing a visual action.
     for _, entity in ipairs(world.all_entities) do

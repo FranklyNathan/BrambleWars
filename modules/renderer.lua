@@ -10,6 +10,7 @@ local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local UnitInfoMenu = require("modules.unit_info_menu")
 local BattleInfoMenu = require("modules.battle_info_menu")
+local LiveCombatDisplay = require("modules.live_combat_display")
 local Renderer = {}
 
 --------------------------------------------------------------------------------
@@ -29,7 +30,12 @@ local function drawHealthBar(square)
         local pending = square.components.pending_damage
         -- 1. Draw the "draining" white part first. This represents the health before the drain animation finishes.
         local totalHealthBeforeDrainWidth = ((square.hp + pending.displayAmount) / square.maxHp) * barWidth
-        love.graphics.setColor(1, 1, 1, 1) -- White for pending damage
+        -- Set color based on whether the damage was a critical hit.
+        if pending.isCrit then
+            love.graphics.setColor(1, 1, 0.2, 1) -- Yellow for crit pending damage
+        else
+            love.graphics.setColor(1, 1, 1, 1) -- White for normal pending damage
+        end
         love.graphics.rectangle("fill", square.x, square.y + barYOffset, totalHealthBeforeDrainWidth, barHeight)
 
         -- 2. Draw the current (final) health portion on top of the white bar.
@@ -926,6 +932,7 @@ function Renderer.draw(world)
     Camera.apply()
     draw_world_space_ui(world)
     draw_all_entities_and_effects(world)
+    LiveCombatDisplay.draw(world) -- Draw combat UI on top of entities
     Camera.revert()
 
     -- 4. Draw screen-space UI based on the current game state

@@ -1,48 +1,44 @@
 -- passive_system.lua
 -- Manages team-wide passive abilities.
 
-local EffectFactory = require("modules.effect_factory")
+local EventBus = require("modules.event_bus")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
-local CombatActions = require("modules.combat_actions")
 
 local PassiveSystem = {}
 
--- This system updates the state of team-wide passives and applies their continuous effects.
-function PassiveSystem.update(dt, world)
-    -- 1. Reset all passive provider lists for both teams.
-    for team, passives in pairs(world.teamPassives) do
-        for passiveName, providers in pairs(passives) do
-            -- Clear the list by setting it to a new empty table.
-            world.teamPassives[team][passiveName] = {}
-        end
-    end
+-- Helper to add a unit to the passive lists.
+local function add_unit_to_passives(unit, world)
+    if not unit.hp or unit.hp <= 0 or not unit.type or not world.teamPassives[unit.type] then return end
 
-    -- 2. Populate lists for the player team with living units.
-    for _, p in ipairs(world.players) do
-        if p.hp > 0 then
-            local blueprint = CharacterBlueprints[p.playerType]
-            if blueprint and blueprint.passives then
-                for _, passiveName in ipairs(blueprint.passives) do
-                    -- Add the unit to the list of providers for this passive.
-                    table.insert(world.teamPassives.player[passiveName], p)
-                end
-            end
-        end
-    end
-
-    -- 3. Populate lists for the enemy team with living units.
-    for _, e in ipairs(world.enemies) do
-        if e.hp > 0 then
-            local blueprint = EnemyBlueprints[e.enemyType]
-            if blueprint and blueprint.passives then
-                for _, passiveName in ipairs(blueprint.passives) do
-                    -- Add the unit to the list of providers for this passive.
-                    table.insert(world.teamPassives.enemy[passiveName], e)
-                end
+    local blueprint = (unit.type == "player") and CharacterBlueprints[unit.playerType] or EnemyBlueprints[unit.enemyType]
+    if blueprint and blueprint.passives then
+        for _, passiveName in ipairs(blueprint.passives) do
+            -- Ensure the passive list exists before trying to insert.
+            if world.teamPassives[unit.type][passiveName] then
+                table.insert(world.teamPassives[unit.type][passiveName], unit)
             end
         end
     end
 end
+
+-- Helper to remove a unit from all passive lists.
+local function remove_unit_from_passives(unit, world)
+    if not unit.type or not world.teamPassives[unit.type] then return end
+
+    for passiveName, providers in pairs(world.teamPassives[unit.type]) do
+        for i = #providers, 1, -1 do
+            if providers[i] == unit then
+                table.remove(providers, i)
+            end
+        end
+    end
+end
+
+-- Listen for new units being added to the world (at startup or via party swap).
+EventBus:register("unit_added", function(data) add_unit_to_passives(data.unit, data.world) end)
+
+-- Listen for units dying to remove them from the provider lists.
+EventBus:register("unit_died", function(data) remove_unit_from_passives(data.victim, data.world) end)
 
 return PassiveSystem

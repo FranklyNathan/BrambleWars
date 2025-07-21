@@ -16,7 +16,7 @@ function CombatActions.applyDirectHeal(target, healAmount)
     return false
 end
 -- The attacker is passed in to correctly attribute kills for passives like Bloodrush.
-function CombatActions.applyDirectDamage(target, damageAmount, isCrit, attacker, options)
+function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, attacker, options)
     if not target or not target.hp or target.hp <= 0 then return end
     options = options or {} -- Ensure options table exists to prevent errors.
 
@@ -40,9 +40,39 @@ function CombatActions.applyDirectDamage(target, damageAmount, isCrit, attacker,
         target.components.shake = { timer = 0.2, intensity = 2 }
         target.components.damage_tint = { timer = 0.3, initialTimer = 0.3 } -- Add red tint effect
 
+        -- Create a live combat display for this interaction.
+        -- Only create a display if not explicitly told otherwise (e.g., for counter-attacks).
+        if options.createCombatDisplay ~= false then
+            if attacker then
+                -- Check if a display for this attacker/defender/attackName combo already exists.
+                -- This prevents duplicates from multi-hit AoE attacks like Eruption.
+                local displayExists = false
+                for _, existingDisplay in ipairs(world.liveCombatDisplays) do
+                    if existingDisplay.attacker == attacker and existingDisplay.defender == target and existingDisplay.attackName == options.attackName then
+                        displayExists = true
+                        break
+                    end
+                end
+
+                if not displayExists then
+                    -- Store attackName in the display data for the check above.
+                    local displayData = { attacker = attacker, defender = target, timer = 2.0, attackName = options.attackName }
+                    if isCrit then
+                        displayData.shake = { timer = 0.2, intensity = 4 } -- Add a shake component for crits
+                    end
+                    table.insert(world.liveCombatDisplays, displayData)
+                end
+            end
+        end
+
         -- Add the pending_damage component for the health bar animation.
         local actualDamageDealt = hp_before_damage - target.hp
-        target.components.pending_damage = { amount = actualDamageDealt, timer = 0.8, initialTimer = 0.8 }
+        target.components.pending_damage = {
+            amount = actualDamageDealt,
+            timer = 0.8,
+            initialTimer = 0.8,
+            isCrit = isCrit
+        }
 
         -- If the unit was alive and is now at 0 HP, it just died.
         if wasAlive and target.hp <= 0 then

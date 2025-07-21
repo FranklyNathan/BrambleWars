@@ -49,7 +49,7 @@ function StatusEffectManager.processTurnStart(target, world)
         local damage = 5 -- Per your request, poison now deals a flat amount of damage.
 
        -- Create an "invisible" damage event to apply poison damage
-       CombatActions.applyDirectDamage(target, damage, false, effect.attacker, {createPopup = false})
+       CombatActions.applyDirectDamage(world, target, damage, false, effect.attacker, {createPopup = false})
 
        -- Create a "Poison!" popup to signal the damage
        local popupText = "Poison! -" .. damage

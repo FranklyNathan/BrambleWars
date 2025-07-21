@@ -41,10 +41,6 @@ function AttackHandler.execute(square, attackName, world)
         return false -- Not enough Wisp, attack fails.
     end
 
-    print("Executing attack:", attackName)
-    print("Target:", target)
-    print("Attacker:", square)
-
     -- Deduct the Wisp cost.
     if attackData.wispCost > 0 then
         if not AttackHandler.deductWispCost(square, attackData) then return false end

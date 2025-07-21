@@ -87,6 +87,24 @@ function EffectTimerSystem.update(dt, world)
         end
     end
 
+    -- Live Combat Displays
+    for i = #world.liveCombatDisplays, 1, -1 do
+        local display = world.liveCombatDisplays[i]
+        display.timer = display.timer - dt
+
+        -- Update shake timer for the display if it exists (for critical hits)
+        if display.shake then
+            display.shake.timer = display.shake.timer - dt
+            if display.shake.timer <= 0 then
+                display.shake = nil
+            end
+        end
+
+        if display.timer <= 0 then
+            table.remove(world.liveCombatDisplays, i)
+        end
+    end
+
     -- Particle Effects
     for i = #world.particleEffects, 1, -1 do
         local p = world.particleEffects[i]

@@ -1,6 +1,7 @@
 -- systems/battle_info_system.lua
 -- Calculates and updates the data for the battle forecast UI.
 
+local EventBus = require("modules.event_bus")
 local CombatFormulas = require("modules.combat_formulas")
 local AttackBlueprints = require("data.attack_blueprints")
 local CharacterBlueprints = require("data.character_blueprints")
@@ -9,10 +10,12 @@ local AttackPatterns = require("modules.attack_patterns")
 
 local BattleInfoSystem = {}
 
-function BattleInfoSystem.update(dt, world)
+-- This is the core logic. It's called by event handlers to update the forecast.
+function BattleInfoSystem.refresh_forecast(world)
     local menu = world.battleInfoMenu
     if not menu then return end
 
+    -- Only show a forecast if the player is actively cycling targets.
     if world.playerTurnState == "cycle_targeting" and world.cycleTargeting.active then
         local attacker = world.actionMenu.unit
         local target = world.cycleTargeting.targets[world.cycleTargeting.selectedIndex]
@@ -102,5 +105,19 @@ function BattleInfoSystem.update(dt, world)
         menu.active = false
     end
 end
+
+-- Event handler for when the player's turn state changes.
+-- This is crucial for showing/hiding the forecast when entering/leaving the targeting state.
+local function on_player_state_changed(data)
+    BattleInfoSystem.refresh_forecast(data.world)
+end
+
+-- Event handler for when the player cycles to a new target.
+local function on_cycle_target_changed(data)
+    BattleInfoSystem.refresh_forecast(data.world)
+end
+
+EventBus:register("player_state_changed", on_player_state_changed)
+EventBus:register("cycle_target_changed", on_cycle_target_changed)
 
 return BattleInfoSystem

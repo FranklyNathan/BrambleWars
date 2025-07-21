@@ -53,8 +53,9 @@ function AttackResolutionSystem.update(dt, world)
                                     -- The attack hits.
                                     local critChance = CombatFormulas.calculateCritChance(effect.attacker.witStat, target.witStat, attackData.CritChance or 0)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
-local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit)
-                                    CombatActions.applyDirectDamage(target, damage, isCrit, effect.attacker)
+                                    local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit)
+                                    local isCounter = effect.specialProperties and effect.specialProperties.isCounterAttack
+                                    CombatActions.applyDirectDamage(world, target, damage, isCrit, effect.attacker, { createCombatDisplay = not isCounter, attackName = effect.attackName })
 
                                     -- Handle status effects on successful hit.
                                     if effect.statusEffect then

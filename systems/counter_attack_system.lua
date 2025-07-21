@@ -13,7 +13,9 @@ function CounterAttackSystem.update(dt, world)
         local counter = world.pendingCounters[i]
         counter.delay = counter.delay - dt
 
-        if counter.delay <= 0 then
+        -- Only execute the counter if the delay has passed, the defender is still alive,
+        -- and the defender is not still animating taking damage.
+        if counter.delay <= 0 and counter.defender.hp > 0 and not (counter.defender.components and counter.defender.components.pending_damage) then
             local defender = counter.defender
             local attacker = counter.attacker
 

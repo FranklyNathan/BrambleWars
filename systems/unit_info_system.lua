@@ -1,63 +1,75 @@
 -- systems/unit_info_system.lua
--- Manages the display of the unit info menu based on cursor hover.
+-- Manages the display of the unit info menu based on game events.
 
+local EventBus = require("modules.event_bus")
 local WorldQueries = require("modules.world_queries")
 local Pathfinding = require("modules.pathfinding")
 local RangeCalculator = require("modules.range_calculator")
 
 local UnitInfoSystem = {}
 
-function UnitInfoSystem.update(dt, world)
-    local menu = world.unitInfoMenu
-    if not menu then return end
+-- This is the core logic. It's called by event handlers to update the UI.
+function UnitInfoSystem.refresh_display(world)
+    -- If a major action is happening (animations, etc.), or a menu is open that should
+    -- hide the info box, then we ensure it's hidden.
+    local shouldHide = WorldQueries.isActionOngoing(world) or
+                       world.actionMenu.active or
+                       world.mapMenu.active
 
-    -- If any combat or movement animation is in progress, hide the hover UI.
-    if WorldQueries.isActionOngoing(world) then
-        menu.active = false
-        menu.unit = nil
+    if shouldHide then
+        world.unitInfoMenu.active = false
         world.hoverReachableTiles = nil
         world.hoverAttackableTiles = nil
-        return -- Exit early to prevent UI from showing.
+        return
     end
 
-    -- Only show the hover menu in specific states.
-    if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" then
-        local unit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
+    -- Get the unit under the current cursor position.
+    local unit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
 
-        if unit then
-            -- A unit is being hovered.
-            menu.active = true
-            menu.unit = unit
-            print("[UnitInfoSystem] Hovering over: " .. (unit.displayName or unit.enemyType))
-            -- Calculate and store hover ranges, but only if the unit isn't the currently selected one (to avoid double-drawing)
-            -- and is not a player unit that has already acted.
-            if unit ~= world.selectedUnit and not (unit.type == "player" and unit.hasActed) then
-                print("[UnitInfoSystem] Calculating hover ranges...")
-                local reachable, _ = Pathfinding.calculateReachableTiles(unit, world)
-                world.hoverReachableTiles = reachable
-                world.hoverAttackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, reachable)
-                local reachableCount = 0; for _ in pairs(world.hoverReachableTiles) do reachableCount = reachableCount + 1 end
-                local attackableCount = 0; for _ in pairs(world.hoverAttackableTiles) do attackableCount = attackableCount + 1 end
-                print(string.format("[UnitInfoSystem] Found %d reachable tiles and %d attackable tiles.", reachableCount, attackableCount))
-            else
-                print("[UnitInfoSystem] Hovered unit is the selected unit. Skipping range calculation.")
-            end
+    if unit then
+        -- A unit is being hovered over.
+        world.unitInfoMenu.active = true
+        world.unitInfoMenu.unit = unit
+
+        -- Only calculate and show hover previews (movement/attack range) when the player
+        -- is in the 'free_roam' state. This prevents visual clutter during other actions.
+        if world.playerTurnState == "free_roam" and not unit.hasActed then
+            local reachable, _, _ = Pathfinding.calculateReachableTiles(unit, world)
+            world.hoverReachableTiles = reachable
+            world.hoverAttackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, reachable)
         else
-            -- No unit is being hovered.
-            menu.active = false
-            menu.unit = nil
-            if world.hoverReachableTiles then print("[UnitInfoSystem] Clearing hover ranges.") end
+            -- In any other state (like 'unit_selected'), clear the hover previews.
             world.hoverReachableTiles = nil
             world.hoverAttackableTiles = nil
         end
     else
-        -- We are not in a state where the hover menu should be shown.
-        menu.active = false
-        menu.unit = nil
-        if world.hoverReachableTiles then print("[UnitInfoSystem] Clearing hover ranges due to state change.") end
+        -- No unit is being hovered over.
+        world.unitInfoMenu.active = false
+        world.unitInfoMenu.unit = nil
         world.hoverReachableTiles = nil
         world.hoverAttackableTiles = nil
     end
 end
+
+-- Event handler for when the cursor moves to a new tile.
+local function on_cursor_moved(data)
+    UnitInfoSystem.refresh_display(data.world)
+end
+
+-- Event handler for when the player's turn state changes.
+-- This helps hide/show the menu correctly when selecting/deselecting units or opening menus.
+local function on_player_state_changed(data)
+    UnitInfoSystem.refresh_display(data.world)
+end
+
+-- We also need to refresh when an action completes, as this might change what should be displayed.
+local function on_action_finalized(data)
+    UnitInfoSystem.refresh_display(data.world)
+end
+
+-- Register the event listeners. This code runs when the module is required.
+EventBus:register("cursor_moved", on_cursor_moved)
+EventBus:register("player_state_changed", on_player_state_changed)
+EventBus:register("action_finalized", on_action_finalized)
 
 return UnitInfoSystem

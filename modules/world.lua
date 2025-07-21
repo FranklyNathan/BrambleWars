@@ -22,6 +22,7 @@ function World.new(gameMap)
     self.attackEffects = {}
     self.particleEffects = {}
     self.damagePopups = {}
+    self.liveCombatDisplays = {} -- For the new combat UI
     self.pendingCounters = {}
     self.new_entities = {}
     self.afterimageEffects = {}
@@ -327,6 +328,9 @@ function World:_add_entity(entity)
     elseif entity.isObstacle then
         table.insert(self.obstacles, entity)
     end
+
+    -- Dispatch event so systems can react to the new entity.
+    EventBus:dispatch("unit_added", { unit = entity, world = self })
 end
 
 -- Removes an entity from its specific list.

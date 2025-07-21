@@ -15,97 +15,119 @@ local RangeCalculator = {}
 -- It can also add new tiles to the reachableTiles table for special movement attacks like Phantom Step.
 function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
     if not unit or not unit.movement or not reachableTiles then return {} end
-
+ 
     local attackableTiles = {} -- The final set of red "danger zone" tiles.
-    local processedReachable = {} -- A set to track tiles we've already processed to prevent infinite loops.
-    local tileQueue = {} -- A queue of reachable tiles to process.
-
-    -- 1. Initialize the queue with all starting reachable tiles.
-    for posKey, _ in pairs(reachableTiles) do
-        table.insert(tileQueue, posKey)
-    end
-
-    local blueprint
-    if unit.type == "player" then
-        blueprint = CharacterBlueprints[unit.playerType]
-    elseif unit.type == "enemy" then
-        blueprint = EnemyBlueprints[unit.enemyType]
-    end
+ 
+    local blueprint = (unit.type == "player") and CharacterBlueprints[unit.playerType] or EnemyBlueprints[unit.enemyType]
     if not blueprint or not blueprint.attacks then return {} end
+ 
+    -- 1. Pre-computation: Build a unified footprint for all fixed-shape attacks.
+    local fixedFootprint = {}
+    local complexAttacks = {} -- For attacks that need per-tile calculation.
+ 
+    for _, attackName in ipairs(blueprint.attacks) do
+        local attackData = AttackBlueprints[attackName]
+        if attackData then
+            local style = attackData.targeting_style
+            local pattern = attackData.patternType and AttackPatterns[attackData.patternType]
+ 
+            if style == "cycle_target" and pattern and type(pattern) == "table" then
+                -- Case 1: Fixed shape pattern (e.g., standard_melee). Add to footprint.
+                for _, pCoord in ipairs(pattern) do
+                    fixedFootprint[pCoord.dx .. "," .. pCoord.dy] = true
+                end
+            elseif style == "cycle_target" and not pattern and attackData.range and not attackData.line_of_sight_only then
+                -- Case 2: Diamond-shaped range (e.g., hookshot). Add to footprint.
+                local range = attackData.range
+                local minRange = attackData.min_range or 1
+                for dx = -range, range do
+                    for dy = -range, range do
+                        if math.abs(dx) + math.abs(dy) <= range and math.abs(dx) + math.abs(dy) >= minRange then
+                            fixedFootprint[dx .. "," .. dy] = true
+                        end
+                    end
+                end
+            else
+                -- Case 3: All other attacks are "complex" and need per-tile calculation.
+                -- This includes ground_aim, phantom_step, and directional/functional patterns.
+                table.insert(complexAttacks, attackName)
+            end
+        end
+    end
 
-    -- Create a temporary unit to simulate positions and directions.
-    local tempUnit = {
-        tileX = 0, tileY = 0,
-        x = 0, y = 0,
-        size = unit.size,
-        lastDirection = "down",
-        -- Copy necessary fields for WorldQueries to work correctly
-        type = unit.type,
-        movement = unit.movement
-    }
-    local directions = {"up", "down", "left", "right"}
-
-    -- 2. Process the queue until it's empty. This is more robust than a simple for loop.
-    local head = 1
-    while head <= #tileQueue do
-        local posKey = tileQueue[head]
-        head = head + 1
-
-        if not processedReachable[posKey] then
-            processedReachable[posKey] = true
-
+    -- 2. Apply the unified fixed footprint from every reachable tile.
+    for posKey, data in pairs(reachableTiles) do
+        if data.landable then
             local tileX = tonumber(string.match(posKey, "(-?%d+)"))
             local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+            for fpKey, _ in pairs(fixedFootprint) do
+                local dx = tonumber(string.match(fpKey, "(-?%d+)"))
+                local dy = tonumber(string.match(fpKey, ",(-?%d+)"))
+                local attackTileX, attackTileY = tileX + dx, tileY + dy
+                attackableTiles[attackTileX .. "," .. attackTileY] = true
+            end
+        end
+    end
 
-            -- Update the temp unit's position
-            tempUnit.tileX, tempUnit.tileY = tileX, tileY
-            tempUnit.x, tempUnit.y = Grid.toPixels(tileX, tileY)
+    -- 3. Process complex attacks from every reachable tile.
+    if #complexAttacks > 0 then
+        local tempUnit = {
+            tileX = 0, tileY = 0, x = 0, y = 0,
+            size = unit.size,
+            lastDirection = "down",
+            type = unit.type,
+            movement = unit.movement
+        }
+        local directions = {"up", "down", "left", "right"}
 
-            -- ...check every attack it has...
-            for _, attackName in ipairs(blueprint.attacks) do
-                local attackData = AttackBlueprints[attackName]
-                if attackData then
-                    if attackName == "phantom_step" then
-                        -- Find valid targets for Phantom Step from the current simulated position.
-                        local validTargets = WorldQueries.findValidTargetsForAttack(tempUnit, "phantom_step", world)
-                        for _, target in ipairs(validTargets) do
-                            -- The target's tile is part of the danger zone.
-                            attackableTiles[target.tileX .. "," .. target.tileY] = true
-                            -- Calculate the destination tile behind the target.
-                            local dx, dy = 0, 0
-                            if target.lastDirection == "up" then dy = 1
-                            elseif target.lastDirection == "down" then dy = -1
-                            elseif target.lastDirection == "left" then dx = 1
-                            elseif target.lastDirection == "right" then dx = -1
-                            end
-                            local teleportTileX, teleportTileY = target.tileX + dx, target.tileY + dy
-                            local newReachableKey = teleportTileX .. "," .. teleportTileY
+        for posKey, data in pairs(reachableTiles) do
+            if data.landable then
+                local tileX = tonumber(string.match(posKey, "(-?%d+)"))
+                local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+                tempUnit.tileX, tempUnit.tileY = tileX, tileY
+                tempUnit.x, tempUnit.y = Grid.toPixels(tileX, tileY)
 
-                            -- If this is a new reachable tile, add it to the list of blue tiles.
-                            -- We do NOT add it to the tileQueue, because Phantom Step is a turn-ending attack.
-                            -- This prevents the danger zone from showing attacks from the teleport destination.
-                            if not reachableTiles[newReachableKey] then
-                                reachableTiles[newReachableKey] = true
-                            end
-                        end
-                    elseif attackData.targeting_style == "cycle_target" then
-                        local pattern = attackData.patternType and AttackPatterns[attackData.patternType]
-                        if pattern and type(pattern) == "table" then
-                            -- New: Use fixed-shape patterns for attacks like slash, walnut_toss, etc.
-                            for _, patternCoord in ipairs(pattern) do
-                                local attackTileX = tileX + patternCoord.dx
-                                local attackTileY = tileY + patternCoord.dy
-                                -- Check map bounds before adding.
-                                if attackTileX >= 0 and attackTileX < world.map.width and attackTileY >= 0 and attackTileY < world.map.height then
-                                    attackableTiles[attackTileX .. "," .. attackTileY] = true
+                for _, attackName in ipairs(complexAttacks) do
+                    local attackData = AttackBlueprints[attackName]
+                    if attackData then
+                        if attackName == "phantom_step" then
+                            local validTargets = WorldQueries.findValidTargetsForAttack(tempUnit, "phantom_step", world)
+                            for _, target in ipairs(validTargets) do
+                                attackableTiles[target.tileX .. "," .. target.tileY] = true
+                                local dx_p, dy_p = 0, 0
+                                if target.lastDirection == "up" then dy_p = 1 elseif target.lastDirection == "down" then dy_p = -1 elseif target.lastDirection == "left" then dx_p = 1 elseif target.lastDirection == "right" then dx_p = -1 end
+                                local teleportTileX, teleportTileY = target.tileX + dx_p, target.tileY + dy_p
+                                local newReachableKey = teleportTileX .. "," .. teleportTileY
+                                if not reachableTiles[newReachableKey] then
+                                    reachableTiles[newReachableKey] = { cost = -1, landable = true } -- Cost is irrelevant here, just needs to exist.
                                 end
                             end
-                        elseif pattern and type(pattern) == "function" then
-                            -- Handle functional patterns (like line_of_sight) which might be directional.
+                        elseif attackData.targeting_style == "ground_aim" then
+                            local range = attackData.range
+                            if range then
+                                for dx = -range, range do
+                                    for dy = -range, range do
+                                        if math.abs(dx) + math.abs(dy) <= range then
+                                            local aimTileX, aimTileY = tileX + dx, tileY + dy
+                                            if attackName == "eruption" then
+                                                local aoeRadius = 2
+                                                for aoeX = aimTileX - aoeRadius, aimTileX + aoeRadius do
+                                                    for aoeY = aimTileY - aoeRadius, aimTileY + aoeRadius do
+                                                        attackableTiles[aoeX .. "," .. aoeY] = true
+                                                    end
+                                                end
+                                            else
+                                                attackableTiles[aimTileX .. "," .. aimTileY] = true
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        elseif attackData.targeting_style == "cycle_target" and attackData.patternType and type(AttackPatterns[attackData.patternType]) == "function" then
+                            local patternFunc = AttackPatterns[attackData.patternType]
                             for _, dir in ipairs(directions) do
                                 tempUnit.lastDirection = dir
-                                local attackShapes = pattern(tempUnit, world)
-                                -- Convert the shapes' pixel coordinates back to tiles and add to the set.
+                                local attackShapes = patternFunc(tempUnit, world)
                                 for _, effectData in ipairs(attackShapes) do
                                     local s = effectData.shape
                                     local startTileX, startTileY = Grid.toTile(s.x, s.y)
@@ -113,52 +135,12 @@ function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
                                     for ty = startTileY, endTileY do for tx = startTileX, endTileX do attackableTiles[tx .. "," .. ty] = true end end
                                 end
                             end
-                        else
-                            -- Fallback for cycle_target attacks without a pattern (e.g., hookshot using raw range).
-                            local range = attackData.range
-                            if range then
-                                for dx = -range, range do
-                                    for dy = -range, range do
-                                        if math.abs(dx) + math.abs(dy) <= range then
-                                            local attackTileX, attackTileY = tileX + dx, tileY + dy
-                                            if attackTileX >= 0 and attackTileX < world.map.width and attackTileY >= 0 and attackTileY < world.map.height then
-                                                attackableTiles[attackTileX .. "," .. attackTileY] = true
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    elseif attackData.targeting_style == "ground_aim" then
-                        local range = attackData.range
-                        if range then
-                            -- From the current reachable tile (tileX, tileY), find all possible aim points.
-                            for dx = -range, range do
-                                for dy = -range, range do
-                                    if math.abs(dx) + math.abs(dy) <= range then
-                                        local aimTileX, aimTileY = tileX + dx, tileY + dy
-                                        if attackName == "eruption" then
-                                            -- For Eruption, the danger zone includes the AoE from every possible aim point.
-                                            local aoeRadius = 2 -- 2 tiles in each direction for a 5x5 area.
-                                            for aoeX = aimTileX - aoeRadius, aimTileX + aoeRadius do
-                                                for aoeY = aimTileY - aoeRadius, aimTileY + aoeRadius do
-                                                    attackableTiles[aoeX .. "," .. aoeY] = true
-                                                end
-                                            end
-                                        else
-                                            -- For other ground_aim attacks, the aimable tile itself is the danger zone.
-                                            attackableTiles[aimTileX .. "," .. aimTileY] = true
-                                        end
-                                    end
-                                end
-                            end
                         end
                     end
+                end
             end
-        end        
+        end
     end
-    end
-
     return attackableTiles
 end
 

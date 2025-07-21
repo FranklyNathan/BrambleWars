@@ -49,12 +49,7 @@ local scale = 1
 -- The order is important: Intent -> Action -> Resolution
 local update_systems = {
     -- 1. State and timer updates
-    StatSystem,
     EffectTimerSystem,
-    PassiveSystem,
-    UnitInfoSystem,
-    BattleInfoSystem,
-    ActionMenuPreviewSystem,
     -- 2. Movement and Animation (update physical state)
     TurnBasedMovementSystem,
     MovementSystem,
