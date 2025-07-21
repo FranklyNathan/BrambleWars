@@ -32,19 +32,36 @@ function UnitInfoSystem.refresh_display(world)
         unit_to_display = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
     end
 
-    local unit = unit_to_display
+    -- Determine the true source of the ripple effect based on the game state.
+    local ripple_source_unit = nil
+    if world.playerTurnState == "unit_selected" then
+        ripple_source_unit = world.selectedUnit
+    elseif world.playerTurnState == "enemy_range_display" then
+        ripple_source_unit = world.enemyRangeDisplay.unit
+    else
+        -- In all other states (like free_roam), the ripple follows the hovered/targeted unit.
+        ripple_source_unit = unit_to_display
+    end
 
-    if unit then -- A unit is being hovered over or targeted.
+    -- If the ripple's source unit has changed, reset the animation timer.
+    if ripple_source_unit ~= world.unitInfoMenu.rippleSourceUnit then
+        world.unitInfoMenu.rippleStartTime = love.timer.getTime()
+    end
+    world.unitInfoMenu.rippleSourceUnit = ripple_source_unit
+
+    -- The unit being displayed in the info box is separate from the ripple source.
+    world.unitInfoMenu.unit = unit_to_display
+    
+    if unit_to_display then -- A unit is being hovered over or targeted.
         -- A unit is being hovered over.
         world.unitInfoMenu.active = true
-        world.unitInfoMenu.unit = unit
 
         -- Only calculate and show hover previews (movement/attack range) when the player
         -- is in the 'free_roam' state. This prevents visual clutter during other actions.
-        if world.playerTurnState == "free_roam" and not unit.hasActed then
-            local reachable, _, _ = Pathfinding.calculateReachableTiles(unit, world)
+        if world.playerTurnState == "free_roam" and not unit_to_display.hasActed then
+            local reachable, _, _ = Pathfinding.calculateReachableTiles(unit_to_display, world)
             world.hoverReachableTiles = reachable
-            world.hoverAttackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, reachable)
+            world.hoverAttackableTiles = RangeCalculator.calculateAttackableTiles(unit_to_display, world, reachable)
         else
             -- In any other state (like 'unit_selected'), clear the hover previews.
             world.hoverReachableTiles = nil
@@ -53,7 +70,6 @@ function UnitInfoSystem.refresh_display(world)
     else
         -- No unit is being hovered over.
         world.unitInfoMenu.active = false
-        world.unitInfoMenu.unit = nil
         world.hoverReachableTiles = nil
         world.hoverAttackableTiles = nil
     end

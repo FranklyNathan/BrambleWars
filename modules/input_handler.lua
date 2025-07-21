@@ -10,6 +10,7 @@ local WorldQueries = require("modules.world_queries")
 local Grid = require("modules.grid")
 local ShoveHandler = require("modules/shove_handler")
 local RescueHandler = require("modules.rescue_handler")
+local EffectFactory = require("modules.effect_factory")
 local TakeHandler = require("modules/take_handler")
 
 local InputHandler = {}
@@ -56,7 +57,7 @@ local function focus_next_available_player(world)
 end
 
 -- Helper to move the cursor and update the movement path if applicable.
-local function move_cursor(dx, dy, world)
+local function move_cursor(dx, dy, world, isFastMove)
     local oldTileX = world.mapCursorTile.x
     local oldTileY = world.mapCursorTile.y
 
@@ -71,6 +72,7 @@ local function move_cursor(dx, dy, world)
     if newTileX ~= oldTileX or newTileY ~= oldTileY then
         world.mapCursorTile.x = newTileX
         world.mapCursorTile.y = newTileY
+
         -- Dispatch an event that other systems (like UnitInfoSystem) can listen to.
         EventBus:dispatch("cursor_moved", { tileX = newTileX, tileY = newTileY, world = world })
 
@@ -122,13 +124,14 @@ local function handle_free_roam_input(key, world)
             local anyUnit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
             if anyUnit and anyUnit.type == "enemy" then
                 -- Pressing 'J' on an enemy now shows their range.
-                set_player_turn_state("enemy_range_display", world)
+                -- Set up the data *before* changing the state, so event listeners have the correct info.
                 local display = world.enemyRangeDisplay
                 display.active = true
                 display.unit = anyUnit
                 local reachable, _ = Pathfinding.calculateReachableTiles(anyUnit, world)
                 display.reachableTiles = reachable
                 display.attackableTiles = RangeCalculator.calculateAttackableTiles(anyUnit, world, reachable)
+                set_player_turn_state("enemy_range_display", world)
             elseif not anyUnit then
                 -- The tile is empty, so open the map menu.
                 world.mapMenu.active = true
@@ -802,10 +805,10 @@ stateHandlers.gameplay = function(key, world)
 
     -- Handle cursor movement for states that allow it. This is for single key taps.
     if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" or world.playerTurnState == "enemy_range_display" then
-        if key == "w" then move_cursor(0, -1, world)
-        elseif key == "s" then move_cursor(0, 1, world)
-        elseif key == "a" then move_cursor(-1, 0, world)
-        elseif key == "d" then move_cursor(1, 0, world)
+        if key == "w" then move_cursor(0, -1, world, false)
+        elseif key == "s" then move_cursor(0, 1, world, false)
+        elseif key == "a" then move_cursor(-1, 0, world, false)
+        elseif key == "d" then move_cursor(1, 0, world, false)
         end
     elseif world.playerTurnState == "ground_aiming" then
         -- Ground aiming has its own cursor movement logic with different bounds.
@@ -992,7 +995,7 @@ function InputHandler.handle_continuous_input(dt, world)
                 if world.playerTurnState == "ground_aiming" then
                     move_ground_aim_cursor(dx, dy, world)
                 else
-                    move_cursor(dx, dy, world)
+                    move_cursor(dx, dy, world, true)
                 end
                 cursor.timer = cursor.timer + cursor.repeatDelay -- Add to prevent timer drift
             end

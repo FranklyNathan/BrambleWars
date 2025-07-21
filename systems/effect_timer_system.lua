@@ -1,6 +1,11 @@
 -- effect_timer_system.lua
 -- This system is responsible for updating simple countdown timers on entities for visual effects.
 
+-- A simple linear interpolation function.
+local function lerp(a, b, t)
+    return a + (b - a) * t
+end
+
 local EffectTimerSystem = {}
 
 function EffectTimerSystem.update(dt, world)
@@ -138,6 +143,32 @@ function EffectTimerSystem.update(dt, world)
             end
         end
     end
+    -- 3. Handle queued ripple effects
+    if world.rippleEffectQueue and #world.rippleEffectQueue > 0 then
+        local rippleData = world.rippleEffectQueue[1] -- Process the first ripple in the queue
+
+        -- Check if we're still adding effects from this ripple
+        if rippleData.currentIndex <= #rippleData.pattern then
+            local effectData = rippleData.pattern[rippleData.currentIndex]
+            local s = effectData.shape
+            local color = {1, 0, 0, 1} -- Default color (adjust if needed)
+
+            -- Create a single attack effect with its delay
+            EffectFactory.addAttackEffect(rippleData.attacker, rippleData.attackName, s.x, s.y, s.w, s.h, color, effectData.delay, false, rippleData.targetType, nil, rippleData.statusEffect, rippleData.specialProperties)
+            
+            -- Move to the next effect in the ripple
+            rippleData.currentIndex = rippleData.currentIndex + 1
+        else
+            -- All effects from this ripple have been added. Remove from the queue
+            table.remove(world.rippleEffectQueue, 1)
+        end
+    end
+    -- Check for delays and add subsequent ripple effect when appropriate.
+        -- Handle the next effect in queue, if any and it is time.
+       
+        
+        
+    
 end
 
 return EffectTimerSystem

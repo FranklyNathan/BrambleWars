@@ -68,15 +68,16 @@ function EffectFactory.createShatterEffect(x, y, size, color)
 end
 
 function EffectFactory.createRippleEffect(attacker, attackName, centerX, centerY, rippleCenterSize, targetType, statusEffect, specialProperties)
-    -- Use the centralized ripple pattern generator
-    local ripplePattern = AttackPatterns.eruption_aoe(centerX, centerY, rippleCenterSize)
-    local color = {1, 0, 0, 1} -- Default ripple color
-
-    for _, effectData in ipairs(ripplePattern) do
-        local s = effectData.shape
-        -- Correctly call addAttackEffect with the right arguments.
-        EffectFactory.addAttackEffect(attacker, attackName, s.x, s.y, s.w, s.h, color, effectData.delay, false, targetType, nil, statusEffect, specialProperties)
+    -- Initialize a queue for ripple effects if it doesn't exist
+    if not world_ref.rippleEffectQueue then
+        world_ref.rippleEffectQueue = {}
     end
+
+    -- Generate the full ripple pattern
+    local fullPattern = AttackPatterns.eruption_aoe(centerX, centerY, rippleCenterSize)
+
+    -- Add all effects from the pattern to the queue
+    table.insert(world_ref.rippleEffectQueue, { attacker = attacker, attackName = attackName, pattern = fullPattern, currentIndex = 1, targetType = targetType, statusEffect = statusEffect, specialProperties = specialProperties or {}})
 end
 
 return EffectFactory

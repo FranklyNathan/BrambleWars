@@ -18,7 +18,7 @@ function World.new(gameMap)
     self.players = {}
     self.enemies = {}
     self.projectiles = {}
-    self.obstacles = {} -- New unified list for all obstacles
+    self.obstacles = {}
     self.attackEffects = {}
     self.particleEffects = {}
     self.damagePopups = {}
@@ -77,6 +77,9 @@ function World.new(gameMap)
         reachableTiles = nil,
         attackableTiles = nil
     }
+    -- This table was accidentally removed in a previous change. It is still needed
+    -- to handle continuous cursor movement when a key is held down. The old
+    -- ripple-related properties have been correctly removed.
     self.cursorInput = {
         timer = 0,
         initialDelay = 0.35, -- Time before repeat starts
@@ -85,7 +88,7 @@ function World.new(gameMap)
     }
 
     self.battleInfoMenu = { active = false }
-    self.unitInfoMenu = {active = false, unit = nil}
+    self.unitInfoMenu = {active = false, unit = nil, rippleStartTime = 0, rippleSourceUnit = nil}
     self.turnShouldEnd = false -- New flag to defer ending the turn
     -- Game State and UI
     self.gameState = "gameplay"

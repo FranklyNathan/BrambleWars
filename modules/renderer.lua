@@ -398,15 +398,36 @@ local function draw_all_entities_and_effects(world)
 end
 
 -- Helper to draw a set of tiles with a specific color and transparency.
-local function draw_tile_set(tileSet, r, g, b, a)
+local function draw_tile_set(tileSet, r, g, b, a, world)
     if not tileSet then return end
-    love.graphics.setColor(r, g, b, a)
     local BORDER_WIDTH = 1
     local INSET_SIZE = Config.SQUARE_SIZE - (BORDER_WIDTH * 2)
+
+    -- Determine the center of the ripple effect based on the current game state.
+    -- The ripple should be centered on the unit whose range is being displayed.
+    -- The unit_info_system is the single source of truth for which unit is the ripple's source.
+    local ripple_center_unit = world.unitInfoMenu.rippleSourceUnit
+
     for posKey, _ in pairs(tileSet) do
         local tileX = tonumber(string.match(posKey, "(-?%d+)"))
         local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
         if tileX and tileY then
+            local finalAlpha = a -- Start with the base alpha for the tile set.
+
+            -- If a ripple source is active, calculate and apply the ripple brightness.
+            if ripple_center_unit then
+                -- Calculate elapsed time since the ripple started for this unit.
+                local elapsedTime = love.timer.getTime() - (world.unitInfoMenu.rippleStartTime or love.timer.getTime())
+                local rippleRadius = (elapsedTime * 10) % (15 + 3) -- (speed) % (maxRadius + width)
+                local baseDist = math.abs(tileX - ripple_center_unit.tileX) + math.abs(tileY - ripple_center_unit.tileY)
+                local deltaDist = math.abs(baseDist - rippleRadius)
+                if deltaDist < 3 then -- width
+                    local brightness = (1 - (deltaDist / 3)) * 0.2 -- maxBrightness
+                    finalAlpha = finalAlpha + brightness
+                end
+            end
+
+            love.graphics.setColor(r, g, b, math.min(1, finalAlpha))
             local pixelX, pixelY = Grid.toPixels(tileX, tileY)
             love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
         end
@@ -421,7 +442,7 @@ local function draw_world_space_ui(world)
     if world.gameState == "gameplay" and world.turn == "player" then
         -- Draw the action menu's attack preview
         if world.actionMenu.active and world.actionMenu.previewAttackableTiles then
-            draw_tile_set(world.actionMenu.previewAttackableTiles, 1, 0.2, 0.2, 0.5) -- Brighter red
+            draw_tile_set(world.actionMenu.previewAttackableTiles, 1, 0.2, 0.2, 0.5, world) -- Brighter red
         end
 
         -- Draw the action menu's AoE preview for ground-targeted attacks
@@ -439,28 +460,28 @@ local function draw_world_space_ui(world)
         -- 1. Draw the full attack range for the selected unit (the "danger zone").
         local showDangerZone = world.playerTurnState == "unit_selected" or world.playerTurnState == "ground_aiming" or world.playerTurnState == "cycle_targeting"
         if showDangerZone and world.attackableTiles then
-            draw_tile_set(world.attackableTiles, 1, 0.2, 0.2, 0.3)
+            draw_tile_set(world.attackableTiles, 1, 0.2, 0.2, 0.3, world)
         end
 
         -- Draw hovered unit's danger zone (fainter)
         if world.unitInfoMenu.active and world.hoverAttackableTiles then
-            draw_tile_set(world.hoverAttackableTiles, 1, 0.2, 0.2, 0.2)
+            draw_tile_set(world.hoverAttackableTiles, 1, 0.2, 0.2, 0.2, world)
         end
 
         -- Draw hovered unit's movement range
         if world.unitInfoMenu.active and world.hoverReachableTiles then
-            draw_tile_set(world.hoverReachableTiles, 0.2, 0.4, 1, 0.2)
+            draw_tile_set(world.hoverReachableTiles, 0.2, 0.4, 1, 0.2, world)
         end
 
         -- 2. Draw the movement range for the selected unit. This is drawn on top of the attack range.
         if world.playerTurnState == "unit_selected" and world.reachableTiles then 
-            draw_tile_set(world.reachableTiles, 0.2, 0.4, 1, 0.6)
+            draw_tile_set(world.reachableTiles, 0.2, 0.4, 1, 0.6, world)
         end
 
         -- Draw enemy range display if active
         if world.enemyRangeDisplay.active then
-            draw_tile_set(world.enemyRangeDisplay.attackableTiles, 1, 0.2, 0.2, 0.4) -- Red for attack
-            draw_tile_set(world.enemyRangeDisplay.reachableTiles, 0.2, 0.4, 1, 0.4) -- Blue for movement
+            draw_tile_set(world.enemyRangeDisplay.attackableTiles, 1, 0.2, 0.2, 0.4, world) -- Red for attack
+            draw_tile_set(world.enemyRangeDisplay.reachableTiles, 0.2, 0.4, 1, 0.4, world) -- Blue for movement
         end
 
         -- 3. Draw the movement path arrow.
@@ -505,11 +526,7 @@ local function draw_world_space_ui(world)
 
         -- Draw the ground aiming grid (the valid area for ground-targeted attacks)
         if world.playerTurnState == "ground_aiming" and world.groundAimingGrid then
-            love.graphics.setColor(0.2, 0.8, 1, 0.4) -- A light, cyan-ish color
-            for _, tile in ipairs(world.groundAimingGrid) do
-                local pixelX, pixelY = Grid.toPixels(tile.x, tile.y)
-                love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
-            end
+            draw_tile_set(world.groundAimingGrid, 0.2, 0.8, 1, 0.4, world) -- A light, cyan-ish color
         end
 
         -- 5. Draw the Attack AoE preview
