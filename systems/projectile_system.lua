@@ -48,7 +48,8 @@ function ProjectileSystem.update(dt, world)
                         if target.hp > 0 and not projComp.hitTargets[target] and target.tileX == currentTileX and target.tileY == currentTileY then
                             -- Collision detected! Create an attack effect to deal damage.
                             local attackName = projComp.attackName
-                            EffectFactory.addAttackEffect(projComp.attacker, attackName, target.x, target.y, target.size, target.size, {1, 0.5, 0, 1}, 0, false, targetType, false, projComp.statusEffect)
+                            local specialProperties = { attackInstanceId = projComp.attackInstanceId }
+                            EffectFactory.addAttackEffect(projComp.attacker, attackName, target.x, target.y, target.size, target.size, {1, 0.5, 0, 1}, 0, false, targetType, false, projComp.statusEffect, specialProperties)
 
                             -- Mark target as hit to prevent re-hitting
                             projComp.hitTargets[target] = true

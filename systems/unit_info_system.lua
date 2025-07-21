@@ -23,10 +23,18 @@ function UnitInfoSystem.refresh_display(world)
         return
     end
 
-    -- Get the unit under the current cursor position.
-    local unit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
+    local unit_to_display = nil
+    -- In targeting mode, the info box should always show the current target, not what's under the cursor.
+    if world.playerTurnState == "cycle_targeting" and world.cycleTargeting.active and #world.cycleTargeting.targets > 0 then
+        unit_to_display = world.cycleTargeting.targets[world.cycleTargeting.selectedIndex]
+    else
+        -- In all other states, get the unit under the current cursor position.
+        unit_to_display = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
+    end
 
-    if unit then
+    local unit = unit_to_display
+
+    if unit then -- A unit is being hovered over or targeted.
         -- A unit is being hovered over.
         world.unitInfoMenu.active = true
         world.unitInfoMenu.unit = unit
@@ -62,6 +70,11 @@ local function on_player_state_changed(data)
     UnitInfoSystem.refresh_display(data.world)
 end
 
+-- Event handler for when the player cycles to a new target.
+local function on_cycle_target_changed(data)
+    UnitInfoSystem.refresh_display(data.world)
+end
+
 -- We also need to refresh when an action completes, as this might change what should be displayed.
 local function on_action_finalized(data)
     UnitInfoSystem.refresh_display(data.world)
@@ -70,6 +83,7 @@ end
 -- Register the event listeners. This code runs when the module is required.
 EventBus:register("cursor_moved", on_cursor_moved)
 EventBus:register("player_state_changed", on_player_state_changed)
+EventBus:register("cycle_target_changed", on_cycle_target_changed)
 EventBus:register("action_finalized", on_action_finalized)
 
 return UnitInfoSystem

@@ -26,8 +26,8 @@ function EffectFactory.addAttackEffect(attacker, attackName, effectX, effectY, e
         isHeal = isHeal,
         effectApplied = false,
         targetType = targetType,
-        statusEffect = statusEffect, -- e.g., {type="stunned", duration=1}
-        specialProperties = specialProperties
+        statusEffect = statusEffect,
+        specialProperties = specialProperties or {} -- Ensure this is never nil
     })
 end
 
@@ -67,13 +67,15 @@ function EffectFactory.createShatterEffect(x, y, size, color)
     end
 end
 
-function EffectFactory.createRippleEffect(attacker, centerX, centerY, power, rippleCenterSize, targetType, statusEffect)
+function EffectFactory.createRippleEffect(attacker, attackName, centerX, centerY, rippleCenterSize, targetType, statusEffect, specialProperties)
     -- Use the centralized ripple pattern generator
     local ripplePattern = AttackPatterns.eruption_aoe(centerX, centerY, rippleCenterSize)
+    local color = {1, 0, 0, 1} -- Default ripple color
 
     for _, effectData in ipairs(ripplePattern) do
         local s = effectData.shape
-        EffectFactory.addAttackEffect(s.x, s.y, s.w, s.h, {1, 0, 0, 1}, effectData.delay, attacker, power, false, targetType, nil, statusEffect)
+        -- Correctly call addAttackEffect with the right arguments.
+        EffectFactory.addAttackEffect(attacker, attackName, s.x, s.y, s.w, s.h, color, effectData.delay, false, targetType, nil, statusEffect, specialProperties)
     end
 end
 

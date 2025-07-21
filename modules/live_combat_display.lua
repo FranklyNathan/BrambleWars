@@ -18,7 +18,12 @@ local function draw_ui_health_bar(unit, x, y, width, height, globalAlpha)
         -- Ensure we don't draw a bar wider than the max width if there's overkill pending damage.
         local totalHealth = math.min(unit.maxHp, unit.hp + pending.displayAmount)
         local totalHealthBeforeDrainWidth = (totalHealth / unit.maxHp) * width
-        love.graphics.setColor(1, 1, 1, 1 * globalAlpha)
+        -- Set color based on whether the damage was a critical hit.
+        if pending.isCrit then
+            love.graphics.setColor(1, 1, 0.2, 1 * globalAlpha) -- Yellow for crit pending damage
+        else
+            love.graphics.setColor(1, 1, 1, 1 * globalAlpha) -- White for normal pending damage
+        end
         love.graphics.rectangle("fill", x, y, totalHealthBeforeDrainWidth, height)
     end
 
@@ -65,11 +70,11 @@ local function draw_single_display(display, startX, startY, world)
     end
 
     -- Draw Panels
-    love.graphics.setColor(0.7, 0.1, 0.1, 0.6 * alpha) -- Left (Enemy) Panel - Red
+    love.graphics.setColor(0.7, 0.1, 0.1, 0.8 * alpha) -- Left (Enemy) Panel - Red
     love.graphics.rectangle("fill", startX, startY, panelWidth, displayHeight)
-    love.graphics.setColor(0.1, 0.1, 0.7, 0.6 * alpha) -- Right (Player) Panel - Blue
+    love.graphics.setColor(0.1, 0.1, 0.7, 0.8 * alpha) -- Right (Player) Panel - Blue
     love.graphics.rectangle("fill", startX + panelWidth, startY, panelWidth, displayHeight)
-    love.graphics.setColor(0.9, 0.9, 0.9, 0.7 * alpha) -- Border
+    love.graphics.setColor(0.9, 0.9, 0.9, 0.85 * alpha) -- Border
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", startX, startY, displayWidth, displayHeight)
 
@@ -89,67 +94,82 @@ end
 function LiveCombatDisplay.draw(world)
     if not world.liveCombatDisplays or #world.liveCombatDisplays == 0 then return end
 
-    -- 1. Collect all units involved to determine the overall position.
-    local allUnits = {}
-    local unitIds = {}
+    -- 1. Group displays by their attackInstanceId. This allows for multiple, separate combat stacks.
+    local displayGroups = {}
+    local nextGroupId = 1 -- A counter for displays that don't have an ID.
     for _, display in ipairs(world.liveCombatDisplays) do
-        if not unitIds[display.attacker] then
-            table.insert(allUnits, display.attacker)
-            unitIds[display.attacker] = true
+        local groupId = display.attackInstanceId
+        if not groupId then
+            -- If a display has no ID, give it a unique group so it's drawn by itself.
+            groupId = "no_id_" .. nextGroupId
+            nextGroupId = nextGroupId + 1
         end
-        if not unitIds[display.defender] then
-            table.insert(allUnits, display.defender)
-            unitIds[display.defender] = true
+
+        if not displayGroups[groupId] then
+            displayGroups[groupId] = {}
         end
+        table.insert(displayGroups[groupId], display)
     end
 
-    -- 2. Find the bounding box of all involved units.
-    local topUnitY = math.huge
-    local bottomUnitY = -math.huge
-    local bottomUnitSize = 0
-    local totalX = 0
-    for _, unit in ipairs(allUnits) do
-        topUnitY = math.min(topUnitY, unit.y)
-        if unit.y >= bottomUnitY then
-            bottomUnitY = unit.y
-            bottomUnitSize = unit.size
+    -- 2. Iterate over each group and draw it as a self-contained stack.
+    for _, group in pairs(displayGroups) do
+        -- 2a. Collect all units involved in this specific group.
+        local allUnits = {}
+        local unitIds = {}
+        for _, display in ipairs(group) do
+            if not unitIds[display.attacker] then table.insert(allUnits, display.attacker); unitIds[display.attacker] = true; end
+            if not unitIds[display.defender] then table.insert(allUnits, display.defender); unitIds[display.defender] = true; end
         end
-        totalX = totalX + unit.x
-    end
 
-    -- 3. Determine vertical positioning for the *entire stack*.
-    local displayWidth = 360
-    local displayHeight = 50
-    local verticalOffset = 10 -- Space between unit and display
-    local stackSpacing = 5 -- Space between stacked displays
-    local totalStackHeight = #world.liveCombatDisplays * displayHeight + (#world.liveCombatDisplays - 1) * stackSpacing
+        if #allUnits > 0 then
+            -- 2b. Find the bounding box of all involved units in this group.
+            local topUnitY, bottomUnitY, bottomUnitSize, totalX = math.huge, -math.huge, 0, 0
+            for _, unit in ipairs(allUnits) do
+                topUnitY = math.min(topUnitY, unit.y)
+                if unit.y >= bottomUnitY then bottomUnitY, bottomUnitSize = unit.y, unit.size end
+                totalX = totalX + unit.x
+            end
 
-    -- Potential Y positions for the TOP of the stack
-    local belowY = bottomUnitY + bottomUnitSize + verticalOffset
-    local aboveY = topUnitY - totalStackHeight - verticalOffset
+            -- 2c. Determine vertical positioning for this stack.
+            local displayWidth, displayHeight, verticalOffset, stackSpacing = 360, 50, 10, 5
+            local totalStackHeight = #group * displayHeight + (#group - 1) * stackSpacing
+            local belowY = bottomUnitY + bottomUnitSize + verticalOffset
+            local aboveY = topUnitY - totalStackHeight - verticalOffset
+            local belowIsVisible = (belowY + totalStackHeight) < (Camera.y + Config.VIRTUAL_HEIGHT)
+            local aboveIsVisible = aboveY > Camera.y
 
-    -- Check if these positions are visible within the camera's current view.
-    local belowIsVisible = (belowY + totalStackHeight) < (Camera.y + Config.VIRTUAL_HEIGHT)
-    local aboveIsVisible = aboveY > Camera.y
+            local baseStartY, stackGrowsUp = belowY, false
+            if belowIsVisible then
+                baseStartY = belowY
+            elseif aboveIsVisible then
+                baseStartY = aboveY
+            else
+                -- Neither position is fully visible. Default to the bottom of the screen,
+                -- and make the stack grow upwards from there to ensure visibility.
+                baseStartY = Camera.y + Config.VIRTUAL_HEIGHT - 5 -- Anchor at the bottom of the screen (with padding)
+                stackGrowsUp = true
+            end
 
-    local baseStartY
-    if belowIsVisible then
-        baseStartY = belowY
-    elseif aboveIsVisible then
-        baseStartY = aboveY
-    else
-        baseStartY = belowY -- Default to below
-    end
+            -- 2d. Determine horizontal positioning for this stack.
+            local avgX = totalX / #allUnits
+            local startX = avgX + (Config.SQUARE_SIZE / 2) - (displayWidth / 2)
 
-    -- 4. Determine horizontal positioning: Center on the average position
-    local avgX = totalX / #allUnits
-    local startX = avgX + (Config.SQUARE_SIZE / 2) - (displayWidth / 2)
-
-    -- 5. Draw each display in the stack.
-    for i, display in ipairs(world.liveCombatDisplays) do
-        -- Calculate the Y position for this specific display in the stack.
-        local currentY = baseStartY + (i - 1) * (displayHeight + stackSpacing)
-        draw_single_display(display, startX, currentY, world)
+            -- 2e. Draw each display in this group's stack.
+            if stackGrowsUp then
+                -- Draw from bottom to top. The baseStartY is the bottom edge of the stack.
+                for i = 1, #group do
+                    local stackIndex = #group - i
+                    local currentY = baseStartY - displayHeight - (stackIndex * (displayHeight + stackSpacing))
+                    draw_single_display(group[i], startX, currentY, world)
+                end
+            else
+                -- Draw from top to bottom (original logic). The baseStartY is the top edge of the stack.
+                for i, display in ipairs(group) do
+                    local currentY = baseStartY + (i - 1) * (displayHeight + stackSpacing)
+                    draw_single_display(display, startX, currentY, world)
+                end
+            end
+        end
     end
 end
 

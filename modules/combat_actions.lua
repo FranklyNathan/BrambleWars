@@ -44,19 +44,28 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
         -- Only create a display if not explicitly told otherwise (e.g., for counter-attacks).
         if options.createCombatDisplay ~= false then
             if attacker then
-                -- Check if a display for this attacker/defender/attackName combo already exists.
-                -- This prevents duplicates from multi-hit AoE attacks like Eruption.
+                -- Check if a display for this specific attack instance hitting this specific defender already exists.
+                -- This prevents a single lingering AoE from creating multiple displays for the same target,
+                -- while allowing multi-target attacks to show a display for each unique target.
                 local displayExists = false
-                for _, existingDisplay in ipairs(world.liveCombatDisplays) do
-                    if existingDisplay.attacker == attacker and existingDisplay.defender == target and existingDisplay.attackName == options.attackName then
-                        displayExists = true
-                        break
+                if options.attackInstanceId then -- Only check if we have an ID to work with
+                    for _, existingDisplay in ipairs(world.liveCombatDisplays) do
+                        if existingDisplay.attackInstanceId == options.attackInstanceId and existingDisplay.defender == target then
+                            displayExists = true
+                            break
+                        end
                     end
                 end
 
                 if not displayExists then
-                    -- Store attackName in the display data for the check above.
-                    local displayData = { attacker = attacker, defender = target, timer = 2.0, attackName = options.attackName }
+                    -- Store all relevant data for the display.
+                    local displayData = {
+                        attacker = attacker,
+                        defender = target,
+                        timer = 2.0,
+                        attackName = options.attackName,
+                        attackInstanceId = options.attackInstanceId
+                    }
                     if isCrit then
                         displayData.shake = { timer = 0.2, intensity = 4 } -- Add a shake component for crits
                     end
@@ -69,8 +78,9 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
         local actualDamageDealt = hp_before_damage - target.hp
         target.components.pending_damage = {
             amount = actualDamageDealt,
-            timer = 0.8,
-            initialTimer = 0.8,
+            delay = 0.2, -- A brief pause before the bar starts draining.
+            timer = 0.6, -- The duration of the drain animation itself.
+            initialTimer = 0.6,
             isCrit = isCrit
         }
 

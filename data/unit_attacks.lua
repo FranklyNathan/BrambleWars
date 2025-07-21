@@ -42,7 +42,7 @@ local function get_and_face_cycle_target(attacker, world)
 end
 
 -- Helper for cycle_target attacks that heal.
-local function execute_cycle_target_heal_attack(attacker, world)
+local function execute_cycle_target_heal_attack(attacker, world, attackInstanceId)
     local target = get_and_face_cycle_target(attacker, world)
     if not target then return false end
 
@@ -52,8 +52,9 @@ local function execute_cycle_target_heal_attack(attacker, world)
     -- Healing moves always hit.
     local healAmount = CombatFormulas.calculateHealingAmount(attacker, attackData)
     if CombatActions.applyDirectHeal(target, healAmount) then
+        local specialProperties = { attackInstanceId = attackInstanceId }
         -- Create a visual effect on the target tile.
-        EffectFactory.addAttackEffect(attacker, attackName, target.x, target.y, target.size, target.size, {0.5, 1, 0.5, 0.7}, 0, true, "none")
+        EffectFactory.addAttackEffect(attacker, attackName, target.x, target.y, target.size, target.size, {0.5, 1, 0.5, 0.7}, 0, true, "none", nil, nil, specialProperties)
         -- Create a popup number for the healing.
         EffectFactory.createDamagePopup(target, healAmount, false, {0.5, 1, 0.5, 1}) -- Green text
     end
@@ -62,7 +63,7 @@ local function execute_cycle_target_heal_attack(attacker, world)
 end
 
 -- Helper for cycle_target attacks that fire a projectile.
-local function executeCycleTargetProjectileAttack(attacker, attackName, world, isPiercing)
+local function executeCycleTargetProjectileAttack(attacker, attackName, world, isPiercing, attackInstanceId)
     local target = get_and_face_cycle_target(attacker, world)
     if not target then return false end
 
@@ -70,13 +71,13 @@ local function executeCycleTargetProjectileAttack(attacker, attackName, world, i
 
     -- Fire a projectile in that direction.
     local isEnemy = (attacker.type == "enemy")
-    local newProjectile = EntityFactory.createProjectile(attacker.x, attacker.y, attacker.lastDirection, attacker, attackName, attackData.power, isEnemy, nil, isPiercing)
+    local newProjectile = EntityFactory.createProjectile(attacker.x, attacker.y, attacker.lastDirection, attacker, attackName, attackData.power, isEnemy, nil, isPiercing, attackInstanceId)
     world:queue_add_entity(newProjectile)
     return true
 end
 
 -- Helper for cycle_target attacks that deal damage.
-local function execute_cycle_target_damage_attack(attacker, world, statusEffect)
+local function execute_cycle_target_damage_attack(attacker, world, statusEffect, attackInstanceId)
     local target = get_and_face_cycle_target(attacker, world)
     if not target then return false end
 
@@ -85,59 +86,60 @@ local function execute_cycle_target_damage_attack(attacker, world, statusEffect)
     -- Determine the correct target type based on the attacker's team.
     local targetType = (attacker.type == "player") and "enemy" or "player"
 
+    local specialProperties = { attackInstanceId = attackInstanceId }
     -- Create the attack effect. The resolution system will handle the rest.
-    EffectFactory.addAttackEffect(attacker, attackName, target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType, nil, statusEffect)
+    EffectFactory.addAttackEffect(attacker, attackName, target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType, nil, statusEffect, specialProperties)
     return true
 end
 
 -- Shared attack functions, now using the new formulas and structure:
 
-UnitAttacks.froggy_rush = function(attacker, world)
-    return execute_cycle_target_damage_attack(attacker, world)
+UnitAttacks.froggy_rush = function(attacker, world, attackInstanceId)
+    return execute_cycle_target_damage_attack(attacker, world, nil, attackInstanceId)
 end
 
-UnitAttacks.quill_jab = function(attacker, world)
-    return execute_cycle_target_damage_attack(attacker, world)
+UnitAttacks.quill_jab = function(attacker, world, attackInstanceId)
+    return execute_cycle_target_damage_attack(attacker, world, nil, attackInstanceId)
 end
 
-UnitAttacks.snap = function(attacker, world)
-    return execute_cycle_target_damage_attack(attacker, world)
+UnitAttacks.snap = function(attacker, world, attackInstanceId)
+    return execute_cycle_target_damage_attack(attacker, world, nil, attackInstanceId)
 end
 
-UnitAttacks.walnut_toss = function(attacker, world)
-    return execute_cycle_target_damage_attack(attacker, world)
+UnitAttacks.walnut_toss = function(attacker, world, attackInstanceId)
+    return execute_cycle_target_damage_attack(attacker, world, nil, attackInstanceId)
 end
 
-UnitAttacks.slash = function(attacker, world)
-    return execute_cycle_target_damage_attack(attacker, world)
+UnitAttacks.slash = function(attacker, world, attackInstanceId)
+    return execute_cycle_target_damage_attack(attacker, world, nil, attackInstanceId)
 end
 
-UnitAttacks.venom_stab = function(attacker, world)
+UnitAttacks.venom_stab = function(attacker, world, attackInstanceId)
     local status = {type = "poison", duration = 3} -- Lasts 3 turns
-    return execute_cycle_target_damage_attack(attacker, world, status)
+    return execute_cycle_target_damage_attack(attacker, world, status, attackInstanceId)
 end
 
-UnitAttacks.fireball = function(attacker, world)
+UnitAttacks.fireball = function(attacker, world, attackInstanceId)
     -- Fireball is a projectile attack.
-    return executeCycleTargetProjectileAttack(attacker, "fireball", world, true)
+    return executeCycleTargetProjectileAttack(attacker, "fireball", world, true, attackInstanceId)
 end
 
-UnitAttacks.uppercut = function(attacker, world)
+UnitAttacks.uppercut = function(attacker, world, attackInstanceId)
     local status = {type = "airborne", duration = 1.2} -- Shortened for a snappier feel
-    return execute_cycle_target_damage_attack(attacker, world, status)
+    return execute_cycle_target_damage_attack(attacker, world, status, attackInstanceId)
 end
 
-UnitAttacks.mend = function(attacker, world)
-    return execute_cycle_target_heal_attack(attacker, world)
+UnitAttacks.mend = function(attacker, world, attackInstanceId)
+    return execute_cycle_target_heal_attack(attacker, world, attackInstanceId)
 end
 
 -- The rest of your unit attack functions remain largely unchanged, as they don't directly involve damage calculation:
 
-UnitAttacks.longshot = function(attacker, world)
-    return execute_cycle_target_damage_attack(attacker, world)
+UnitAttacks.longshot = function(attacker, world, attackInstanceId)
+    return execute_cycle_target_damage_attack(attacker, world, nil, attackInstanceId)
 end
 
-UnitAttacks.phantom_step = function(square, world)
+UnitAttacks.phantom_step = function(square, world, attackInstanceId)
      -- 1. Get the selected target from the cycle targeting system.
      if not world.cycleTargeting.active or not world.cycleTargeting.targets[world.cycleTargeting.selectedIndex] then
          return false -- Failsafe, should not happen if called correctly.
@@ -167,12 +169,13 @@ UnitAttacks.phantom_step = function(square, world)
      local attackName = "phantom_step"
      local status = {type = "stunned", duration = 1}
      local targetType = (square.type == "player") and "enemy" or "player"
-     EffectFactory.addAttackEffect(square, attackName, target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType, nil, status)
+     local specialProperties = { attackInstanceId = attackInstanceId }
+     EffectFactory.addAttackEffect(square, attackName, target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType, nil, status, specialProperties)
  
      return true
  end
 
-UnitAttacks.invigoration = function(attacker, world)
+UnitAttacks.invigoration = function(attacker, world, attackInstanceId)
     local target = get_and_face_cycle_target(attacker, world)
     if not target then return false end
 
@@ -182,12 +185,13 @@ UnitAttacks.invigoration = function(attacker, world)
         EffectFactory.createDamagePopup(target, "Refreshed!", false, {0.5, 1, 0.5, 1}) -- Green text
     end
 
+    local specialProperties = { attackInstanceId = attackInstanceId }
     -- Create a visual effect on the target tile so the player sees the action.
-    EffectFactory.addAttackEffect(attacker, "invigoration", target.x, target.y, target.size, target.size, {0.5, 1, 0.5, 0.7}, 0, true, "none")
+    EffectFactory.addAttackEffect(attacker, "invigoration", target.x, target.y, target.size, target.size, {0.5, 1, 0.5, 0.7}, 0, true, "none", nil, nil, specialProperties)
     return true
 end
 
-UnitAttacks.eruption = function(attacker, world)
+UnitAttacks.eruption = function(attacker, world, attackInstanceId)
     -- This is the new model for a ground_aim AoE attack.
     -- 1. Get the target tile from the ground aiming cursor.
     local targetTileX, targetTileY = world.mapCursorTile.x, world.mapCursorTile.y
@@ -201,14 +205,15 @@ UnitAttacks.eruption = function(attacker, world)
     local effects = AttackPatterns.eruption_aoe(centerX, centerY, rippleCenterSize)
     local color = {1, 0, 0, 1}
     local targetType = (attacker.type == "player" and "enemy" or "player")
+    local specialProperties = { attackInstanceId = attackInstanceId }
 
     for _, effectData in ipairs(effects) do
-        EffectFactory.addAttackEffect(attacker, "eruption", effectData.shape.x, effectData.shape.y, effectData.shape.w, effectData.shape.h, color, effectData.delay, false, targetType)
+        EffectFactory.addAttackEffect(attacker, "eruption", effectData.shape.x, effectData.shape.y, effectData.shape.w, effectData.shape.h, color, effectData.delay, false, targetType, nil, nil, specialProperties)
     end
     return true
 end
 
-UnitAttacks.shockwave = function(attacker, world)
+UnitAttacks.shockwave = function(attacker, world, attackInstanceId)
     -- Shockwave now always hits all valid targets.
     local targets = WorldQueries.findValidTargetsForAttack(attacker, "shockwave", world)
 
@@ -219,7 +224,7 @@ UnitAttacks.shockwave = function(attacker, world)
     return true -- Turn is consumed.
 end
 
-UnitAttacks.quick_step = function(attacker, world)
+UnitAttacks.quick_step = function(attacker, world, attackInstanceId)
     -- 1. Get the target tile from the ground aiming cursor.
     local targetTileX, targetTileY = world.mapCursorTile.x, world.mapCursorTile.y
 
@@ -273,7 +278,7 @@ UnitAttacks.quick_step = function(attacker, world)
     return true -- Consume the turn.
 end
 
-UnitAttacks.grovecall = function(square, world)
+UnitAttacks.grovecall = function(square, world, attackInstanceId)
     -- This is the new model for a ground_aim attack.
     -- 1. Get the target tile from the ground aiming cursor.
     local targetTileX, targetTileY = world.mapCursorTile.x, world.mapCursorTile.y
@@ -300,13 +305,14 @@ UnitAttacks.grovecall = function(square, world)
     }
     world:queue_add_entity(newObstacle)
 
+    local specialProperties = { attackInstanceId = attackInstanceId }
     -- Create a visual effect on the target tile so the player sees the action.
-    EffectFactory.addAttackEffect(square, "grovecall", landX, landY, Config.SQUARE_SIZE, Config.SQUARE_SIZE, {0.2, 0.8, 0.3, 0.7}, 0, false, "none")
+    EffectFactory.addAttackEffect(square, "grovecall", landX, landY, Config.SQUARE_SIZE, Config.SQUARE_SIZE, {0.2, 0.8, 0.3, 0.7}, 0, false, "none", nil, nil, specialProperties)
 
     return true -- Attack succeeds, turn is consumed.
 end
 
-UnitAttacks.hookshot = function(attacker, world)
+UnitAttacks.hookshot = function(attacker, world, attackInstanceId)
     local target = get_and_face_cycle_target(attacker, world)
     if not target then return false end
 

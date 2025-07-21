@@ -326,11 +326,11 @@ local function handle_action_menu_input(key, world)
                 local validTargets = WorldQueries.findValidTargetsForAttack(unit, attackName, world)
                 -- The menu logic should prevent this, but as a failsafe:
                 if #validTargets > 0 then
-                    set_player_turn_state("cycle_targeting", world)
                     world.cycleTargeting.active = true
                     world.cycleTargeting.targets = validTargets
                     world.cycleTargeting.selectedIndex = 1
-                    -- Set cursor to first target
+                    set_player_turn_state("cycle_targeting", world) -- Dispatch event *after* setting up state.
+                    -- Snap cursor to first target
                     local firstTarget = validTargets[1]
                     world.mapCursorTile.x = firstTarget.tileX
                     world.mapCursorTile.y = firstTarget.tileY
@@ -365,19 +365,22 @@ local function handle_action_menu_input(key, world)
                             local directions = {{0, -i}, {0, i}, {-i, 0}, {i, 0}}
                             for _, dir in ipairs(directions) do
                                 local tileX, tileY = unit.tileX + dir[1], unit.tileY + dir[2]
+                                -- The tile must be on the map. The attack itself will validate if it's occupied.
                                 if tileX >= 0 and tileX < world.map.width and tileY >= 0 and tileY < world.map.height then
-                                    table.insert(world.groundAimingGrid, {x = tileX, y = tileY})
+                                    world.groundAimingGrid[tileX .. "," .. tileY] = true
                                 end
                             end
                         end
                     else
-                        -- For standard AoE ground aim, create a square grid.
+                        -- For standard AoE ground aim, create a diamond-shaped grid based on Manhattan distance.
                         for dx = -attackData.range, attackData.range do
                             for dy = -attackData.range, attackData.range do
-                                local tileX = unit.tileX + dx
-                                local tileY = unit.tileY + dy
-                                if tileX >= 0 and tileX < world.map.width and tileY >= 0 and tileY < world.map.height then
-                                    table.insert(world.groundAimingGrid, {x = tileX, y = tileY})
+                                if math.abs(dx) + math.abs(dy) <= attackData.range then
+                                    local tileX = unit.tileX + dx
+                                    local tileY = unit.tileY + dy
+                                    if tileX >= 0 and tileX < world.map.width and tileY >= 0 and tileY < world.map.height then
+                                        world.groundAimingGrid[tileX .. "," .. tileY] = true
+                                    end
                                 end
                             end
                         end
@@ -428,18 +431,13 @@ end
 
 -- Helper to move the cursor for ground aiming, clamping to map bounds.
 local function move_ground_aim_cursor(dx, dy, world)
+    local attacker = world.actionMenu.unit
+    local attackData = getAttackDataByName(world.selectedAttackName)
     local newTileX = world.mapCursorTile.x + dx
     local newTileY = world.mapCursorTile.y + dy
 
-    local attacker = world.actionMenu.unit
-    local attackData = getAttackDataByName(world.selectedAttackName)
-
-    -- By default, clamp to map bounds
-    local minX, maxX = 0, world.map.width - 1
-    local minY, maxY = 0, world.map.height - 1
-
-    -- If the attack has a specific range, clamp to that range around the attacker
-    if attackData and attackData.range and attacker then
+    -- If the attack has a specific range, validate against the pre-calculated grid.
+    if attackData and attackData.range and world.groundAimingGrid then
         if attackData.line_of_sight_only then
             -- For line-of-sight attacks, snap to the attacker's axis when changing direction.
             if dx ~= 0 then -- Moving horizontally
@@ -448,21 +446,24 @@ local function move_ground_aim_cursor(dx, dy, world)
                 newTileX = attacker.tileX
             end
         end
-        -- Clamp to the attack's range box regardless of aiming style.
-        minX = math.max(minX, attacker.tileX - attackData.range)
-        maxX = math.min(maxX, attacker.tileX + attackData.range)
-        minY = math.max(minY, attacker.tileY - attackData.range)
-        maxY = math.min(maxY, attacker.tileY + attackData.range)
+
+        -- Check if the new tile is in the valid grid.
+        if world.groundAimingGrid[newTileX .. "," .. newTileY] then
+            world.mapCursorTile.x = newTileX
+            world.mapCursorTile.y = newTileY
+            -- After moving, update the AoE preview
+            world.attackAoETiles = AttackPatterns.getGroundAimPreviewShapes(world.selectedAttackName, newTileX, newTileY)
+        end
+        -- If the tile is not valid, do nothing (the cursor doesn't move).
+    else
+        -- Fallback for attacks without a range grid: just clamp to map bounds.
+        newTileX = math.max(0, math.min(newTileX, world.map.width - 1))
+        newTileY = math.max(0, math.min(newTileY, world.map.height - 1))
+        world.mapCursorTile.x = newTileX
+        world.mapCursorTile.y = newTileY
+        -- After moving, update the AoE preview
+        world.attackAoETiles = AttackPatterns.getGroundAimPreviewShapes(world.selectedAttackName, newTileX, newTileY)
     end
-
-    -- Clamp cursor to the calculated bounds
-    newTileX = math.max(minX, math.min(newTileX, maxX))
-    newTileY = math.max(minY, math.min(newTileY, maxY))
-    world.mapCursorTile.x = newTileX
-    world.mapCursorTile.y = newTileY
-
-    -- After moving, update the AoE preview
-    world.attackAoETiles = AttackPatterns.getGroundAimPreviewShapes(world.selectedAttackName, newTileX, newTileY)
 end
 
 -- Handles input when the player is aiming an attack at a ground tile.

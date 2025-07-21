@@ -43,12 +43,21 @@ function EffectTimerSystem.update(dt, world)
         -- Update pending_damage timer for health bar animation
         if s.components.pending_damage then
             local pending = s.components.pending_damage
-            pending.timer = pending.timer - dt
-            if pending.timer <= 0 then
-                s.components.pending_damage = nil
+            -- New logic with a delay before draining starts.
+            if pending.delay and pending.delay > 0 then
+                -- We are in the initial pause phase.
+                pending.delay = pending.delay - dt
+                -- During the delay, the display amount should show the full damage.
+                pending.displayAmount = pending.amount
             else
-                -- This value will be read by the renderer to draw the white "draining" part of the bar.
-                pending.displayAmount = pending.amount * (pending.timer / pending.initialTimer)
+                -- The pause is over, now we animate the drain.
+                pending.timer = pending.timer - dt
+                if pending.timer <= 0 then
+                    s.components.pending_damage = nil
+                else
+                    -- This value will be read by the renderer to draw the white "draining" part of the bar.
+                    pending.displayAmount = pending.amount * (pending.timer / pending.initialTimer)
+                end
             end
         end
 
