@@ -129,6 +129,46 @@ UnitAttacks.uppercut = function(attacker, world, attackInstanceId)
     return execute_cycle_target_damage_attack(attacker, world, status, attackInstanceId)
 end
 
+UnitAttacks.impale = function(attacker, world, attackInstanceId)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+
+    local attackName = "impale"
+    local targetType = (attacker.type == "player") and "enemy" or "player"
+
+    -- Check for a unit behind the primary target
+    local dx = target.tileX - attacker.tileX
+    local dy = target.tileY - attacker.tileY
+    -- The tile behind the target is one more step in the same direction.
+    local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
+    local secondaryTarget = WorldQueries.getUnitAt(behindTileX, behindTileY, target, world)
+
+    -- The secondary target must also be an opponent.
+    if secondaryTarget and secondaryTarget.type ~= attacker.type then
+        -- Knock the primary target back into the secondary target.
+        -- The destination is the secondary target's tile.
+        local destPixelX, destPixelY = Grid.toPixels(behindTileX, behindTileY)
+        target.targetX, target.targetY = destPixelX, destPixelY
+        -- Update the logical tile position immediately. This is important for collision and targeting.
+        target.tileX, target.tileY = behindTileX, behindTileY
+        -- Give it a speed boost for a quick slide.
+        target.speedMultiplier = 3
+
+        -- Impale hits both! Primary target takes 1.5x damage.
+        local primarySpecialProperties = { attackInstanceId = attackInstanceId, damageMultiplier = 1.5 }
+        EffectFactory.addAttackEffect(attacker, attackName, target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType, nil, nil, primarySpecialProperties)
+        -- Secondary target takes normal damage.
+        local secondarySpecialProperties = { attackInstanceId = attackInstanceId }
+        EffectFactory.addAttackEffect(attacker, attackName, secondaryTarget.x, secondaryTarget.y, secondaryTarget.size, secondaryTarget.size, {1, 0, 0, 1}, 0, false, targetType, nil, nil, secondarySpecialProperties)
+    else
+        -- Impale hits only the primary target for normal damage.
+        local specialProperties = { attackInstanceId = attackInstanceId }
+        EffectFactory.addAttackEffect(attacker, attackName, target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType, nil, nil, specialProperties)
+    end
+
+    return true
+end
+
 UnitAttacks.mend = function(attacker, world, attackInstanceId)
     return execute_cycle_target_heal_attack(attacker, world, attackInstanceId)
 end

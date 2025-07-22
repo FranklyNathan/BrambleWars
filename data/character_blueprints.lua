@@ -19,7 +19,7 @@ local CharacterBlueprints = {
         dominantColor = {0.5, 0.2, 0.8}, -- Drapion: Purple
         passives = {"Bloodrush"}, -- Characters can have multiple 
         attacks = {
-            "froggy_rush", "venom_stab", "phantom_step"
+            "froggy_rush", "venom_stab", "impale", "phantom_step"
         } --The first attack must always be a basic attack, the rest can be any attack(s) defined in attack_blueprints.lua
     },
     florgessquare = {

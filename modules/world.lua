@@ -38,6 +38,7 @@ function World.new(gameMap)
     self.movementPath = nil -- Will hold the list of nodes for the movement arrow
     self.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 } -- For post-move actions
     self.mapMenu = { active = false, options = {}, selectedIndex = 1 } -- For actions on empty tiles
+    self.actionDescriptionMenu = { active = false, text = "" } -- For attack descriptions
     self.hoverReachableTiles = nil -- For hover previews
     self.hoverAttackableTiles = nil -- For hover previews
     self.selectedAttackName = nil -- The name of the attack being targeted

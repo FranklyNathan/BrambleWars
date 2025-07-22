@@ -11,16 +11,26 @@ local ActionMenuPreviewSystem = {}
 -- This is the core logic. It's called by event handlers to update the preview.
 function ActionMenuPreviewSystem.refresh_preview(world)
     local menu = world.actionMenu
+    local descMenu = world.actionDescriptionMenu
 
     -- Always clear previous previews before calculating new ones.
     menu.previewAttackableTiles = nil
     menu.previewAoeShapes = nil
+    descMenu.active = false
+    descMenu.text = ""
 
     -- Only show a preview if the action menu is active in the correct state.
     if menu.active and world.playerTurnState == "action_menu" then
         local selectedOption = menu.options[menu.selectedIndex]
         if selectedOption and selectedOption.key then
             local attackData = AttackBlueprints[selectedOption.key]
+
+            -- Update the description text for the currently hovered move.
+            if attackData and attackData.description then
+                descMenu.active = true
+                descMenu.text = attackData.description
+            end
+
             -- Check if the selected option is a valid attack with a range.
             if attackData and (attackData.useType == "physical" or attackData.useType == "magical" or attackData.useType == "utility") then
                 menu.previewAttackableTiles = RangeCalculator.calculateSingleAttackRange(menu.unit, selectedOption.key, world)

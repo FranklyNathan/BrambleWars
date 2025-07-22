@@ -22,6 +22,34 @@ local target_cursor_line_width = 2
 -- (Moved from systems.lua)
 --------------------------------------------------------------------------------
 
+-- Helper function for wrapping long strings of text.
+local function wrapText(text, limit, font)
+    font = font or love.graphics.getFont()
+    local lines = {}
+    if not text then return lines end
+
+    local currentLine = ""
+    local currentWidth = 0
+
+    for word in string.gmatch(text, "%S+") do
+        local wordWidth = font:getWidth(word)
+        if currentWidth > 0 and currentWidth + font:getWidth(" ") + wordWidth > limit then
+            table.insert(lines, currentLine)
+            currentLine = word
+            currentWidth = wordWidth
+        else
+            if currentLine == "" then
+                currentLine = word
+            else
+                currentLine = currentLine .. " " .. word
+            end
+            currentWidth = font:getWidth(currentLine)
+        end
+    end
+    table.insert(lines, currentLine)
+    return lines
+end
+
 local function drawHealthBar(square)
     local barWidth, barHeight, barYOffset = square.size, 3, square.size + 2
     -- Draw background first
@@ -872,20 +900,25 @@ local function draw_screen_space_ui(world)
         local screenUnitY = unit.y - Camera.y
         local font = love.graphics.getFont()
 
-        -- Dynamically calculate menu width based on the longest option text
-        local maxTextWidth = 0 -- No title, so start with 0
-        for _, option in ipairs(menu.options) do
-            local attackData = AttackBlueprints[option.key]
-            local wispString = ""
-            if attackData and attackData.wispCost and attackData.wispCost > 0 then
-                wispString = " " .. string.rep("♦", attackData.wispCost)
-            end
-            maxTextWidth = math.max(maxTextWidth, font:getWidth(option.text .. wispString))
-        end
-        local menuWidth = maxTextWidth + 20 -- 10px padding on each side
-        local menuHeight = 10 + #menu.options * 20 -- 5px padding top and bottom
+        -- Check if the currently selected move has power to determine if we need an extra slice.
+        local selectedOption = menu.options[menu.selectedIndex]
+        local selectedAttackData = selectedOption and AttackBlueprints[selectedOption.key]
+
+        -- New: Fixed width for the menu.
+        local menuWidth = 180
+        local sliceHeight = 25 -- A bit taller for a nicer look
+        local mainOptionsHeight = #menu.options * sliceHeight
+
+        -- New: Calculate height for power and description slices.
+        local powerSliceHeight = sliceHeight
+        local descText = (selectedAttackData and selectedAttackData.description) or ""
+        local wrappedLines = wrapText(descText, menuWidth - 20, font) -- 10px padding on each side
+        local descLineHeight = font:getHeight() * 1.2
+        local descriptionSliceHeight = 10 + 4 * descLineHeight -- Fixed height for 4 lines of text.
+
+        local menuHeight = mainOptionsHeight + powerSliceHeight + descriptionSliceHeight
         local menuX = screenUnitX + unit.size + 5 -- Position it to the right of the unit
-        local menuY = screenUnitY
+        local menuY = screenUnitY + (unit.size / 2) - mainOptionsHeight -- Anchor the top of the menu relative to the main options, not the total height.
 
         -- Clamp menu position to stay on screen
         if menuX + menuWidth > Config.VIRTUAL_WIDTH then menuX = screenUnitX - menuWidth - 5 end
@@ -893,21 +926,17 @@ local function draw_screen_space_ui(world)
         menuX = math.max(0, menuX)
         menuY = math.max(0, menuY)
 
-        -- Draw menu background
-        love.graphics.setColor(0.1, 0.1, 0.2, 0.8)
-        love.graphics.rectangle("fill", menuX, menuY, menuWidth, menuHeight)
-        love.graphics.setColor(0.8, 0.8, 0.9, 1)
-        love.graphics.setLineWidth(2)
-        love.graphics.rectangle("line", menuX, menuY, menuWidth, menuHeight)
-        love.graphics.setLineWidth(1)
+        -- Draw menu options as a stack of slices
+        local horizontalShift = 10 -- How much the selected slice shifts left
 
-        -- Draw menu options
         for i, option in ipairs(menu.options) do
-            local yPos = menuY + 5 + (i - 1) * 20
-            local attackData = AttackBlueprints[option.key]
+            local sliceX = menuX
+            local sliceY = menuY + (i - 1) * sliceHeight
+            local sliceColor, textColor
 
             -- Check if an attack option is invalid (has no valid targets)
             local is_valid = true
+            local attackData = AttackBlueprints[option.key]
             if attackData and attackData.targeting_style == "cycle_target" then
                 local validTargets = WorldQueries.findValidTargetsForAttack(menu.unit, option.key, world)
                 if #validTargets == 0 then
@@ -916,26 +945,81 @@ local function draw_screen_space_ui(world)
             end
 
             if i == menu.selectedIndex then
-                love.graphics.setColor(1, 1, 0, 1) -- Yellow for selected
-            elseif not is_valid then
-                love.graphics.setColor(0.5, 0.5, 0.5, 1) -- Grey for invalid
+                -- Selected slice: shift left, bright color
+                sliceX = sliceX - horizontalShift
+                sliceColor = {0.95, 0.95, 0.7, 0.9}
+                textColor = {0, 0, 0, 1} -- Black
             else
-                love.graphics.setColor(1, 1, 1, 1) -- White for others
+                -- Unselected slice: normal position, darker color
+                sliceColor = {0.2, 0.2, 0.1, 0.9}
+                textColor = {1, 1, 1, 1} -- White
             end
-            love.graphics.print(option.text, menuX + 10, yPos)
+
+            -- If the option is invalid, grey it out
+            if not is_valid then
+                sliceColor = {0.2, 0.2, 0.2, 0.8} -- Dark grey
+                textColor = {0.5, 0.5, 0.5, 1} -- Grey
+            end
+
+            -- Draw the slice background
+            love.graphics.setColor(sliceColor)
+            love.graphics.rectangle("fill", sliceX, sliceY, menuWidth, sliceHeight)
+
+            -- Draw the text
+            love.graphics.setColor(textColor)
+            local textY = sliceY + (sliceHeight - font:getHeight()) / 2
+            love.graphics.print(option.text, sliceX + 10, textY)
 
             -- Draw wisp cost diamonds
             if attackData and attackData.wispCost and attackData.wispCost > 0 then
-                local wispString = string.rep("♦", attackData.wispCost)
-                local moveNameWidth = font:getWidth(option.text .. " ")
-                -- If the move is invalid, also grey out the wisp cost. Otherwise, it's white.
-                if not is_valid then
-                    love.graphics.setColor(0.5, 0.5, 0.5, 1)
-                else
-                    love.graphics.setColor(1, 1, 1, 1)
-                end
-                love.graphics.print(wispString, menuX + 10 + moveNameWidth, yPos)
+                local wispString = string.rep("♦", attackData.wispCost) -- The diamonds themselves
+                local wispWidth = font:getWidth(wispString)
+                -- Use the same text color for the wisp cost
+                love.graphics.setColor(textColor)
+                love.graphics.print(wispString, sliceX + menuWidth - wispWidth - 10, textY) -- Right-align the wisp cost
             end
+        end
+
+        -- Draw the static "Power" slice.
+        local powerSliceY = menuY + mainOptionsHeight
+        local powerValueText = "--"
+        if selectedAttackData and selectedAttackData.power and selectedAttackData.power > 0 then
+            powerValueText = tostring(selectedAttackData.power)
+        end
+
+        -- Draw the slice background (always unselected style)
+        love.graphics.setColor(0.2, 0.2, 0.1, 0.9)
+        love.graphics.rectangle("fill", menuX, powerSliceY, menuWidth, powerSliceHeight)
+
+        -- Draw separator line at the top of the slice
+        love.graphics.setColor(0, 0, 0, 0.3)
+        love.graphics.rectangle("fill", menuX, powerSliceY, menuWidth, 2)
+
+        -- Draw the text
+        love.graphics.setColor(1, 1, 1, 1) -- White text
+        local textY = powerSliceY + (powerSliceHeight - font:getHeight()) / 2
+        love.graphics.print("Power", menuX + 10, textY)
+
+        -- Draw the right-aligned power value
+        local valueWidth = font:getWidth(powerValueText)
+        love.graphics.print(powerValueText, menuX + menuWidth - valueWidth - 10, textY)
+
+        -- Draw the static "Description" slice.
+        local descriptionSliceY = powerSliceY + powerSliceHeight
+
+        -- Draw the slice background
+        love.graphics.setColor(0.2, 0.2, 0.1, 0.9)
+        love.graphics.rectangle("fill", menuX, descriptionSliceY, menuWidth, descriptionSliceHeight)
+
+        -- Draw separator line at the top of the slice
+        love.graphics.setColor(0, 0, 0, 0.3)
+        love.graphics.rectangle("fill", menuX, descriptionSliceY, menuWidth, 2)
+
+        -- Draw the wrapped description text
+        love.graphics.setColor(1, 1, 1, 1)
+        for i, line in ipairs(wrappedLines) do
+            local lineY = descriptionSliceY + 5 + (i - 1) * descLineHeight
+            love.graphics.print(line, menuX + 10, lineY)
         end
     end
 

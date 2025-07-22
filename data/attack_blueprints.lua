@@ -22,7 +22,8 @@ local AttackBlueprints = {
         CritChance = 5, -- Odds of a critical hit (which does double damage), used in crit calculations
         useType = "physical", -- Physical uses Attack/Defense stat in calcs, Magical uses Magic/Resistance stat, other options don't do damage
         targeting_style = "cycle_target", --See above for targeting styles
-        patternType = "standard_melee" -- The 4 adjacent tiles.
+        patternType = "standard_melee", -- The 4 adjacent tiles.
+        description = "A standard physical attack."
     },
 
     quill_jab = {
@@ -33,7 +34,8 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "standard_all" -- Can hit adjacent and standard ranged tiles.
+        patternType = "standard_all", -- Can hit adjacent and standard ranged tiles.
+        description = "A standard physical attack that can hit from a distance."
     },
 
     snap = {
@@ -44,7 +46,8 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "standard_melee" -- The 4 adjacent tiles.
+        patternType = "standard_melee", -- The 4 adjacent tiles.
+        description = "A standard physical attack."
     },
 
     walnut_toss = {
@@ -55,7 +58,8 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "magical",
         targeting_style = "cycle_target",
-        patternType = "standard_ranged" -- Can hit ranged tiles, but not adjacent ones.
+        patternType = "standard_ranged", -- Can hit ranged tiles, but not adjacent ones.
+        description = "A standard magical attack from a distance."
     },
 
     -- Damaging Melee Attacks
@@ -67,7 +71,8 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "standard_melee" -- The 4 adjacent tiles.
+        patternType = "standard_melee", -- The 4 adjacent tiles.
+        description = "A physical attack that poisons the target."
     },
     uppercut = {
         power = 40,
@@ -77,7 +82,8 @@ local AttackBlueprints = {
         CritChance = 10,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "standard_melee" -- The 4 adjacent tiles.
+        patternType = "standard_melee", -- The 4 adjacent tiles.
+        description = "A powerful physical attack that sends the target airborne."
     },
     slash = {
         power = 35,
@@ -87,7 +93,8 @@ local AttackBlueprints = {
         CritChance = 15,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "standard_melee" -- The 4 adjacent tiles.
+        patternType = "standard_melee", -- The 4 adjacent tiles.
+        description = "A physical attack with a high critical hit chance."
     },
     shunt = {
         power = 15,
@@ -97,7 +104,8 @@ local AttackBlueprints = {
         CritChance = 0,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "standard_melee" -- The 4 adjacent tiles.
+        patternType = "standard_melee", -- The 4 adjacent tiles.
+        description = "A weak physical attack that pushes the target back."
     },
     shockstrike = {
         power = 20,
@@ -107,7 +115,19 @@ local AttackBlueprints = {
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "standard_melee" -- The 4 adjacent tiles.
+        patternType = "standard_melee", -- The 4 adjacent tiles.
+        description = "A physical attack that may paralyze the target."
+    },
+    impale = {
+        power = 30,
+        wispCost = 1,
+        originType = "cavernborn", 
+        Accuracy = 100,
+        CritChance = 5,
+        useType = "physical",
+        targeting_style = "cycle_target",
+        patternType = "standard_melee", -- The 4 adjacent tiles.
+        description = "A physical attack that deals extra damage if it pierces through to another enemy."
     },
 
     -- Damaging Ranged Attacks
@@ -123,7 +143,8 @@ local AttackBlueprints = {
         affects = "enemies",
         line_of_sight_only = true,
         patternType = "line_of_sight", -- For the attack preview.
-        drawsTile = true
+        drawsTile = true,
+        description = "Launches a piercing fireball in a straight line."
     },
     longshot = {
         power = 50,
@@ -133,7 +154,8 @@ local AttackBlueprints = {
         CritChance = 20,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "longshot_range" -- Can hit targets 2-3 tiles away.
+        patternType = "longshot_range", -- Can hit targets 2-3 tiles away.
+        description = "A powerful, long-range physical attack with a high critical hit chance."
     },
     eruption = {
         power = 60,
@@ -145,7 +167,8 @@ local AttackBlueprints = {
         targeting_style = "ground_aim",
         range = 7,
         patternType = "eruption_aoe", -- The 5x5 ripple effect.
-        drawsTile = true
+        drawsTile = true,
+        description = "Causes a delayed, multi-stage explosion at a target location."
     },
 
     -- Damaging Special Attacks
@@ -157,7 +180,8 @@ local AttackBlueprints = {
         CritChance = 0,
         useType = "utility",
         targeting_style = "cycle_target",
-        affects = "enemies"
+        affects = "enemies",
+        description = "Teleport behind an enemy and strike them, causing stun."
     }, -- Range is dynamic (user's movement stat)
 
     -- Support Attacks
@@ -170,7 +194,8 @@ local AttackBlueprints = {
         targeting_style = "cycle_target",
         affects = "allies",
         patternType = "standard_melee",
-        drawsTile = true
+        drawsTile = true,
+        description = "Refreshes an ally's turn if they have already acted."
     },
     mend = {
         power = 20,
@@ -181,7 +206,8 @@ local AttackBlueprints = {
         targeting_style = "cycle_target",
         patternType = "standard_melee", -- The 4 adjacent tiles.
         affects = "all", -- Can target allies and enemies.
-        drawsTile = true
+        drawsTile = true,
+        description = "Restores a small amount of HP to any unit."
     },
 
     -- Status Attacks
@@ -191,8 +217,9 @@ local AttackBlueprints = {
         originType = "cavernborn", 
         useType = "utility",
         targeting_style = "auto_hit_all",
-        range = 12,
-        affects = "enemies"
+        range = 12, -- This is a large radius around the user
+        affects = "enemies",
+        description = "Paralyzes all enemies within a wide radius."
     },
 
     -- Movement Attacks
@@ -203,7 +230,8 @@ local AttackBlueprints = {
         useType = "utility",
         targeting_style = "ground_aim",
         range = 3,
-        line_of_sight_only = true
+        line_of_sight_only = true,
+        description = "A quick dash that makes enemies passed through airborne."
     },
 
     -- Environment Attacks
@@ -214,7 +242,8 @@ local AttackBlueprints = {
         useType = "utility",
         targeting_style = "ground_aim",
         range = 6,
-        drawsTile = true
+        drawsTile = true,
+        description = "Summons a tree obstacle on the battlefield."
     },
 
     -- Shared Attacks
@@ -226,7 +255,8 @@ local AttackBlueprints = {
         targeting_style = "cycle_target",
         range = 7,
         affects = "all",
-        line_of_sight_only = true
+        line_of_sight_only = true,
+        description = "Fires a hook that pulls the user and target towards each other."
     },
 
 }
