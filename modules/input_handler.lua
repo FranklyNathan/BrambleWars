@@ -118,6 +118,9 @@ local function handle_free_roam_input(key, world)
             world.movementPath = {} -- Start with an empty path
             world.cursorPath = {} -- Start with an empty cursor path
 
+            -- Add a selection flash effect to the unit.
+            unit.components.selection_flash = { timer = 0, duration = 0.25 }
+
             print("Selected unit:", unit.playerType)
 
         else

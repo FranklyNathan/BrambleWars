@@ -13,6 +13,10 @@ local BattleInfoMenu = require("modules.battle_info_menu")
 local LiveCombatDisplay = require("modules.live_combat_display")
 local Renderer = {}
 
+-- Local state for cursor animation
+local current_cursor_line_width = 2
+local target_cursor_line_width = 2
+
 --------------------------------------------------------------------------------
 -- LOCAL DRAWING HELPER FUNCTIONS
 -- (Moved from systems.lua)
@@ -236,6 +240,41 @@ local function draw_entity(entity, world, is_active_player)
         love.graphics.setShader()
         love.graphics.setColor(1, 1, 1, baseAlpha)
         currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
+
+        -- Draw selection flash effect if present
+        if entity.components.selection_flash then
+            local flash = entity.components.selection_flash
+            local progress = flash.timer / flash.duration
+
+            -- The width of the flash expands from a thin line to the full sprite width.
+            -- Using progress^0.5 (sqrt) will make it expand fast at the start and slow down.
+            local flashWidth = w * math.sqrt(progress)
+            local flashX = drawX - flashWidth / 2
+            local flashY = finalDrawY - h -- The sprite is drawn anchored bottom-center
+
+            -- Use the solid color shader to only color the sprite's pixels
+            if Assets.shaders.solid_color then
+                -- Store the current scissor to restore it later
+                local oldScissor = {love.graphics.getScissor()}
+
+                -- Set the scissor to the expanding rectangle
+                -- The scissor coordinates need to be in screen space, not world space.
+                love.graphics.setScissor(flashX - Camera.x, flashY - Camera.y, flashWidth, h)
+
+                -- Set the shader to tint the sprite white
+                love.graphics.setShader(Assets.shaders.solid_color)
+                local flashAlpha = 1.0 * (1 - progress)
+                Assets.shaders.solid_color:send("solid_color", {1, 1, 1, flashAlpha * baseAlpha})
+
+                -- Draw the sprite again, tinted white, clipped by the scissor
+                currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
+
+                -- Reset shader and scissor
+                love.graphics.setShader()
+                -- Use global unpack for compatibility with older Lua versions used by LÖVE.
+                love.graphics.setScissor(unpack(oldScissor))
+            end
+        end
 
         -- 4. Draw overlays for visual effects (damage tint, poison, etc.)
         draw_visual_effect_overlays(entity, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, baseAlpha)
@@ -484,19 +523,14 @@ local function draw_world_space_ui(world)
             draw_tile_set(world.enemyRangeDisplay.reachableTiles, 0.2, 0.4, 1, 0.4, world) -- Blue for movement
         end
 
-        -- 3. Draw the movement path arrow.
+        -- 3. Draw the movement path.
         if world.playerTurnState == "unit_selected" and world.movementPath and #world.movementPath > 0 then
-            love.graphics.setColor(1, 1, 0, 0.8) -- Bright yellow
-            love.graphics.setLineWidth(3)
-            local prevX = world.selectedUnit.x + world.selectedUnit.size / 2
-            local prevY = world.selectedUnit.y + world.selectedUnit.size / 2
+            local pathTiles = {}
             for _, node in ipairs(world.movementPath) do
-                local nextX = node.x + Config.SQUARE_SIZE / 2
-                local nextY = node.y + Config.SQUARE_SIZE / 2
-                love.graphics.line(prevX, prevY, nextX, nextY)
-                prevX, prevY = nextX, nextY
+                local tileX, tileY = Grid.toTile(node.x, node.y)
+                pathTiles[tileX .. "," .. tileY] = true
             end
-            love.graphics.setLineWidth(1) -- Reset line width
+            draw_tile_set(pathTiles, 1, 1, 0.5, 0.8, world) -- Gold color
         end
 
         -- 4. Draw the map cursor.
@@ -506,8 +540,17 @@ local function draw_world_space_ui(world)
            world.playerTurnState == "rescue_targeting" or world.playerTurnState == "drop_targeting" or
            world.playerTurnState == "shove_targeting" or world.playerTurnState == "take_targeting"
            then
+            -- Animate the cursor's line width for a "lock in" effect
+            if world.playerTurnState == "unit_selected" or world.playerTurnState == "enemy_range_display" then
+                target_cursor_line_width = 6 -- Thicker when a unit is selected
+            else
+                target_cursor_line_width = 2 -- Normal thickness
+            end
+            -- Lerp the current width towards the target width for a smooth animation
+            current_cursor_line_width = current_cursor_line_width + (target_cursor_line_width - current_cursor_line_width) * 0.2
+
             love.graphics.setColor(1, 1, 1, 1) -- White cursor outline
-            love.graphics.setLineWidth(2)
+            love.graphics.setLineWidth(current_cursor_line_width)
             local cursorPixelX, cursorPixelY
             if world.playerTurnState == "cycle_targeting" and world.cycleTargeting.active and #world.cycleTargeting.targets > 0 then
                 local target = world.cycleTargeting.targets[world.cycleTargeting.selectedIndex]
@@ -520,7 +563,30 @@ local function draw_world_space_ui(world)
             else
                 cursorPixelX, cursorPixelY = Grid.toPixels(world.mapCursorTile.x, world.mapCursorTile.y)
             end
-            love.graphics.rectangle("line", cursorPixelX, cursorPixelY, Config.SQUARE_SIZE, Config.SQUARE_SIZE)
+
+            -- Animate the corners pulsating in and out when idle
+            local corner_offset = 0
+            if world.playerTurnState ~= "unit_selected" and world.playerTurnState ~= "enemy_range_display" then
+                -- When not locked on a unit, the corners breathe.
+                -- Create a discrete "jump" between pixels instead of a smooth sine wave to simulate a 2-frame animation.
+                local anim_sequence = {1, 0} -- The sequence of pixel offsets for the animation (1 = inward, 0 = neutral).
+                local anim_speed = 2 -- How many frames per second.
+                corner_offset = anim_sequence[(math.floor(love.timer.getTime() * anim_speed) % #anim_sequence) + 1]
+            end
+            local cornerLength = 8 -- A fixed length for the corner lines.
+
+            local size = Config.SQUARE_SIZE
+            local offset = corner_offset
+
+            -- Draw each corner as a single 3-point polyline to ensure perfect joins with thick lines.
+            -- Top-left
+            love.graphics.line(cursorPixelX + offset + cornerLength, cursorPixelY + offset, cursorPixelX + offset, cursorPixelY + offset, cursorPixelX + offset, cursorPixelY + offset + cornerLength)
+            -- Top-right
+            love.graphics.line(cursorPixelX + size - offset - cornerLength, cursorPixelY + offset, cursorPixelX + size - offset, cursorPixelY + offset, cursorPixelX + size - offset, cursorPixelY + offset + cornerLength)
+            -- Bottom-left
+            love.graphics.line(cursorPixelX + offset + cornerLength, cursorPixelY + size - offset, cursorPixelX + offset, cursorPixelY + size - offset, cursorPixelX + offset, cursorPixelY + size - offset - cornerLength)
+            -- Bottom-right
+            love.graphics.line(cursorPixelX + size - offset - cornerLength, cursorPixelY + size - offset, cursorPixelX + size - offset, cursorPixelY + size - offset, cursorPixelX + size - offset, cursorPixelY + size - offset - cornerLength)
             love.graphics.setLineWidth(1) -- Reset line width
         end
 

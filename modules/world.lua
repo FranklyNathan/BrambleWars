@@ -77,9 +77,6 @@ function World.new(gameMap)
         reachableTiles = nil,
         attackableTiles = nil
     }
-    -- This table was accidentally removed in a previous change. It is still needed
-    -- to handle continuous cursor movement when a key is held down. The old
-    -- ripple-related properties have been correctly removed.
     self.cursorInput = {
         timer = 0,
         initialDelay = 0.35, -- Time before repeat starts

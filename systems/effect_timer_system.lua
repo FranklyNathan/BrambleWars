@@ -45,6 +45,14 @@ function EffectTimerSystem.update(dt, world)
             end
         end
 
+        -- Update selection_flash timer
+        if s.components.selection_flash then
+            s.components.selection_flash.timer = s.components.selection_flash.timer + dt
+            if s.components.selection_flash.timer >= s.components.selection_flash.duration then
+                s.components.selection_flash = nil -- Remove the component to end the effect
+            end
+        end
+
         -- Update pending_damage timer for health bar animation
         if s.components.pending_damage then
             local pending = s.components.pending_damage
