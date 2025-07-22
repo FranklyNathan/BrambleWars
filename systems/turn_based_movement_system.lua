@@ -18,6 +18,17 @@ local function formatAttackName(name)
 end
 
 function TurnBasedMovementSystem.update(dt, world)
+    -- Update the visual effect for the move destination tile.
+    if world.moveDestinationEffect then
+        local effect = world.moveDestinationEffect
+        if effect.state == "descending" then
+            effect.timer = math.max(0, effect.timer - dt)
+            if effect.timer == 0 then
+                effect.state = "glowing"
+            end
+        end
+    end
+
     -- This system moves any entity that has a movement path.
     for _, entity in ipairs(world.all_entities) do
         -- The check for entity.components is no longer needed, as world.lua now guarantees it exists.
@@ -49,6 +60,10 @@ function TurnBasedMovementSystem.update(dt, world)
                 else
                     -- The path is now empty, which means movement is complete.
                     entity.components.movement_path = nil -- Clean up the component.
+
+                    -- Clear the move destination effect now that the unit has arrived.
+                    world.moveDestinationEffect = nil
+
                     -- Only player units trigger state changes upon finishing a move.
                     if entity.type == "player" then -- Player finished moving
                         -- Movement is done, open the action menu.

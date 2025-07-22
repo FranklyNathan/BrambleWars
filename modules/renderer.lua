@@ -506,6 +506,18 @@ local function draw_world_space_ui(world)
     local BORDER_WIDTH = 1
     local INSET_SIZE = Config.SQUARE_SIZE - (BORDER_WIDTH * 2)
 
+    -- Helper to draw the cursor's corner shapes.
+    local function draw_cursor_corners(x, y, size, cornerLength, offset)
+        -- Top-left
+        love.graphics.line(x + offset + cornerLength, y + offset, x + offset, y + offset, x + offset, y + offset + cornerLength)
+        -- Top-right
+        love.graphics.line(x + size - offset - cornerLength, y + offset, x + size - offset, y + offset, x + size - offset, y + offset + cornerLength)
+        -- Bottom-left
+        love.graphics.line(x + offset + cornerLength, y + size - offset, x + offset, y + size - offset, x + offset, y + size - offset - cornerLength)
+        -- Bottom-right
+        love.graphics.line(x + size - offset - cornerLength, y + size - offset, x + size - offset, y + size - offset, x + size - offset, y + size - offset - cornerLength)
+    end
+
     if world.gameState == "gameplay" and world.turn == "player" then
         -- Draw the action menu's attack preview
         if world.actionMenu.active and world.actionMenu.previewAttackableTiles then
@@ -561,6 +573,60 @@ local function draw_world_space_ui(world)
             draw_tile_set(pathTiles, 1, 1, 0.5, 0.8, world) -- Gold color
         end
 
+        -- Draw the move destination effect (descending cursor and glowing tile)
+        if world.moveDestinationEffect then
+            local effect = world.moveDestinationEffect
+            local pixelX, pixelY = Grid.toPixels(effect.tileX, effect.tileY)
+            local size = Config.SQUARE_SIZE
+
+            if effect.state == "descending" then
+                -- Animate the cursor morphing into a filled square.
+                local progress = 1 - (effect.timer / effect.initialTimer) -- Goes from 0 to 1
+                local cornerLength = 8
+
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.setLineWidth(6) -- Use the thick "locked in" line width
+
+                if progress < 0.5 then
+                    -- Phase 1: Animate outline formation. The L-shapes at the corners grow to form a square.
+                    local outline_progress = progress / 0.5 -- This sub-progress goes from 0 to 1.
+                    local current_len = cornerLength + ((size / 2) - cornerLength) * outline_progress
+
+                    -- Draw the 8 elongating lines from the corners.
+                    love.graphics.line(pixelX, pixelY, pixelX + current_len, pixelY) -- Top-left H
+                    love.graphics.line(pixelX, pixelY, pixelX, pixelY + current_len) -- Top-left V
+                    love.graphics.line(pixelX + size, pixelY, pixelX + size - current_len, pixelY) -- Top-right H
+                    love.graphics.line(pixelX + size, pixelY, pixelX + size, pixelY + current_len) -- Top-right V
+                    love.graphics.line(pixelX, pixelY + size, pixelX + current_len, pixelY + size) -- Bottom-left H
+                    love.graphics.line(pixelX, pixelY + size, pixelX, pixelY + size - current_len) -- Bottom-left V
+                    love.graphics.line(pixelX + size, pixelY + size, pixelX + size - current_len, pixelY + size) -- Bottom-right H
+                    love.graphics.line(pixelX + size, pixelY + size, pixelX + size, pixelY + size - current_len) -- Bottom-right V
+                else
+                    -- Phase 2: The outline is now a full square. Animate the fill from the corners.
+                    local fill_progress = (progress - 0.5) / 0.5 -- This sub-progress goes from 0 to 1.
+
+                    -- First, draw the complete square outline that was formed in Phase 1.
+                    love.graphics.rectangle("line", pixelX, pixelY, size, size)
+
+                    -- Calculate the size of the filling squares growing from each corner.
+                    -- They grow to half the size of the tile to meet in the middle.
+                    local fill_size = (size / 2) * fill_progress
+
+                    -- Draw four rectangles, one growing from each corner.
+                    love.graphics.rectangle("fill", pixelX, pixelY, fill_size, fill_size) -- Top-left
+                    love.graphics.rectangle("fill", pixelX + size - fill_size, pixelY, fill_size, fill_size) -- Top-right
+                    love.graphics.rectangle("fill", pixelX, pixelY + size - fill_size, fill_size, fill_size) -- Bottom-left
+                    love.graphics.rectangle("fill", pixelX + size - fill_size, pixelY + size - fill_size, fill_size, fill_size) -- Bottom-right
+                end
+                love.graphics.setLineWidth(1)
+            elseif effect.state == "glowing" then
+                -- Animate the tile glowing with a pulsating effect.
+                local glowAlpha = 0.4 + (math.sin(love.timer.getTime() * 8) + 1) / 2 * 0.3 -- Pulsates between 0.4 and 0.7
+                love.graphics.setColor(1, 1, 1, glowAlpha)
+                love.graphics.rectangle("fill", pixelX, pixelY, size, size)
+            end
+        end
+
         -- 4. Draw the map cursor.
         if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" or
            world.playerTurnState == "cycle_targeting" or world.playerTurnState == "ground_aiming" or 
@@ -579,42 +645,34 @@ local function draw_world_space_ui(world)
 
             love.graphics.setColor(1, 1, 1, 1) -- White cursor outline
             love.graphics.setLineWidth(current_cursor_line_width)
-            local cursorPixelX, cursorPixelY
+            local baseCursorPixelX, baseCursorPixelY
             if world.playerTurnState == "cycle_targeting" and world.cycleTargeting.active and #world.cycleTargeting.targets > 0 then
                 local target = world.cycleTargeting.targets[world.cycleTargeting.selectedIndex]
                 if target then
                     -- In cycle mode, the cursor is on the target itself.
-                    cursorPixelX, cursorPixelY = target.x, target.y
+                    baseCursorPixelX, baseCursorPixelY = target.x, target.y
                 else
-                    cursorPixelX, cursorPixelY = Grid.toPixels(world.mapCursorTile.x, world.mapCursorTile.y)
+                    baseCursorPixelX, baseCursorPixelY = Grid.toPixels(world.mapCursorTile.x, world.mapCursorTile.y)
                 end
             else
-                cursorPixelX, cursorPixelY = Grid.toPixels(world.mapCursorTile.x, world.mapCursorTile.y)
+                baseCursorPixelX, baseCursorPixelY = Grid.toPixels(world.mapCursorTile.x, world.mapCursorTile.y)
             end
 
-            -- Animate the corners pulsating in and out when idle
-            local corner_offset = 0
-            if world.playerTurnState ~= "unit_selected" and world.playerTurnState ~= "enemy_range_display" then
-                -- When not locked on a unit, the corners breathe.
-                -- Create a discrete "jump" between pixels instead of a smooth sine wave to simulate a 2-frame animation.
-                local anim_sequence = {1, 0} -- The sequence of pixel offsets for the animation (1 = inward, 0 = neutral).
-                local anim_speed = 2 -- How many frames per second.
-                corner_offset = anim_sequence[(math.floor(love.timer.getTime() * anim_speed) % #anim_sequence) + 1]
-            end
+            -- New: Hover and projected shadow logic
+            local hover_offset = -4 + math.sin(love.timer.getTime() * 4) * 2 -- Bob up and down
+            local cursorPixelX = baseCursorPixelX
+            local cursorPixelY = baseCursorPixelY + hover_offset
             local cornerLength = 8 -- A fixed length for the corner lines.
-
             local size = Config.SQUARE_SIZE
-            local offset = corner_offset
+            local offset = 0 -- No more pulsing animation
 
-            -- Draw each corner as a single 3-point polyline to ensure perfect joins with thick lines.
-            -- Top-left
-            love.graphics.line(cursorPixelX + offset + cornerLength, cursorPixelY + offset, cursorPixelX + offset, cursorPixelY + offset, cursorPixelX + offset, cursorPixelY + offset + cornerLength)
-            -- Top-right
-            love.graphics.line(cursorPixelX + size - offset - cornerLength, cursorPixelY + offset, cursorPixelX + size - offset, cursorPixelY + offset, cursorPixelX + size - offset, cursorPixelY + offset + cornerLength)
-            -- Bottom-left
-            love.graphics.line(cursorPixelX + offset + cornerLength, cursorPixelY + size - offset, cursorPixelX + offset, cursorPixelY + size - offset, cursorPixelX + offset, cursorPixelY + size - offset - cornerLength)
-            -- Bottom-right
-            love.graphics.line(cursorPixelX + size - offset - cornerLength, cursorPixelY + size - offset, cursorPixelX + size - offset, cursorPixelY + size - offset, cursorPixelX + size - offset, cursorPixelY + size - offset - cornerLength)
+            -- Draw the shadow on the ground tile by drawing the cursor shape in black.
+            love.graphics.setColor(0, 0, 0, 0.25)
+            draw_cursor_corners(baseCursorPixelX, baseCursorPixelY, size, cornerLength, offset)
+
+            -- Draw the actual cursor itself (now hovering)
+            love.graphics.setColor(1, 1, 1, 1) -- White cursor outline
+            draw_cursor_corners(cursorPixelX, cursorPixelY, size, cornerLength, offset)
             love.graphics.setLineWidth(1) -- Reset line width
         end
 

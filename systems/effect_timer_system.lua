@@ -151,7 +151,18 @@ function EffectTimerSystem.update(dt, world)
             end
         end
     end
-    -- 3. Handle queued ripple effects
+
+    -- 3. Update range fade-out effect timer
+    if world.rangeFadeEffect and world.rangeFadeEffect.active then
+        local effect = world.rangeFadeEffect
+        effect.timer = math.max(0, effect.timer - dt)
+        if effect.timer == 0 then
+            -- The fade is complete, clear the effect.
+            world.rangeFadeEffect = nil
+        end
+    end
+
+    -- 4. Handle queued ripple effects
     if world.rippleEffectQueue and #world.rippleEffectQueue > 0 then
         local rippleData = world.rippleEffectQueue[1] -- Process the first ripple in the queue
 

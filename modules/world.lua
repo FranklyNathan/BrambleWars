@@ -45,6 +45,7 @@ function World.new(gameMap)
     self.attackAoETiles = nil -- The shape of the attack for the targeting preview
     self.attackableTiles = nil -- The full attack range of a selected unit
     self.groundAimingGrid = nil -- The grid of valid tiles for ground-aiming attacks
+    self.rangeFadeEffect = nil -- For fading out range indicators.
         self.cycleTargeting = { -- For abilities that cycle through targets
         active = false,
         targets = {},

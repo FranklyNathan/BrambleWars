@@ -163,8 +163,28 @@ local function handle_unit_selected_input(key, world)
             -- If cursor is on the unit, the path is nil/empty. Assign an empty table `{}`
             -- to trigger the movement system's completion logic immediately.
             world.selectedUnit.components.movement_path = world.movementPath or {}
+
+            -- Create the destination effect: a descending cursor and a glowing tile.
+            world.moveDestinationEffect = {
+                tileX = world.mapCursorTile.x,
+                tileY = world.mapCursorTile.y,
+                state = "descending", -- 'descending', 'glowing'
+                timer = 0.4, -- duration of the new morphing animation
+                initialTimer = 0.4
+            }
+
+            -- Create the range fade-out effect.
+            world.rangeFadeEffect = {
+                active = true,
+                timer = 0.5, -- A slightly longer fade
+                initialTimer = 0.5,
+                reachableTiles = world.reachableTiles,
+                attackableTiles = world.attackableTiles
+            }
+
             set_player_turn_state("unit_moving", world)
             world.selectedUnit = nil
+            -- Clear the original tile sets so they are not drawn by the regular logic.
             world.reachableTiles = nil
             world.attackableTiles = nil
             world.movementPath = nil
