@@ -32,6 +32,7 @@ function World.new(gameMap)
     self.turn = "player" -- "player" or "enemy"
     self.selectedUnit = nil -- The unit currently selected by the player
     self.playerTurnState = "free_roam" -- e.g., "free_roam", "unit_selected", "unit_moving", "action_menu", "attack_targeting", "map_menu"
+    self.previousPlayerTurnState = nil -- Stores the state before entering a sub-state like 'unit_info_locked'
     self.mapCursorTile = {x = 0, y = 0} -- The player's cursor on the game grid, in tile coordinates
     self.reachableTiles = nil -- Will hold the table of tiles the selected unit can move to
     self.came_from = nil -- Holds pathfinding data for path reconstruction
@@ -87,7 +88,14 @@ function World.new(gameMap)
     }
 
     self.battleInfoMenu = { active = false }
-    self.unitInfoMenu = {active = false, unit = nil, rippleStartTime = 0, rippleSourceUnit = nil}
+    self.unitInfoMenu = {
+        active = false,
+        unit = nil,
+        rippleStartTime = 0,
+        rippleSourceUnit = nil,
+        isLocked = false, -- For the new locked-in inspection mode
+        selectedIndex = 1
+    }
     self.turnShouldEnd = false -- New flag to defer ending the turn
     -- Game State and UI
     self.gameState = "gameplay"
@@ -274,6 +282,7 @@ function World:endTurn()
            player.hasActed = false
            -- Store the starting position for this turn, in case of move cancellation.
            player.startOfTurnTileX, player.startOfTurnTileY = player.tileX, player.tileY
+           player.startOfTurnDirection = player.lastDirection
         end
         -- Clear the AI pathfinding cache for the next enemy turn.
         self.enemyPathfindingCache = {}

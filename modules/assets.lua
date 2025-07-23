@@ -6,6 +6,7 @@ local anim8 = require("libraries.anim8")
 local Assets = {
     images = {},
     animations = {},
+    sounds = {},
     shaders = {}
 }
 
@@ -24,6 +25,23 @@ function Assets.load()
     Assets.images.Archer = love.graphics.newImage("assets/archer.png")
     Assets.images.Flag = love.graphics.newImage("assets/tree.png") -- For Sceptile's attack
     Assets.images.Punter = love.graphics.newImage("assets/punter.png")
+
+    -- Load portraits
+    Assets.images.Default_Portrait = love.graphics.newImage("assets/Portraits/Default_Portrait.png")
+    Assets.images.Sceptile_Portrait = love.graphics.newImage("assets/Portraits/Sceptile_Portrait.png")
+    Assets.images.Rapidash_Portrait = love.graphics.newImage("assets/Portraits/Rapidash_Portrait.png")
+
+    -- Load sounds
+    Assets.sounds.cursor_move = love.audio.newSource("assets/sfx/cursor_move.wav", "static")
+    Assets.sounds.cursor_move:setVolume(0.4)
+    Assets.sounds.menu_scroll = love.audio.newSource("assets/sfx/menu_scroll.wav", "static")
+    Assets.sounds.menu_scroll:setVolume(0.7)
+    Assets.sounds.back_out = love.audio.newSource("assets/sfx/back_out.wav", "static")
+    Assets.sounds.menu_scroll:setVolume(0.7)
+    Assets.sounds.attack_hit = love.audio.newSource("assets/sfx/attack_hit.ogg", "static")
+    Assets.sounds.attack_hit:setVolume(0.6)    
+    Assets.sounds.attack_miss = love.audio.newSource("assets/sfx/attack_miss.ogg", "static")
+    Assets.sounds.attack_miss:setVolume(0.6)
 
     -- Define animation grids
     -- We assume each character sprite is 64x64 pixels per frame.

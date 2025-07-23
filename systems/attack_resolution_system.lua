@@ -11,6 +11,7 @@ local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
 local AttackPatterns = require("modules.attack_patterns")
 local EffectFactory = require("modules.effect_factory")
+local Assets = require("modules.assets")
 
 
 local AttackResolutionSystem = {}
@@ -51,6 +52,11 @@ function AttackResolutionSystem.update(dt, world)
                                 local hitChance = CombatFormulas.calculateHitChance(effect.attacker.witStat, target.witStat, attackData.Accuracy or 100)
                                 if love.math.random() < hitChance then
                                     -- The attack hits.
+                                    if Assets.sounds.attack_hit then
+                                        Assets.sounds.attack_hit:stop()
+                                        Assets.sounds.attack_hit:play()
+                                    end
+
                                     local critChance = CombatFormulas.calculateCritChance(effect.attacker.witStat, target.witStat, attackData.CritChance or 0)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
                                     local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit)
@@ -78,7 +84,9 @@ function AttackResolutionSystem.update(dt, world)
 
                                     -- New: Check for counter-attacks right after a successful hit.
                                     local isCounter = effect.specialProperties and effect.specialProperties.isCounterAttack
-                                    if not isCounter and target.hp and target.hp > 0 and not target.statusEffects.stunned and not target.statusEffects.airborne then
+                                    local isAetherfall = effect.specialProperties and effect.specialProperties.isAetherfallAttack
+                                    -- A unit cannot counter-attack if it is stunned, already airborne, or if the incoming attack is the one that *causes* it to become airborne.
+                                    if not isCounter and not isAetherfall and target.hp and target.hp > 0 and not target.statusEffects.stunned and not target.statusEffects.airborne and not (effect.statusEffect and effect.statusEffect.type == "airborne") then
                                         local defenderBlueprint = (target.type == "player") and CharacterBlueprints[target.playerType] or EnemyBlueprints[target.enemyType]
                                         if defenderBlueprint and defenderBlueprint.attacks and defenderBlueprint.attacks[1] then
                                             local basicAttackName = defenderBlueprint.attacks[1]
@@ -109,6 +117,10 @@ function AttackResolutionSystem.update(dt, world)
                                     end
                                 else
                                     -- The attack misses.
+                                    if Assets.sounds.attack_miss then
+                                        Assets.sounds.attack_miss:stop()
+                                        Assets.sounds.attack_miss:play()
+                                    end
                                     EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1})
                                 end
                             end

@@ -536,6 +536,22 @@ local function draw_world_space_ui(world)
             love.graphics.setColor(1, 1, 1, 1) -- Reset color
         end
 
+                -- New: Draw the fading range indicators after a move is confirmed.
+        if world.rangeFadeEffect and world.rangeFadeEffect.active then
+            local effect = world.rangeFadeEffect
+            local progress = effect.timer / effect.initialTimer -- Fades from 1 down to 0
+
+            -- Draw fading attackable tiles (danger zone)
+            if effect.attackableTiles then
+                draw_tile_set(effect.attackableTiles, 1, 0.2, 0.2, 0.3 * progress, world)
+            end
+
+            -- Draw fading reachable tiles (movement range)
+            if effect.reachableTiles then
+                draw_tile_set(effect.reachableTiles, 0.2, 0.4, 1, 0.6 * progress, world)
+            end
+        end
+
         -- 1. Draw the full attack range for the selected unit (the "danger zone").
         local showDangerZone = world.playerTurnState == "unit_selected" or world.playerTurnState == "ground_aiming" or world.playerTurnState == "cycle_targeting"
         if showDangerZone and world.attackableTiles then
@@ -588,42 +604,56 @@ local function draw_world_space_ui(world)
                 love.graphics.setLineWidth(6) -- Use the thick "locked in" line width
 
                 if progress < 0.5 then
-                    -- Phase 1: Animate outline formation. The L-shapes at the corners grow to form a square.
+                    -- Phase 1: Animate outline formation. The L-shapes grow and the whole shape shrinks by 1px.
                     local outline_progress = progress / 0.5 -- This sub-progress goes from 0 to 1.
-                    local current_len = cornerLength + ((size / 2) - cornerLength) * outline_progress
+
+                    -- Interpolate the position and size to shrink the cursor by 1px on each side.
+                    local anim_x = pixelX + 4 * outline_progress -- Shrink significantly to account for thick cursor line.
+                    local anim_y = pixelY + 4 * outline_progress
+                    local anim_size = size - 8 * outline_progress
+
+                    local current_len = cornerLength + ((anim_size / 2) - cornerLength) * outline_progress
 
                     -- Draw the 8 elongating lines from the corners.
-                    love.graphics.line(pixelX, pixelY, pixelX + current_len, pixelY) -- Top-left H
-                    love.graphics.line(pixelX, pixelY, pixelX, pixelY + current_len) -- Top-left V
-                    love.graphics.line(pixelX + size, pixelY, pixelX + size - current_len, pixelY) -- Top-right H
-                    love.graphics.line(pixelX + size, pixelY, pixelX + size, pixelY + current_len) -- Top-right V
-                    love.graphics.line(pixelX, pixelY + size, pixelX + current_len, pixelY + size) -- Bottom-left H
-                    love.graphics.line(pixelX, pixelY + size, pixelX, pixelY + size - current_len) -- Bottom-left V
-                    love.graphics.line(pixelX + size, pixelY + size, pixelX + size - current_len, pixelY + size) -- Bottom-right H
-                    love.graphics.line(pixelX + size, pixelY + size, pixelX + size, pixelY + size - current_len) -- Bottom-right V
+                    love.graphics.line(anim_x, anim_y, anim_x + current_len, anim_y) -- Top-left H
+                    love.graphics.line(anim_x, anim_y, anim_x, anim_y + current_len) -- Top-left V
+                    love.graphics.line(anim_x + anim_size, anim_y, anim_x + anim_size - current_len, anim_y) -- Top-right H
+                    love.graphics.line(anim_x + anim_size, anim_y, anim_x + anim_size, anim_y + current_len) -- Top-right V
+                    love.graphics.line(anim_x, anim_y + anim_size, anim_x + current_len, anim_y + anim_size) -- Bottom-left H
+                    love.graphics.line(anim_x, anim_y + anim_size, anim_x, anim_y + anim_size - current_len) -- Bottom-left V
+                    love.graphics.line(anim_x + anim_size, anim_y + anim_size, anim_x + anim_size - current_len, anim_y + anim_size) -- Bottom-right H
+                    love.graphics.line(anim_x + anim_size, anim_y + anim_size, anim_x + anim_size, anim_y + anim_size - current_len) -- Bottom-right V
                 else
                     -- Phase 2: The outline is now a full square. Animate the fill from the corners.
                     local fill_progress = (progress - 0.5) / 0.5 -- This sub-progress goes from 0 to 1.
 
+                    -- The cursor is now fully shrunken to match the inset tile size.
+                    local inset_x = pixelX + 4
+                    local inset_y = pixelY + 4
+                    local inset_size = size - 8
+
                     -- First, draw the complete square outline that was formed in Phase 1.
-                    love.graphics.rectangle("line", pixelX, pixelY, size, size)
+                    love.graphics.rectangle("line", inset_x, inset_y, inset_size, inset_size)
 
-                    -- Calculate the size of the filling squares growing from each corner.
-                    -- They grow to half the size of the tile to meet in the middle.
-                    local fill_size = (size / 2) * fill_progress
+                    -- Calculate the distance the fill should travel from each edge.
+                    local fill_distance = (inset_size / 2) * fill_progress
 
-                    -- Draw four rectangles, one growing from each corner.
-                    love.graphics.rectangle("fill", pixelX, pixelY, fill_size, fill_size) -- Top-left
-                    love.graphics.rectangle("fill", pixelX + size - fill_size, pixelY, fill_size, fill_size) -- Top-right
-                    love.graphics.rectangle("fill", pixelX, pixelY + size - fill_size, fill_size, fill_size) -- Bottom-left
-                    love.graphics.rectangle("fill", pixelX + size - fill_size, pixelY + size - fill_size, fill_size, fill_size) -- Bottom-right
+                    -- Draw four rectangles, one growing from each perimeter edge, to fill the square.
+                    love.graphics.rectangle("fill", inset_x, inset_y, inset_size, fill_distance) -- Top
+                    love.graphics.rectangle("fill", inset_x, inset_y + inset_size - fill_distance, inset_size, fill_distance) -- Bottom
+                    love.graphics.rectangle("fill", inset_x, inset_y, fill_distance, inset_size) -- Left
+                    love.graphics.rectangle("fill", inset_x + inset_size - fill_distance, inset_y, fill_distance, inset_size) -- Right
                 end
                 love.graphics.setLineWidth(1)
             elseif effect.state == "glowing" then
                 -- Animate the tile glowing with a pulsating effect.
                 local glowAlpha = 0.4 + (math.sin(love.timer.getTime() * 8) + 1) / 2 * 0.3 -- Pulsates between 0.4 and 0.7
                 love.graphics.setColor(1, 1, 1, glowAlpha)
-                love.graphics.rectangle("fill", pixelX, pixelY, size, size)
+                -- Use the inset dimensions to match the final frame of the descending animation.
+                local inset_x = pixelX + 1
+                local inset_y = pixelY + 1
+                local inset_size = size - 2
+                love.graphics.rectangle("fill", inset_x, inset_y, inset_size, inset_size)
             end
         end
 
@@ -948,7 +978,8 @@ end
 
 local function draw_screen_space_ui(world)
     -- Draw Action Menu
-    if world.actionMenu.active then
+    -- Only draw the menu if it's active AND the range fade effect is finished (or not active).
+    if world.actionMenu.active and not (world.rangeFadeEffect and world.rangeFadeEffect.active) then
         local menu = world.actionMenu
         local unit = menu.unit
         if not unit then return end -- Can't draw without a unit
@@ -1128,7 +1159,7 @@ local function draw_screen_space_ui(world)
         end
     end
 
-    -- Draw Unit Info Menu (This was missing)
+    -- Draw Unit Info Menu
     UnitInfoMenu.draw(world)
 
     -- Draw Battle Info Menu

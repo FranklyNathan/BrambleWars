@@ -19,6 +19,11 @@ function ActionMenuPreviewSystem.refresh_preview(world)
     descMenu.active = false
     descMenu.text = ""
 
+    -- If the range is fading out from a previous state, don't show any new previews yet.
+    if world.rangeFadeEffect and world.rangeFadeEffect.active then
+        return
+    end
+
     -- Only show a preview if the action menu is active in the correct state.
     if menu.active and world.playerTurnState == "action_menu" then
         local selectedOption = menu.options[menu.selectedIndex]

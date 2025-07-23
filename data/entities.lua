@@ -38,8 +38,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.weight = blueprint.weight or 1 -- Default to a light weight
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
         square.originType = blueprint.originType
-        square.HpStat = blueprint.HpStat
-        square.maxHp = blueprint.HpStat * 10
+        square.maxHp = blueprint.maxHp
         square.attackStat = blueprint.attackStat
         square.defenseStat = blueprint.defenseStat
         square.magicStat = blueprint.magicStat
@@ -48,6 +47,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.maxWisp = blueprint.wispStat
         square.attacks = blueprint.attacks
         square.displayName = blueprint.displayName -- Use display name from blueprint
+        square.portrait = blueprint.portrait or "Default_Portrait.png"
 
         -- A mapping from the internal player type to the asset name for scalability.
         local playerSpriteMap = {
@@ -80,8 +80,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.enemyType = subType -- e.g., "standard"
         local blueprint = EnemyBlueprints[subType]
         square.originType = blueprint.originType
-        square.HpStat = blueprint.HpStat
-        square.maxHp = blueprint.HpStat * 10
+        square.maxHp = blueprint.maxHp
         square.attackStat = blueprint.attackStat
         square.defenseStat = blueprint.defenseStat
         square.magicStat = blueprint.magicStat
@@ -92,6 +91,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.weight = blueprint.weight
         square.attacks = blueprint.attacks
         square.displayName = subType -- Use enemy type as display name
+        square.portrait = blueprint.portrait or "Default_Portrait.png"
 
         -- Add animation component for enemies
         local enemySpriteMap = {

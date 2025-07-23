@@ -27,6 +27,12 @@ function BattleInfoSystem.refresh_forecast(world)
             return
         end
 
+        -- If the target has no HP (i.e., it's an obstacle), don't show the forecast.
+        if not target.hp then
+            menu.active = false
+            return
+        end
+
         menu.active = true
         menu.attacker = attacker
         menu.target = target

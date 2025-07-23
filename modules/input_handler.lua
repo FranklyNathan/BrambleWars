@@ -5,6 +5,7 @@ local EventBus = require("modules.event_bus")
 local RangeCalculator = require("modules.range_calculator")
 local Pathfinding = require("modules.pathfinding")
 local AttackHandler = require("modules.attack_handler")
+local Assets = require("modules.assets")
 local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local Grid = require("modules.grid")
@@ -73,6 +74,12 @@ local function move_cursor(dx, dy, world, isFastMove)
         world.mapCursorTile.x = newTileX
         world.mapCursorTile.y = newTileY
 
+        -- Play sound effect for cursor movement.
+        if Assets.sounds.cursor_move then
+            Assets.sounds.cursor_move:stop()
+            Assets.sounds.cursor_move:play()
+        end
+
         -- Dispatch an event that other systems (like UnitInfoSystem) can listen to.
         EventBus:dispatch("cursor_moved", { tileX = newTileX, tileY = newTileY, world = world })
 
@@ -108,7 +115,7 @@ end
 local function handle_free_roam_input(key, world)
     if key == "j" then -- Universal "Confirm" / "Action" key
         local unit = getPlayerUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, world)
-        if unit and not unit.hasActed then
+        if unit and not unit.hasActed and not unit.isCarried then
             -- If the cursor is on an available player unit, select it.
             world.selectedUnit = unit
             set_player_turn_state("unit_selected", world)
@@ -143,15 +150,95 @@ local function handle_free_roam_input(key, world)
                 set_player_turn_state("map_menu", world)
             end
         end
-    end
-
-    if not world.selectedUnit then
+    elseif key == "l" then -- Lock Unit Info Menu
         local unit = WorldQueries.getUnitAt(world.mapCursorTile.x, world.mapCursorTile.y, nil, world)
-        if unit then print("Cursor over unit (no selection):", unit.displayName) end
+        if unit then
+            local menu = world.unitInfoMenu
+            menu.isLocked = true -- The unit_info_system will now keep this menu active.
+            menu.unit = unit -- Lock the current unit
+            menu.selectedIndex = 1 -- Reset index
+            world.previousPlayerTurnState = "free_roam"
+            set_player_turn_state("unit_info_locked", world)
+        end
     end
 
 end
 
+-- Handles input when the unit info menu is locked.
+local function handle_unit_info_locked_input(key, world)
+    local menu = world.unitInfoMenu
+    if not menu.isLocked or not menu.unit then return end
+
+    if key == "k" then -- Unlock menu
+        if Assets.sounds.back_out then
+            Assets.sounds.back_out:stop()
+            Assets.sounds.back_out:play()
+        end
+        menu.isLocked = false
+        menu.selectedIndex = 1
+        -- Return to the previous state.
+        local returnState = world.previousPlayerTurnState or "free_roam"
+        set_player_turn_state(returnState, world)
+        world.previousPlayerTurnState = nil -- Clean up the stored state.
+    elseif key == "w" or key == "s" or key == "a" or key == "d" then
+        local oldIndex = menu.selectedIndex
+        local newIndex = oldIndex
+
+        -- Define menu sections and total number of slices
+        local TOP_SECTION_END = 3 -- Name, HP, Wisp
+        local STATS_START = 4
+        local STATS_END = 9 -- 3 rows of 2 stats each
+        local MOVES_START = 10
+        local numAttacks = #menu.unit.attacks
+        local MOVES_END = MOVES_START + numAttacks - 1
+        
+        local hasCarriedUnit = menu.unit.carriedUnit and true or false
+        local CARRIED_UNIT_INDEX = hasCarriedUnit and (MOVES_END + 1) or nil
+        
+        local totalSlices = MOVES_END
+        if hasCarriedUnit then totalSlices = CARRIED_UNIT_INDEX end
+
+        -- Vertical Navigation (W/S)
+        if key == "w" then -- Up
+            if oldIndex > MOVES_START then newIndex = oldIndex - 1 -- In moves or carried unit
+            elseif oldIndex == MOVES_START then newIndex = STATS_END - 1 -- From first move to Wit
+            elseif oldIndex > STATS_START + 1 then newIndex = oldIndex - 2 -- In stats grid (not top row)
+            elseif oldIndex > STATS_START - 1 then newIndex = TOP_SECTION_END -- From top row of stats to Wisp
+            elseif oldIndex > 1 then newIndex = oldIndex - 1 -- In top section
+            else newIndex = totalSlices end -- Wrap from top to bottom
+        elseif key == "s" then -- Down
+            if oldIndex < TOP_SECTION_END then newIndex = oldIndex + 1 -- In top section
+            elseif oldIndex == TOP_SECTION_END then newIndex = STATS_START -- From Wisp to Atk
+            elseif oldIndex < STATS_END - 1 then newIndex = oldIndex + 2 -- In stats grid (not last row)
+            elseif oldIndex <= STATS_END then newIndex = MOVES_START -- From last row of stats to first move
+            elseif oldIndex < totalSlices then newIndex = oldIndex + 1 -- In moves/carried
+            else newIndex = 1 end -- Wrap from bottom to top
+        end
+
+        -- Horizontal Navigation (A/D)
+        if key == "a" or key == "d" then
+            -- Horizontal navigation only applies within the stat grid
+            if oldIndex >= STATS_START and oldIndex <= STATS_END then
+                if key == "a" then -- Left
+                    if oldIndex % 2 == 1 then newIndex = oldIndex - 1 end -- Is it a right-side stat (index 5, 7, 9)?
+                else -- 'd', Right
+                    if oldIndex % 2 == 0 then newIndex = oldIndex + 1 end -- Is it a left-side stat (index 4, 6, 8)?
+                end
+            end
+        end
+
+        -- Update index and play sound if changed
+        if newIndex ~= oldIndex then
+            menu.selectedIndex = newIndex
+            if Assets.sounds.menu_scroll then
+                Assets.sounds.menu_scroll:stop()
+                Assets.sounds.menu_scroll:play()
+            end
+            -- Dispatch an event so the UI can react (e.g., show move description)
+            EventBus:dispatch("unit_info_menu_selection_changed", { world = world })
+        end
+    end
+end
 
 local function handle_unit_selected_input(key, world)
     if key == "j" then -- Confirm Move
@@ -176,11 +263,16 @@ local function handle_unit_selected_input(key, world)
             -- Create the range fade-out effect.
             world.rangeFadeEffect = {
                 active = true,
-                timer = 0.5, -- A slightly longer fade
-                initialTimer = 0.5,
                 reachableTiles = world.reachableTiles,
                 attackableTiles = world.attackableTiles
             }
+            -- Calculate the duration of the unit's movement to sync the fade animation.
+            local path_length = world.movementPath and #world.movementPath or 0
+            local time_per_tile = Config.SQUARE_SIZE / Config.SLIDE_SPEED -- Time to cross one tile
+            local total_move_duration = path_length * time_per_tile
+            local fade_duration = math.max(0, total_move_duration) -- Set a minimum fade time of 0s
+            world.rangeFadeEffect.timer = fade_duration
+            world.rangeFadeEffect.initialTimer = fade_duration
 
             set_player_turn_state("unit_moving", world)
             world.selectedUnit = nil
@@ -191,6 +283,12 @@ local function handle_unit_selected_input(key, world)
         end
         return -- Exit to prevent cursor update on confirm
     elseif key == "k" then -- Cancel
+        -- Play the back out sound effect
+        if Assets.sounds.back_out then
+            Assets.sounds.back_out:stop()
+            Assets.sounds.back_out:play()
+        end
+
         -- Snap the cursor back to the unit's position before deselecting.
         world.mapCursorTile.x = world.selectedUnit.tileX
         world.mapCursorTile.y = world.selectedUnit.tileY
@@ -212,27 +310,40 @@ local function handle_action_menu_input(key, world)
     local menu = world.actionMenu
     if not menu.active then return end
 
-    if key == "w" then
+    if key == "w" or key == "s" then
         local oldIndex = menu.selectedIndex
-        -- Wrap around to the bottom when moving up from the top.
-        menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
-        if oldIndex ~= menu.selectedIndex then
-            EventBus:dispatch("action_menu_selection_changed", { world = world })
+        if key == "w" then
+            -- Wrap around to the bottom when moving up from the top.
+            menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
+        else -- key == "s"
+            -- Wrap around to the top when moving down from the bottom.
+            menu.selectedIndex = menu.selectedIndex % #menu.options + 1
         end
-    elseif key == "s" then
-        local oldIndex = menu.selectedIndex
-        -- Wrap around to the top when moving down from the bottom.
-        menu.selectedIndex = menu.selectedIndex % #menu.options + 1
+
         if oldIndex ~= menu.selectedIndex then
+            if Assets.sounds.menu_scroll then
+                Assets.sounds.menu_scroll:stop()
+                Assets.sounds.menu_scroll:play()
+            end
             EventBus:dispatch("action_menu_selection_changed", { world = world })
         end
     elseif key == "k" then -- Cancel action menu
+        if Assets.sounds.back_out then
+            Assets.sounds.back_out:stop()
+            Assets.sounds.back_out:play()
+        end
+
         local unit = menu.unit
         if unit and unit.startOfTurnTileX then
             -- Teleport unit back to its starting position
             unit.tileX, unit.tileY = unit.startOfTurnTileX, unit.startOfTurnTileY
             unit.x, unit.y = Grid.toPixels(unit.tileX, unit.tileY)
             unit.targetX, unit.targetY = unit.x, unit.y
+
+            -- Restore the unit's direction to what it was at the start of the turn.
+            if unit.startOfTurnDirection then
+                unit.lastDirection = unit.startOfTurnDirection
+            end
 
             -- Re-select the unit and allow them to move again
             set_player_turn_state("unit_selected", world)
@@ -544,11 +655,25 @@ local function handle_cycle_targeting_input(key, world)
         if cycle.selectedIndex > #cycle.targets then cycle.selectedIndex = 1 end
         indexChanged = true
     elseif key == "k" then -- Cancel
+        if Assets.sounds.back_out then
+            Assets.sounds.back_out:stop()
+            Assets.sounds.back_out:play()
+        end
         set_player_turn_state("action_menu", world)
         world.actionMenu.active = true
         cycle.active = false
         cycle.targets = {}
         world.selectedAttackName = nil
+    elseif key == "l" then -- Lock Unit Info Menu on the current target
+        local target = cycle.targets[cycle.selectedIndex]
+        if target then
+            local menu = world.unitInfoMenu
+            menu.isLocked = true
+            menu.unit = target
+            menu.selectedIndex = 1
+            world.previousPlayerTurnState = "cycle_targeting"
+            set_player_turn_state("unit_info_locked", world)
+        end
     elseif key == "j" then -- Confirm
         local attacker = world.actionMenu.unit
         local attackName = world.selectedAttackName
@@ -801,18 +926,6 @@ end
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 --------------------------------------------------------------------------------
 -- STATE-SPECIFIC HANDLERS
 --------------------------------------------------------------------------------
@@ -865,6 +978,8 @@ stateHandlers.gameplay = function(key, world)
         handle_take_targeting_input(key, world)
     elseif world.playerTurnState == "enemy_range_display" then
         handle_enemy_range_display_input(key, world)
+elseif world.playerTurnState == "unit_info_locked" then
+        handle_unit_info_locked_input(key, world)
     elseif world.playerTurnState == "map_menu" then
         handle_map_menu_input(key, world)
     end

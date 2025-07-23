@@ -20,7 +20,9 @@ function Camera.update(dt, world)
     local targetX, targetY = Camera.x, Camera.y
 
     -- 2. Define a margin for edge-scrolling. The camera will move when the cursor enters this area.
-    local scrollMargin = 0 -- Scroll only when the cursor is at the very edge of the screen.
+    -- The margin is defined in tiles and converted to pixels.
+    local horizontalScrollMargin = 4 * Config.SQUARE_SIZE -- Scroll when cursor is 3 tiles from the left/right edge.
+    local verticalScrollMargin = 3 * Config.SQUARE_SIZE   -- Scroll when cursor is 2 tiles from the top/bottom edge.
 
     -- Get map dimensions in pixels to check against boundaries.
     local mapPixelWidth = world.map.width * world.map.tilewidth
@@ -30,21 +32,21 @@ function Camera.update(dt, world)
     -- This creates a "dead zone" in the center of the screen where the camera doesn't move.
 
     -- Horizontal Scrolling
-    if cursorPixelX < Camera.x + scrollMargin then
+    if cursorPixelX < Camera.x + horizontalScrollMargin then
         -- Cursor is in the left margin, move camera left.
-        targetX = cursorPixelX - scrollMargin
-    elseif cursorPixelX + cursorSize > Camera.x + Config.VIRTUAL_WIDTH - scrollMargin then
+        targetX = cursorPixelX - horizontalScrollMargin
+    elseif cursorPixelX + cursorSize > Camera.x + Config.VIRTUAL_WIDTH - horizontalScrollMargin then
         -- Cursor is in the right margin, move camera right.
-        targetX = cursorPixelX + cursorSize - (Config.VIRTUAL_WIDTH - scrollMargin)
+        targetX = cursorPixelX + cursorSize - (Config.VIRTUAL_WIDTH - horizontalScrollMargin)
     end
 
     -- Vertical Scrolling
-    if cursorPixelY < Camera.y + scrollMargin then
+    if cursorPixelY < Camera.y + verticalScrollMargin then
         -- Cursor is in the top margin, move camera up.
-        targetY = cursorPixelY - scrollMargin
-    elseif cursorPixelY + cursorSize > Camera.y + Config.VIRTUAL_HEIGHT - scrollMargin then
+        targetY = cursorPixelY - verticalScrollMargin
+    elseif cursorPixelY + cursorSize > Camera.y + Config.VIRTUAL_HEIGHT - verticalScrollMargin then
         -- Cursor is in the bottom margin, move camera down.
-        targetY = cursorPixelY + cursorSize - (Config.VIRTUAL_HEIGHT - scrollMargin)
+        targetY = cursorPixelY + cursorSize - (Config.VIRTUAL_HEIGHT - verticalScrollMargin)
     end
 
     -- 4. Clamp the TARGET position to the map boundaries. This ensures the camera
