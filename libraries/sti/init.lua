@@ -950,7 +950,7 @@ end
 function Map.drawLayer(_, layer)
 	-- Custom check to prevent drawing special logical layers like spawn points.
 	-- These layers are for game logic, not visual representation.
-	if layer.name == "PlayerSpawns" or layer.name == "EnemySpawns" or layer.name == "Obstacles" then
+	if layer.name == "PlayerSpawns" or layer.name == "EnemySpawns" or layer.name == "Obstacles" or layer.name == "Permanents" then
 		return
 	end
 

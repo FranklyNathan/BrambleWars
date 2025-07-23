@@ -10,7 +10,6 @@ local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local UnitInfoMenu = require("modules.unit_info_menu")
 local BattleInfoMenu = require("modules.battle_info_menu")
-local LiveCombatDisplay = require("modules.live_combat_display")
 local Renderer = {}
 
 -- Local state for cursor animation
@@ -50,42 +49,75 @@ local function wrapText(text, limit, font)
     return lines
 end
 
-local function drawHealthBar(square)
-    local barWidth, barHeight, barYOffset = square.size, 3, square.size + 2
-    -- Draw background first
-    love.graphics.setColor(0.2, 0.2, 0.2, 1) -- Dark grey background
-    love.graphics.rectangle("fill", square.x, square.y + barYOffset, barWidth, barHeight)
-
-    local healthColor = (square.type == "enemy") and {1, 0, 0, 1} or {0, 1, 0, 1} -- Red for enemies, Green for players
-
-    if square.components.pending_damage and square.components.pending_damage.displayAmount then
-        local pending = square.components.pending_damage
-        -- 1. Draw the "draining" white part first. This represents the health before the drain animation finishes.
-        local totalHealthBeforeDrainWidth = ((square.hp + pending.displayAmount) / square.maxHp) * barWidth
-        -- Set color based on whether the damage was a critical hit.
-        if pending.isCrit then
-            love.graphics.setColor(1, 1, 0.2, 1) -- Yellow for crit pending damage
-        else
-            love.graphics.setColor(1, 1, 1, 1) -- White for normal pending damage
-        end
-        love.graphics.rectangle("fill", square.x, square.y + barYOffset, totalHealthBeforeDrainWidth, barHeight)
-
-        -- 2. Draw the current (final) health portion on top of the white bar.
-        local currentHealthWidth = (square.hp / square.maxHp) * barWidth
-        love.graphics.setColor(healthColor)
-        love.graphics.rectangle("fill", square.x, square.y + barYOffset, currentHealthWidth, barHeight)
-    else
-        -- No pending damage, draw the health bar normally.
-        local currentHealthWidth = (square.hp / square.maxHp) * barWidth
-        love.graphics.setColor(healthColor)
-        love.graphics.rectangle("fill", square.x, square.y + barYOffset, currentHealthWidth, barHeight)
+-- Helper to check if a unit is currently involved in a combat display.
+local function is_unit_in_combat(unit, world)
+    -- A unit is "in combat" if its health bar is animating (draining or shrinking).
+    if unit.components.pending_damage or unit.components.shrinking_health_bar then
+        return true
     end
 
-    -- If shielded, draw an outline around the health bar.
+    -- We also need to check if the unit is an ATTACKER whose target has pending_damage.
+    -- This ensures the attacker's health bar also becomes large during the combat sequence.
+    for _, entity in ipairs(world.all_entities) do
+        if entity.components.pending_damage and entity.components.pending_damage.attacker == unit then
+            return true
+        end
+    end
+    return false
+end
+
+local function drawHealthBar(square, world)
+    local inCombat = is_unit_in_combat(square, world)
+    local barWidth = square.size
+    local barHeight
+    if square.components.shrinking_health_bar then
+        local shrink = square.components.shrinking_health_bar
+        local progress = shrink.timer / shrink.initialTimer
+        barHeight = math.floor(4 + (4 * progress)) -- Lerp from 8 down to 4
+    else
+        barHeight = inCombat and 8 or 4 -- Twice as tall in combat
+    end
+    local barYOffset = square.size + 2 -- Always positioned below the unit
+    local x, y = square.x, square.y + barYOffset
+
+    -- 1. Draw the outer frame (the bevel)
+    -- Dark part of bevel (bottom and right)
+    love.graphics.setColor(0.2, 0.2, 0.2, 1)
+    love.graphics.rectangle("fill", x, y, barWidth, barHeight)
+    -- Light part of bevel (top and left)
+    love.graphics.setColor(0.8, 0.8, 0.8, 1)
+    love.graphics.rectangle("fill", x, y, barWidth - 1, barHeight - 1)
+
+    -- 2. Draw the inner background for the bar
+    local innerBarX = x + 1
+    local innerBarY = y + 1
+    local innerBarWidth = barWidth - 2
+    local innerBarHeight = barHeight - 2 -- This is 2px high.
+    love.graphics.setColor(0.1, 0.1, 0.1, 1) -- Dark background for the bar itself
+    love.graphics.rectangle("fill", innerBarX, innerBarY, innerBarWidth, innerBarHeight)
+
+    -- 3. Draw pending damage and current health bars
+    local healthColor = (square.type == "enemy") and {1, 0.2, 0.2, 1} or {0.2, 1, 0.2, 1} -- Red for enemies, Green for players
+
+    -- The logic for drawing pending damage and current health remains, but uses the new inner bar dimensions.
+    if square.components.pending_damage and square.components.pending_damage.displayAmount then
+        local pending = square.components.pending_damage
+        local totalHealth = math.min(square.maxHp, square.hp + pending.displayAmount)
+        local totalHealthWidth = (totalHealth / square.maxHp) * innerBarWidth
+        local pendingColor = pending.isCrit and {1, 1, 0.2, 1} or {1, 1, 1, 1} -- Yellow for crit, white for normal
+        love.graphics.setColor(pendingColor)
+        love.graphics.rectangle("fill", innerBarX, innerBarY, totalHealthWidth, innerBarHeight)
+    end
+
+    local currentHealthWidth = (square.hp / square.maxHp) * innerBarWidth
+    love.graphics.setColor(healthColor)
+    love.graphics.rectangle("fill", innerBarX, innerBarY, currentHealthWidth, innerBarHeight)
+
+    -- 4. If shielded, draw an outline around the health bar.
     if square.components.shielded then
         love.graphics.setColor(0.7, 0.7, 1, 0.8) -- Light blue
         love.graphics.setLineWidth(1)
-        love.graphics.rectangle("line", square.x - 1, square.y + barYOffset - 1, barWidth + 2, barHeight + 2)
+        love.graphics.rectangle("line", x - 1, y - 1, barWidth + 2, barHeight + 2)
         love.graphics.setLineWidth(1) -- Reset
     end
 end
@@ -115,9 +147,12 @@ local function drawWispBar(square)
     end
 end
 
-local function drawAllBars(entity)
-   drawHealthBar(entity)
-   drawWispBar(entity)
+local function drawAllBars(entity, world)
+   drawHealthBar(entity, world)
+   -- Only draw the wisp bar if the unit is not in combat, to reduce clutter.
+   if not is_unit_in_combat(entity, world) then
+       drawWispBar(entity)
+   end
 end
 
 
@@ -315,8 +350,11 @@ local function draw_entity(entity, world, is_active_player)
     end
 
     -- 7. Draw the health bar on top of everything, but only if the unit is not fading out.
+    -- If the unit is in combat, its health bar is drawn in a separate pass to ensure it's on top of all other units.
     if not entity.components.fade_out then
-        drawAllBars(entity)
+        if not is_unit_in_combat(entity, world) then
+            drawAllBars(entity, world)
+        end
     end
 
     -- 8. If the unit is carrying another unit, draw an icon on the map sprite.
@@ -389,7 +427,9 @@ local function draw_all_entities_and_effects(world)
     -- Draw all units and obstacles in the correct Z-order.
     for _, entity in ipairs(drawOrder) do
         if entity.isObstacle then
-            -- Draw the obstacle sprite
+            -- Only draw obstacles that have a sprite. This handles dynamically created
+            -- obstacles (like from Grovecall), while map-based obstacles (without sprites)
+            -- are still drawn by the map renderer to prevent double-drawing.
             if entity.sprite then
                 love.graphics.setColor(1, 1, 1, 1)
                 local w, h = entity.sprite:getDimensions()
@@ -400,7 +440,14 @@ local function draw_all_entities_and_effects(world)
             end
         else -- It's a character
             local is_active = (entity.type == "player" and entity == world.selectedUnit)
-            draw_entity(entity, world, is_active)
+            draw_entity(entity, world, is_active) -- Pass world to draw_entity
+        end
+    end
+
+    -- Draw health bars for combatting units on top of everything else.
+    for _, entity in ipairs(drawOrder) do
+        if not entity.isObstacle and is_unit_in_combat(entity, world) and not entity.components.fade_out then
+            drawAllBars(entity, world)
         end
     end
 
@@ -689,7 +736,7 @@ local function draw_world_space_ui(world)
             end
 
             -- New: Hover and projected shadow logic
-            local hover_offset = -4 + math.sin(love.timer.getTime() * 4) * 2 -- Bob up and down
+            local hover_offset = math.floor(-4 + math.sin(love.timer.getTime() * 4) * 2) -- Bob up and down in 1px increments
             local cursorPixelX = baseCursorPixelX
             local cursorPixelY = baseCursorPixelY + hover_offset
             local cornerLength = 8 -- A fixed length for the corner lines.
@@ -1188,7 +1235,6 @@ function Renderer.draw(world)
     Camera.apply()
     draw_world_space_ui(world)
     draw_all_entities_and_effects(world)
-    LiveCombatDisplay.draw(world) -- Draw combat UI on top of entities
     Camera.revert()
 
     -- 4. Draw screen-space UI based on the current game state

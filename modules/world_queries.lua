@@ -360,6 +360,7 @@ function WorldQueries.isActionOngoing(world)
     for _, entity in ipairs(world.all_entities) do
         -- Check for animations like lunges, careening, or any entity that is currently moving towards a target pixel.
         if entity.components.lunge or
+           entity.components.pending_damage or
            (entity.statusEffects and entity.statusEffects.careening) or
            (entity.targetX and (math.abs(entity.x - entity.targetX) > 0.5 or math.abs(entity.y - entity.targetY) > 0.5)) then
             return true -- Found a busy unit.

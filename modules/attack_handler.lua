@@ -8,12 +8,7 @@ local CombatActions = require("modules.combat_actions")
 
 local AttackHandler = {}
 
-local nextAttackInstanceId = 1
-
 function AttackHandler.execute(square, attackName, world)
-    local attackInstanceId = nextAttackInstanceId
-    nextAttackInstanceId = nextAttackInstanceId + 1
-
     local attackData = AttackBlueprints[attackName]
     local target = nil  -- Initialize target to nil
 
@@ -52,7 +47,7 @@ function AttackHandler.execute(square, attackName, world)
     end
 
     -- Execute the attack. The attack function now only needs the attacker and the world state.
-    local result = UnitAttacks[attackName](square, world, attackInstanceId)
+    local result = UnitAttacks[attackName](square, world)
     -- If the attack function returns a boolean, use it. Otherwise, assume it fired successfully.
     if type(result) == "boolean" then
         return result

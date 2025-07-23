@@ -86,9 +86,9 @@ function love.load()
         error("FATAL: Map file not found at '" .. mapPath .. "'. Please ensure the file exists in the 'maps' folder.")
     end
 
-    -- This check is specific to DefaultMap.lua. If you change maps, you might need to update this.
-    if not love.filesystem.getInfo("maps/PokeTiles.png") then
-        error("FATAL: Tileset 'PokeTiles.png' not found in the 'maps' folder. The map '" .. Config.CURRENT_MAP_NAME .. "' requires it to load.")
+    -- This check is specific to the map file. If you change maps, you might need to update this.
+    if not love.filesystem.getInfo("maps/Handrawn.png") then
+        error("FATAL: Tileset 'Handrawn.png' not found in the 'maps' folder. The map '" .. Config.CURRENT_MAP_NAME .. "' requires it to load.")
     end
 
     -- Use pcall to safely load the map and get a detailed error message if it fails

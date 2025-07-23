@@ -21,7 +21,7 @@ function Camera.update(dt, world)
 
     -- 2. Define a margin for edge-scrolling. The camera will move when the cursor enters this area.
     -- The margin is defined in tiles and converted to pixels.
-    local horizontalScrollMargin = 4 * Config.SQUARE_SIZE -- Scroll when cursor is 3 tiles from the left/right edge.
+    local horizontalScrollMargin = 3 * Config.SQUARE_SIZE -- Scroll when cursor is 3 tiles from the left/right edge.
     local verticalScrollMargin = 3 * Config.SQUARE_SIZE   -- Scroll when cursor is 2 tiles from the top/bottom edge.
 
     -- Get map dimensions in pixels to check against boundaries.

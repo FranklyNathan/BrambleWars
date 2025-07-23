@@ -170,7 +170,7 @@ function World.new(gameMap)
 
     -- Create and place obstacles from the map's object layers.
     -- This looks for a layer named "Obstacles" or "Trees" and makes them fully interactive.
-    local obstacleLayer = self.map.layers["Obstacles"] or self.map.layers["Trees"]
+    local obstacleLayer = self.map.layers["Obstacles"] or self.map.layers["Trees"] or self.map.layers["Permanents"]
     if obstacleLayer and obstacleLayer.type == "objectgroup" then
         for _, obj in ipairs(obstacleLayer.objects) do
             -- Tiled positions objects with GIDs from their bottom-left corner.
@@ -190,7 +190,6 @@ function World.new(gameMap)
                 size = obj.width, -- Assuming square obstacles for now
                 weight = (obj.properties and obj.properties.weight) or "Heavy",
                 components = {}, -- Ensure all entities have a components table for system compatibility.
-                sprite = Assets.images.Flag, -- For now, all obstacles use the same tree sprite.
                 isObstacle = true -- A flag to identify these objects as obstacles.
             }
             -- Add the obstacle to all relevant entity lists so it's recognized by all game systems.

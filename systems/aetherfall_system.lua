@@ -10,8 +10,6 @@ local StatusEffectManager = require("modules.status_effect_manager")
 
 local AetherfallSystem = {}
 
-local nextAetherfallInstanceId = 1 -- A local counter to generate unique IDs for each Aetherfall combo.
-
 -- Helper to find all units with the Aetherfall passive on a given team.
 local function find_aetherfall_units(world, teamType)
     -- The PassiveSystem now populates this list each frame with all *living* units
@@ -56,16 +54,12 @@ local function check_and_trigger_aetherfall(airborne_target, reacting_team_type,
             local openTiles = find_adjacent_open_tiles(airborne_target, world)
             if #openTiles > 0 then
                 -- Trigger the attack!
-                local attackInstanceId = "aetherfall_" .. nextAetherfallInstanceId
-                nextAetherfallInstanceId = nextAetherfallInstanceId + 1
-
                 reactor.components.aetherfall_attack = {
                     target = airborne_target,
                     hitLocations = openTiles,
                     hitsRemaining = #openTiles,
                     hitTimer = 0.6, -- Wait for the airborne animation to reach its peak.
-                    hitDelay = 0.2, -- Time between subsequent hits
-                    attackInstanceId = attackInstanceId -- Store the unique ID for this combo.
+                    hitDelay = 0.2 -- Time between subsequent hits
                 }
                 -- One unit reacts, that's enough.
                 break
@@ -132,7 +126,6 @@ function AetherfallSystem.update(dt, world)
                             -- Execute a "Slash" attack.
                             local targetType = (unit.type == "player") and "enemy" or "player"
                             local specialProperties = {
-                                attackInstanceId = attack.attackInstanceId,
                                 isAetherfallAttack = true -- Flag to prevent counter-attacks.
                             }
                             EffectFactory.addAttackEffect(unit, "slash", target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType, nil, nil, specialProperties)

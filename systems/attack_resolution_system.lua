@@ -65,7 +65,7 @@ function AttackResolutionSystem.update(dt, world)
                                         damage = damage * effect.specialProperties.damageMultiplier
                                     end
                                     local isCounter = effect.specialProperties and effect.specialProperties.isCounterAttack
-                                    CombatActions.applyDirectDamage(world, target, damage, isCrit, effect.attacker, { createCombatDisplay = not isCounter, attackName = effect.attackName, attackInstanceId = effect.specialProperties.attackInstanceId })
+                                    CombatActions.applyDirectDamage(world, target, damage, isCrit, effect.attacker, { createPopup = not isCounter })
 
                                     -- Handle status effects on successful hit.
                                     if effect.statusEffect then

@@ -936,9 +936,6 @@ local stateHandlers = {}
 stateHandlers.gameplay = function(key, world)
     if world.turn ~= "player" then return end -- Only accept input on the player's turn
 
-    -- Lock input while combat display is active.
-    if #world.liveCombatDisplays > 0 then return end
-
     -- Handle cursor movement for states that allow it. This is for single key taps.
     if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" or world.playerTurnState == "enemy_range_display" then
         if key == "w" then move_cursor(0, -1, world, false)
@@ -1095,13 +1092,6 @@ function InputHandler.handle_continuous_input(dt, world)
 
     if world.turn ~= "player" or not movement_allowed then
         world.cursorInput.activeKey = nil -- Reset when not in a valid state
-        return
-    end
-
-    -- Lock input while combat display is active.
-    if #world.liveCombatDisplays > 0 then
-        -- Reset the active key to prevent held inputs from firing immediately after the display disappears.
-        world.cursorInput.activeKey = nil
         return
     end
 
