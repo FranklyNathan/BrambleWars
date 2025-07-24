@@ -170,31 +170,41 @@ function World.new(gameMap)
 
     -- Create and place obstacles from the map's object layers.
     -- This looks for a layer named "Obstacles" or "Trees" and makes them fully interactive.
-    local obstacleLayer = self.map.layers["Obstacles"] or self.map.layers["Trees"] or self.map.layers["Permanents"]
-    if obstacleLayer and obstacleLayer.type == "objectgroup" then
-        for _, obj in ipairs(obstacleLayer.objects) do
-            -- Tiled positions objects with GIDs from their bottom-left corner.
-            -- We need to adjust the y-coordinate to be top-left for our game's logic.
-            local objTopLeftY = obj.y - obj.height
-            local tileX, tileY = Grid.toTile(obj.x, objTopLeftY)
-            -- Recalculate pixel coordinates from tile coordinates to ensure perfect grid alignment.
-            local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+    print("--- Loading Obstacles from Object Layers ---")    
+    local obstacleLayerNames = {"Obstacles", "Trees", "Walls"}
+    local anyLayerFound = false
+    for _, layerName in ipairs(obstacleLayerNames) do
+        local obstacleLayer = self.map.layers[layerName]
+        if obstacleLayer and obstacleLayer.type == "objectgroup" then
+            anyLayerFound = true
+            print("Found obstacle layer: " .. obstacleLayer.name)
+            for _, obj in ipairs(obstacleLayer.objects) do
+                -- Tiled positions objects with GIDs from their bottom-left corner.
+                -- We must account for this difference, as rectangle objects are positioned from their top-left.
+                local objTopLeftX = obj.x
+                local objTopLeftY = obj.y
+                if obj.gid then
+                    -- This is a tile object, so adjust its Y-position from bottom-left to top-left.
+                    objTopLeftY = obj.y - obj.height
+                end
+                local tileX, tileY = Grid.toTile(objTopLeftX, objTopLeftY)
+                -- Recalculate pixel coordinates from tile coordinates to ensure perfect grid alignment.
+                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
 
-            local obstacle = {
-                x = pixelX,
-                y = pixelY,
-                tileX = tileX,
-                tileY = tileY,
-                width = obj.width,
-                height = obj.height,
-                size = obj.width, -- Assuming square obstacles for now
-                weight = (obj.properties and obj.properties.weight) or "Heavy",
-                components = {}, -- Ensure all entities have a components table for system compatibility.
-                isObstacle = true -- A flag to identify these objects as obstacles.
-            }
-            -- Add the obstacle to all relevant entity lists so it's recognized by all game systems.
-            self:queue_add_entity(obstacle)
+                local obstacle = {
+                    x = pixelX, y = pixelY, tileX = tileX, tileY = tileY,
+                    width = obj.width, height = obj.height,
+                    size = obj.width, -- Assuming square obstacles for now
+                    weight = (obj.properties and obj.properties.weight) or "Heavy",
+                    components = {}, isObstacle = true
+                }
+                print(string.format("  - Queuing obstacle from object '%s': tile(%d,%d), pixels(%.1f,%.1f), size(%.1fx%.1f)", obj.name or "unnamed", tileX, tileY, pixelX, pixelY, obj.width, obj.height))
+                self:queue_add_entity(obstacle)
+            end
         end
+    end
+    if not anyLayerFound then
+        print("No 'Obstacles', 'Trees', or 'Walls' object layer found.")
     end
 
     -- Set the initial camera position based on a "CameraStart" object in the map.
@@ -248,6 +258,16 @@ function World.new(gameMap)
             gridY = gridY + 1
         end
     end
+
+    -- Process all queued additions to ensure entities like walls and obstacles are fully loaded.
+    self:process_additions_and_deletions()
+
+    print("--- World Loading Complete ---")
+    print("Total obstacles loaded: " .. #self.obstacles)
+    for i, obs in ipairs(self.obstacles) do
+        print(string.format("  - Obstacle %d at tile(%d,%d)", i, obs.tileX, obs.tileY))
+    end
+    print("----------------------------")
 
     return self
 end

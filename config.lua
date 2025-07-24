@@ -2,7 +2,7 @@
 -- Contains all the global constants for the game.
 
 local Config = {
-    SQUARE_SIZE = 48,
+    SQUARE_SIZE = 32,
     SLIDE_SPEED = 200,
     FLASH_DURATION = 0.2,
     POISON_DAMAGE_PER_TURN = 10,

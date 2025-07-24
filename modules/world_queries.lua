@@ -8,6 +8,8 @@ local AttackBlueprints = require("data.attack_blueprints")
 local WorldQueries = {}
 
 function WorldQueries.isTileAnObstacle(tileX, tileY, world)
+    -- Check for object-based obstacles (like trees and walls).
+    -- Walls are now created as obstacle entities when the world is loaded.
     for _, obstacle in ipairs(world.obstacles) do
         -- Obstacles are defined by their top-left tile and their pixel dimensions.
         -- We can check if the queried tile falls within the obstacle's bounding box.
@@ -45,6 +47,29 @@ function WorldQueries.isTileOccupiedBySameTeam(tileX, tileY, originalSquare, wor
             return true
         end
     end
+    return false
+end
+
+-- Checks if a ledge is blocking movement between two adjacent tiles.
+function WorldQueries.isLedgeBlockingPath(fromTileX, fromTileY, toTileX, toTileY, world)
+    local ridgesLayer = world.map.layers["Ridges"]
+    if not ridgesLayer then return false end
+
+    local dy = toTileY - fromTileY
+
+    -- Only check vertical movement, as ledges are only defined for up/down.
+    if math.abs(dy) == 1 then
+        -- Moving up (dy is -1)
+        if dy == -1 then
+            local fromTile = ridgesLayer.data[fromTileY + 1] and ridgesLayer.data[fromTileY + 1][fromTileX + 1]
+            if fromTile and fromTile.properties and fromTile.properties.Block_Up then return true end
+        -- Moving down (dy is 1)
+        elseif dy == 1 then
+            local toTile = ridgesLayer.data[toTileY + 1] and ridgesLayer.data[toTileY + 1][toTileX + 1]
+            if toTile and toTile.properties and toTile.properties.Block_Up then return true end
+        end
+    end
+
     return false
 end
 
@@ -195,6 +220,11 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
                                                 isBlocked = true
                                                 break
                                             end
+                                        elseif WorldQueries.isLedgeBlockingPath(attacker.tileX, attacker.tileY + (i - 1) * dirY, attacker.tileX, attacker.tileY + i * dirY, world) then
+                                            if attackName ~= "fireball" then
+                                                isBlocked = true
+                                                break
+                                            end
                                         end
                                     end
                                 else -- Horizontal line
@@ -272,80 +302,62 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
     return validTargets    
 end
 
--- Finds all adjacent, lighter player units that can be rescued by the given unit.
-function WorldQueries.findRescuableUnits(rescuer, world)
-    local rescuableUnits = {}
-    if not rescuer then return rescuableUnits end
-
-    -- Iterate through all player units to see who can be rescued.
-    for _, potentialTarget in ipairs(world.players) do
-        -- A unit cannot rescue itself, and must be alive.
-        if potentialTarget ~= rescuer and potentialTarget.hp > 0 then
-            -- Check if the target is adjacent (Manhattan distance of 1).
-            local distance = math.abs(rescuer.tileX - potentialTarget.tileX) + math.abs(rescuer.tileY - potentialTarget.tileY)
-            
-            -- Check if the target has lower weight.
-            if distance == 1 and potentialTarget.weight < rescuer.weight then
-                table.insert(rescuableUnits, potentialTarget)
-            end
-        end
-    end
-
-    return rescuableUnits
-end
-
--- Finds all adjacent, lighter allied units that can be shoved by the given unit.
-function WorldQueries.findShoveTargets(shover, world)
+-- Helper to find adjacent allied units that satisfy a given condition.
+local function findAdjacentAllies(actor, world, filterFunc)
     local validTargets = {}
-    if not shover then return validTargets end
+    if not actor then return validTargets end
 
-    -- Iterate through all player units to see who can be shoved.
+    -- Iterate through all player units.
+    -- This assumes these actions are player-only for now.
     for _, potentialTarget in ipairs(world.players) do
-        -- A unit cannot shove itself, and must be alive.
-        if potentialTarget ~= shover and potentialTarget.hp > 0 then
+        -- A unit cannot target itself, and must be alive.
+        if potentialTarget ~= actor and potentialTarget.hp > 0 then
             -- Check if the target is adjacent (Manhattan distance of 1).
-            local distance = math.abs(shover.tileX - potentialTarget.tileX) + math.abs(shover.tileY - potentialTarget.tileY)
+            local distance = math.abs(actor.tileX - potentialTarget.tileX) + math.abs(actor.tileY - potentialTarget.tileY)
             
-            -- Check if the target has lower weight.
-            if distance == 1 and shover.weight > potentialTarget.weight then
-                -- Calculate the destination tile for the shoved unit.
-                local dx = potentialTarget.tileX - shover.tileX
-                local dy = potentialTarget.tileY - shover.tileY
-                local destTileX, destTileY = potentialTarget.tileX + dx, potentialTarget.tileY + dy
-
-                -- Check if the destination tile is within map bounds and is unoccupied.
-                if destTileX >= 0 and destTileX < world.map.width and destTileY >= 0 and destTileY < world.map.height and not WorldQueries.isTileOccupied(destTileX, destTileY, nil, world) then
+            if distance == 1 then
+                -- Apply the custom filter logic.
+                if filterFunc(actor, potentialTarget, world) then
                     table.insert(validTargets, potentialTarget)
                 end
             end
         end
     end
-
     return validTargets
+end
+
+-- Finds all adjacent, lighter player units that can be rescued by the given unit.
+function WorldQueries.findRescuableUnits(rescuer, world)
+    if not rescuer or rescuer.carriedUnit then return {} end -- Can't rescue if already carrying.
+    local filter = function(actor, target, wrld)
+        return target.weight < actor.weight
+    end
+    return findAdjacentAllies(rescuer, world, filter)
+end
+
+-- Finds all adjacent, lighter allied units that can be shoved by the given unit.
+function WorldQueries.findShoveTargets(shover, world)
+    local filter = function(actor, target, wrld)
+        if actor.weight > target.weight then
+            local dx = target.tileX - actor.tileX
+            local dy = target.tileY - actor.tileY
+            local destTileX, destTileY = target.tileX + dx, target.tileY + dy
+            return destTileX >= 0 and destTileX < wrld.map.width and
+                   destTileY >= 0 and destTileY < wrld.map.height and
+                   not WorldQueries.isTileOccupied(destTileX, destTileY, nil, wrld)
+        end
+        return false
+    end
+    return findAdjacentAllies(shover, world, filter)
 end
 
 -- Finds all adjacent player units who are carrying a unit that the 'taker' can take.
 function WorldQueries.findTakeTargets(taker, world)
-    local validTargets = {}
-    if not taker or taker.carriedUnit then return validTargets end -- A unit already carrying someone cannot take.
-
-    -- Iterate through all player units to see who we can take from.
-    for _, potentialCarrier in ipairs(world.players) do
-        -- A unit cannot take from itself, and the carrier must be alive and carrying someone.
-        if potentialCarrier ~= taker and potentialCarrier.hp > 0 and potentialCarrier.carriedUnit then
-            -- Check if the potential carrier is adjacent.
-            local distance = math.abs(taker.tileX - potentialCarrier.tileX) + math.abs(taker.tileY - potentialCarrier.tileY)
-            
-            if distance == 1 then
-                local carriedUnit = potentialCarrier.carriedUnit
-                -- Check if the taker is heavier than the unit being carried.
-                if taker.baseWeight > carriedUnit.baseWeight then
-                    table.insert(validTargets, potentialCarrier)
-                end
-            end
-        end
+    if not taker or taker.carriedUnit then return {} end -- A unit already carrying someone cannot take.
+    local filter = function(actor, target, wrld)
+        return target.carriedUnit and actor.baseWeight > target.carriedUnit.baseWeight
     end
-    return validTargets
+    return findAdjacentAllies(taker, world, filter)
 end
 
 -- Checks if any major game action (attack, movement, animation) is currently in progress.

@@ -50,19 +50,25 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
                         local canPass = false
                         local canLand = false
 
-                        if isObstacle then
+                        -- Check for ledge restrictions using the centralized query function.
+                        local isLedgeBlocked = WorldQueries.isLedgeBlockingPath(current.tileX, current.tileY, nextTileX, nextTileY, world)
+
+                        -- Restructured logic to correctly prioritize obstacles.
+                        if isObstacle then -- Highest priority check.
                             canPass = startUnit.isFlying -- Can only pass over obstacles if flying.
-                            canLand = false -- Cannot land on obstacles.
-                        elseif occupyingUnit then
-                            -- Units can pass through their own teammates, but not opponents.
-                            canPass = startUnit.isFlying or (startUnit.type == occupyingUnit.type)
-                            canLand = false -- Cannot land on occupied tiles.
-                        else -- Tile is empty
-                            canPass = true
-                            canLand = true
+                            canLand = false              -- Cannot land on obstacles.
+                        else -- Not an obstacle, now check for units.
+                            if occupyingUnit then
+                                -- Can pass through teammates, but not opponents.
+                                canPass = startUnit.isFlying or (startUnit.type == occupyingUnit.type)
+                                canLand = false -- Cannot land on occupied tiles.
+                            else -- Tile is empty and not an obstacle.
+                                canPass = true
+                                canLand = true
+                            end
                         end
 
-                        if canPass then
+                        if canPass and not isLedgeBlocked then
                             cost_so_far[nextPosKey] = nextCost
                             came_from[nextPosKey] = {tileX = current.tileX, tileY = current.tileY}
                             -- Add to reachable tiles, but only mark as landable if it's truly empty.
