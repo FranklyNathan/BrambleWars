@@ -7,7 +7,7 @@ local AttackBlueprints = require("data.attack_blueprints")
 
 local WorldQueries = {}
 
-function WorldQueries.isTileAnObstacle(tileX, tileY, world)
+function WorldQueries.getObstacleAt(tileX, tileY, world)
     -- Check for object-based obstacles (like trees and walls).
     -- Walls are now created as obstacle entities when the world is loaded.
     for _, obstacle in ipairs(world.obstacles) do
@@ -18,10 +18,10 @@ function WorldQueries.isTileAnObstacle(tileX, tileY, world)
         local objEndTileX, objEndTileY = Grid.toTile(obstacle.x + obstacle.width - 1, obstacle.y + obstacle.height - 1)
  
         if tileX >= objStartTileX and tileX <= objEndTileX and tileY >= objStartTileY and tileY <= objEndTileY then
-            return true
+            return obstacle
         end
     end
-    return false
+    return nil
 end
 
 function WorldQueries.getUnitAt(tileX, tileY, excludeSquare, world)
@@ -37,7 +37,7 @@ function WorldQueries.getUnitAt(tileX, tileY, excludeSquare, world)
 end
 
 function WorldQueries.isTileOccupied(tileX, tileY, excludeSquare, world)
-    return WorldQueries.isTileAnObstacle(tileX, tileY, world) or (WorldQueries.getUnitAt(tileX, tileY, excludeSquare, world) ~= nil)
+    return (WorldQueries.getObstacleAt(tileX, tileY, world) ~= nil) or (WorldQueries.getUnitAt(tileX, tileY, excludeSquare, world) ~= nil)
 end
 
 function WorldQueries.isTileOccupiedBySameTeam(tileX, tileY, originalSquare, world)
@@ -48,6 +48,43 @@ function WorldQueries.isTileOccupiedBySameTeam(tileX, tileY, originalSquare, wor
         end
     end
     return false
+end
+
+function WorldQueries.isTileWater(tileX, tileY, world)
+    local waterLayer = world.map.layers["Water"]
+    if not waterLayer then return false end
+    -- Tiled data is 1-based, our grid is 0-based.
+    -- The STI library replaces raw GID numbers with tile objects.
+    -- So, if a tile exists at this coordinate, the value will be a table. If not, it will be nil.
+    local tile = waterLayer.data[tileY + 1] and waterLayer.data[tileY + 1][tileX + 1]
+    return tile ~= nil
+end
+
+-- A comprehensive check to see if a unit can end its movement on a specific tile.
+function WorldQueries.isTileLandable(tileX, tileY, unit, world)
+    -- A tile is not landable if it's outside the map.
+    if tileX < 0 or tileX >= world.map.width or tileY < 0 or tileY >= world.map.height then
+        return false
+    end
+
+    local obstacle = WorldQueries.getObstacleAt(tileX, tileY, world)
+    if obstacle then
+        -- Cannot land on any obstacle, impassable or not.
+        return false
+    end
+
+    if WorldQueries.isTileWater(tileX, tileY, world) then
+        -- Only flying units can land on water. A nil unit is treated as non-flying.
+        return unit and unit.isFlying
+    end
+
+    -- Check if another unit is on the tile.
+    if WorldQueries.getUnitAt(tileX, tileY, unit, world) then
+        return false
+    end
+
+    -- If none of the above, the tile is landable.
+    return true
 end
 
 -- Checks if a ledge is blocking movement between two adjacent tiles.
@@ -128,45 +165,70 @@ local function getPotentialTargets(attacker, attackData, world)
     local targetEnemies = (attacker.type == "player") and world.enemies or world.players
     local targetAllies = (attacker.type == "player") and world.players or world.enemies
 
+    -- A helper to add destructible obstacles to a target list.
+    local function addDestructibleObstacles(list)
+        for _, obstacle in ipairs(world.obstacles) do
+            -- An obstacle is destructible if it has health.
+            if obstacle.hp and obstacle.hp > 0 then
+                table.insert(list, obstacle)
+            end
+        end
+    end
+
     if affects == "enemies" then
         for _, unit in ipairs(targetEnemies) do table.insert(potentialTargets, unit) end
+        addDestructibleObstacles(potentialTargets)
     elseif affects == "allies" then
         for _, unit in ipairs(targetAllies) do table.insert(potentialTargets, unit) end
     elseif affects == "all" then
         for _, unit in ipairs(targetEnemies) do table.insert(potentialTargets, unit) end
         for _, unit in ipairs(targetAllies) do table.insert(potentialTargets, unit) end
+        addDestructibleObstacles(potentialTargets)
     end
     return potentialTargets
 end
 
--- Finds all valid targets for a given attack, based on its blueprint properties.
-function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
-    local attackData = AttackBlueprints[attackName]
-    if not attackData then return {} end
+-- Helper to calculate the Manhattan distance from a point to the closest point on a rectangle.
+local function calculateDistanceToRect(pointX, pointY, rectStartX, rectStartY, rectEndX, rectEndY)
+    local dx = math.max(rectStartX - pointX, 0, pointX - rectEndX)
+    local dy = math.max(rectStartY - pointY, 0, pointY - rectEndY)
+    return dx + dy
+end
 
+-- Helper function to find targets for "cycle_target" style attacks.
+local function findValidTargets_Cycle(attacker, attackData, world)
     local validTargets = {}
-    local style = attackData.targeting_style
+    local attackName = attackData.name -- Assuming attackData has a name field
+    local pattern = AttackPatterns[attackData.patternType]
 
-    if style == "cycle_target" then
-        local pattern = AttackPatterns[attackData.patternType]
+    if pattern and type(pattern) == "table" then
+        -- New logic for fixed-shape patterns (standard_melee, etc.)
+        local potentialTargets = getPotentialTargets(attacker, attackData, world)
+        for _, target in ipairs(potentialTargets) do
+            local isSelf = (target == attacker)
+            local canBeTargeted = not isSelf and not (target.hp and target.hp <= 0)
 
-        if pattern and type(pattern) == "table" then
-            -- New logic for fixed-shape patterns (standard_melee, etc.)
-            local potentialTargets = getPotentialTargets(attacker, attackData, world)
-            for _, target in ipairs(potentialTargets) do
-                local isSelf = (target == attacker)
-                local canBeTargeted = not isSelf and not (target.hp and target.hp <= 0)
+            -- For healing moves, don't target units at full health.
+            if attackData.useType == "support" and (attackData.power or 0) > 0 and target.hp >= target.maxHp then
+                canBeTargeted = false
+            end
 
-                -- For healing moves, don't target units at full health.
-                if attackData.useType == "support" and (attackData.power or 0) > 0 and target.hp >= target.maxHp then
-                    canBeTargeted = false
-                end
-
-                if canBeTargeted then
+            if canBeTargeted then
+                if target.isObstacle then
+                    -- For obstacles, check if any of the attack tiles overlap with the obstacle's area.
+                    local objStartTileX, objStartTileY = target.tileX, target.tileY
+                    local objEndTileX, objEndTileY = Grid.toTile(target.x + target.width - 1, target.y + target.height - 1)
+                    for _, patternCoord in ipairs(pattern) do
+                        local attackTileX, attackTileY = attacker.tileX + patternCoord.dx, attacker.tileY + patternCoord.dy
+                        if attackTileX >= objStartTileX and attackTileX <= objEndTileX and attackTileY >= objStartTileY and attackTileY <= objEndTileY then
+                            table.insert(validTargets, target)
+                            break -- Found a match, no need to check other coords for this obstacle.
+                        end
+                    end
+                else
+                    -- For units, check if their single tile matches a pattern coordinate.
                     local dx = target.tileX - attacker.tileX
                     local dy = target.tileY - attacker.tileY
-
-                    -- Check if the target's relative position matches any coordinate in the pattern table.
                     for _, patternCoord in ipairs(pattern) do
                         if patternCoord.dx == dx and patternCoord.dy == dy then
                             table.insert(validTargets, target)
@@ -175,131 +237,171 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
                     end
                 end
             end
-        else
-            -- Fallback to legacy range-based logic for attacks without a fixed pattern table
-            -- (e.g., fireball, phantom_step, hookshot, shockwave).
-            local potentialTargets = getPotentialTargets(attacker, attackData, world)
+        end
+    else
+        -- Fallback to legacy range-based logic for attacks without a fixed pattern table
+        -- (e.g., fireball, phantom_step, hookshot, shockwave).
+        local potentialTargets = getPotentialTargets(attacker, attackData, world)
 
-            -- Special case for hookshot: also allow targeting any obstacle.
-            if attackName == "hookshot" then
-                for _, obstacle in ipairs(world.obstacles) do
+        -- Special case for hookshot: also allow targeting any *non-destructible* obstacle.
+        -- Destructible obstacles are already handled by getPotentialTargets.
+        if attackName == "hookshot" then
+            for _, obstacle in ipairs(world.obstacles) do
+                if not obstacle.hp then
                     table.insert(potentialTargets, obstacle)
                 end
             end
-
-            local range = attackData.range
-            if attackName == "phantom_step" then range = WorldQueries.getUnitMovement(attacker) end -- Dynamic range
-            local minRange = attackData.min_range or 1
-
-            if not range then return {} end -- Can't find targets for an attack without a defined range
-
-            for _, target in ipairs(potentialTargets) do
-                local isSelf = (target == attacker)
-                local canBeTargeted = false
-                if attackName == "hookshot" then
-                    canBeTargeted = not isSelf and target.weight and not (target.hp and target.hp <= 0)
-                else
-                    canBeTargeted = not isSelf and not (target.hp and target.hp <= 0)
-                end
-
-                if canBeTargeted then
-                    local distance = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
-                    local inRange = distance >= minRange and distance <= range
-
-                    if inRange then
-                        if attackData.line_of_sight_only then
-                            local isStraightLine = (attacker.tileX == target.tileX or attacker.tileY == target.tileY)
-                            if isStraightLine then
-                                local dist = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
-                                local isBlocked = false
-                                if attacker.tileX == target.tileX then -- Vertical line
-                                    local dirY = (target.tileY > attacker.tileY) and 1 or -1
-                                    for i = 1, dist - 1 do
-                                        if WorldQueries.isTileOccupied(attacker.tileX, attacker.tileY + i * dirY, attacker, world) then
-                                            if attackName ~= "fireball" then
-                                                isBlocked = true
-                                                break
-                                            end
-                                        elseif WorldQueries.isLedgeBlockingPath(attacker.tileX, attacker.tileY + (i - 1) * dirY, attacker.tileX, attacker.tileY + i * dirY, world) then
-                                            if attackName ~= "fireball" then
-                                                isBlocked = true
-                                                break
-                                            end
-                                        end
-                                    end
-                                else -- Horizontal line
-                                    local dirX = (target.tileX > attacker.tileX) and 1 or -1
-                                    for i = 1, dist - 1 do
-                                        if WorldQueries.isTileOccupied(attacker.tileX + i * dirX, attacker.tileY, attacker, world) then
-                                            if attackName ~= "fireball" then
-                                                isBlocked = true
-                                                break
-                                            end
-                                        end
-                                    end
-                                end
-
-                                if not isBlocked then
-                                    table.insert(validTargets, target)
-                                end
-                            end
-                        elseif attackName == "phantom_step" then
-                            local dx, dy = 0, 0
-                            if target.lastDirection == "up" then dy = 1 elseif target.lastDirection == "down" then dy = -1 elseif target.lastDirection == "left" then dx = 1 elseif target.lastDirection == "right" then dx = -1 end
-                            local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
-                            if not WorldQueries.isTileOccupied(behindTileX, behindTileY, nil, world) then
-                                table.insert(validTargets, target)
-                            end
-                        else
-                            table.insert(validTargets, target)
-                        end
-                    end
-                end
-            end
         end
-    elseif style == "auto_hit_all" then
-        -- This style finds all valid targets within a given range.
-        local potentialTargets = getPotentialTargets(attacker, attackData, world)
-        local range = attackData.range
 
-        if not range then return {} end
+        local range = attackData.range
+        if attackName == "phantom_step" then range = WorldQueries.getUnitMovement(attacker) end -- Dynamic range
+        local minRange = attackData.min_range or 1
+
+        if not range then return {} end -- Can't find targets for an attack without a defined range
 
         for _, target in ipairs(potentialTargets) do
-            if target.hp > 0 and math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY) <= range then
-                table.insert(validTargets, target)
+            local isSelf = (target == attacker)
+            local canBeTargeted = false
+            if attackName == "hookshot" then
+                canBeTargeted = not isSelf and target.weight and not (target.hp and target.hp <= 0)
+            else
+                canBeTargeted = not isSelf and not (target.hp and target.hp <= 0)
             end
-        end
 
-    elseif style == "directional_aim" then
-        local patternFunc = AttackPatterns[attackName]
-        if not patternFunc then return {} end
+            if canBeTargeted then
+                local distance
+                if target.isObstacle then
+                    local objStartTileX, objStartTileY = target.tileX, target.tileY
+                    local objEndTileX, objEndTileY = Grid.toTile(target.x + target.width - 1, target.y + target.height - 1)
+                    distance = calculateDistanceToRect(attacker.tileX, attacker.tileY, objStartTileX, objStartTileY, objEndTileX, objEndTileY)
+                else
+                    distance = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
+                end
+                local inRange = distance >= minRange and distance <= range
 
-        local potentialTargets = getPotentialTargets(attacker, attackData, world)
+                if inRange then
+                    if attackData.line_of_sight_only then
+                        local isStraightLine = (attacker.tileX == target.tileX or attacker.tileY == target.tileY)
+                        if isStraightLine then
+                            local dist = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
+                            local isBlocked = false
+                            if attacker.tileX == target.tileX then -- Vertical line
+                                local dirY = (target.tileY > attacker.tileY) and 1 or -1
+                                for i = 1, dist - 1 do
+                                    if WorldQueries.isTileOccupied(attacker.tileX, attacker.tileY + i * dirY, attacker, world) then
+                                        if attackName ~= "fireball" then
+                                            isBlocked = true
+                                            break
+                                        end
+                                    elseif WorldQueries.isLedgeBlockingPath(attacker.tileX, attacker.tileY + (i - 1) * dirY, attacker.tileX, attacker.tileY + i * dirY, world) then
+                                        if attackName ~= "fireball" then
+                                            isBlocked = true
+                                            break
+                                        end
+                                    end
+                                end
+                            else -- Horizontal line
+                                local dirX = (target.tileX > attacker.tileX) and 1 or -1
+                                for i = 1, dist - 1 do
+                                    if WorldQueries.isTileOccupied(attacker.tileX + i * dirX, attacker.tileY, attacker, world) then
+                                        if attackName ~= "fireball" then
+                                            isBlocked = true
+                                            break
+                                        end
+                                    end
+                                end
+                            end
 
-        -- Check all 4 directions from the attacker's current position
-        local tempAttacker = { tileX = attacker.tileX, tileY = attacker.tileY, x = attacker.x, y = attacker.y, size = attacker.size }
-        local directions = {"up", "down", "left", "right"}
-        for _, dir in ipairs(directions) do
-            tempAttacker.lastDirection = dir
-            local effects = patternFunc(tempAttacker, world)
-            for _, effectData in ipairs(effects) do
-                local s = effectData.shape
-                local startTileX, startTileY = Grid.toTile(s.x, s.y)
-                local endTileX, endTileY = Grid.toTile(s.x + s.w - 1, s.y + s.h - 1)
-
-                for _, target in ipairs(potentialTargets) do
-                    if target.hp > 0 and target ~= attacker and target.tileX >= startTileX and target.tileX <= endTileX and target.tileY >= startTileY and target.tileY <= endTileY then
-                        -- Found a valid target. Add it to the list if not already there.
-                        local found = false
-                        for _, vt in ipairs(validTargets) do if vt == target then found = true; break end end
-                        if not found then table.insert(validTargets, target) end
+                            if not isBlocked then
+                                table.insert(validTargets, target)
+                            end
+                        end
+                    elseif attackName == "phantom_step" then
+                        local dx, dy = 0, 0
+                        if target.lastDirection == "up" then dy = 1 elseif target.lastDirection == "down" then dy = -1 elseif target.lastDirection == "left" then dx = 1 elseif target.lastDirection == "right" then dx = -1 end
+                        local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
+                        if not WorldQueries.isTileOccupied(behindTileX, behindTileY, nil, world) then
+                            table.insert(validTargets, target)
+                        end
+                    else
+                        table.insert(validTargets, target)
                     end
                 end
             end
         end
     end
+    return validTargets
+end
 
-    return validTargets    
+-- Helper function to find targets for "auto_hit_all" style attacks.
+local function findValidTargets_AutoHitAll(attacker, attackData, world)
+    local validTargets = {}
+    local potentialTargets = getPotentialTargets(attacker, attackData, world)
+    local range = attackData.range
+
+    if not range then return {} end
+
+    for _, target in ipairs(potentialTargets) do
+        if target.hp > 0 and math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY) <= range then
+            table.insert(validTargets, target)
+        end
+    end
+    return validTargets
+end
+
+-- Helper function to find targets for "directional_aim" style attacks.
+local function findValidTargets_Directional(attacker, attackData, world)
+    local validTargets = {}
+    local patternFunc = AttackPatterns[attackData.name] -- Assuming attackData has a name field
+    if not patternFunc then return {} end
+
+    local potentialTargets = getPotentialTargets(attacker, attackData, world)
+
+    -- Check all 4 directions from the attacker's current position
+    local tempAttacker = { tileX = attacker.tileX, tileY = attacker.tileY, x = attacker.x, y = attacker.y, size = attacker.size }
+    local directions = {"up", "down", "left", "right"}
+    for _, dir in ipairs(directions) do
+        tempAttacker.lastDirection = dir
+        local effects = patternFunc(tempAttacker, world)
+        for _, effectData in ipairs(effects) do
+            local s = effectData.shape
+            local startTileX, startTileY = Grid.toTile(s.x, s.y)
+            local endTileX, endTileY = Grid.toTile(s.x + s.w - 1, s.y + s.h - 1)
+
+            for _, target in ipairs(potentialTargets) do
+                if target.hp > 0 and target ~= attacker and target.tileX >= startTileX and target.tileX <= endTileX and target.tileY >= startTileY and target.tileY <= endTileY then
+                    -- Found a valid target. Add it to the list if not already there.
+                    local found = false
+                    for _, vt in ipairs(validTargets) do if vt == target then found = true; break end end
+                    if not found then table.insert(validTargets, target) end
+                end
+            end
+        end
+    end
+    return validTargets
+end
+
+-- A dispatch table to call the correct targeting helper function.
+local targetFinders = {
+    cycle_target    = findValidTargets_Cycle,
+    auto_hit_all    = findValidTargets_AutoHitAll,
+    directional_aim = findValidTargets_Directional,
+}
+
+-- Finds all valid targets for a given attack, based on its blueprint properties.
+function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
+    local attackData = AttackBlueprints[attackName]
+    if not attackData then return {} end
+
+    -- Add the attack name to the data table for the helper functions to use.
+    attackData.name = attackName
+
+    local finder = targetFinders[attackData.targeting_style]
+    if finder then
+        return finder(attacker, attackData, world)
+    end
+
+    return {} -- Return an empty table if no handler is found.
 end
 
 -- Helper to find adjacent allied units that satisfy a given condition.

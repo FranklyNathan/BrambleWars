@@ -22,7 +22,6 @@ function TakeHandler.take(taker, carrier, world)
     taker.rescuePenalty = RescueHandler.calculateMovementPenalty(taker, carriedUnit)
     taker.weight = taker.baseWeight + carriedUnit.baseWeight
 
-    print(taker.displayName .. " took " .. carriedUnit.displayName .. " from " .. carrier.displayName)
     return true
 end
 

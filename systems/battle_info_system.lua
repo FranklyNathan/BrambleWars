@@ -12,14 +12,14 @@ local BattleInfoSystem = {}
 
 -- This is the core logic. It's called by event handlers to update the forecast.
 function BattleInfoSystem.refresh_forecast(world)
-    local menu = world.battleInfoMenu
+    local menu = world.ui.menus.battleInfo
     if not menu then return end
 
     -- Only show a forecast if the player is actively cycling targets.
-    if world.playerTurnState == "cycle_targeting" and world.cycleTargeting.active then
-        local attacker = world.actionMenu.unit
-        local target = world.cycleTargeting.targets[world.cycleTargeting.selectedIndex]
-        local attackName = world.selectedAttackName
+    if world.ui.playerTurnState == "cycle_targeting" and world.ui.targeting.cycle.active then
+        local attacker = world.ui.menus.action.unit
+        local target = world.ui.targeting.cycle.targets[world.ui.targeting.cycle.selectedIndex]
+        local attackName = world.ui.targeting.selectedAttackName
         local attackData = attackName and AttackBlueprints[attackName]
 
         if not (attacker and target and attackData) then

@@ -13,7 +13,7 @@ Camera.y = 0
 -- The update function is called every frame to move the camera smoothly.
 function Camera.update(dt, world)
     -- Get cursor position in pixels.
-    local cursorPixelX, cursorPixelY = Grid.toPixels(world.mapCursorTile.x, world.mapCursorTile.y)
+    local cursorPixelX, cursorPixelY = Grid.toPixels(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y)
     local cursorSize = Config.SQUARE_SIZE
 
     -- 1. By default, the camera's target is its current position (it doesn't move).

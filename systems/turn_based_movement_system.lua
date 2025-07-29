@@ -19,8 +19,8 @@ end
 
 function TurnBasedMovementSystem.update(dt, world)
     -- Update the visual effect for the move destination tile.
-    if world.moveDestinationEffect then
-        local effect = world.moveDestinationEffect
+    if world.ui.pathing.moveDestinationEffect then
+        local effect = world.ui.pathing.moveDestinationEffect
         if effect.state == "descending" then
             effect.timer = math.max(0, effect.timer - dt)
             if effect.timer == 0 then
@@ -62,12 +62,12 @@ function TurnBasedMovementSystem.update(dt, world)
                     entity.components.movement_path = nil -- Clean up the component.
 
                     -- Clear the move destination effect now that the unit has arrived.
-                    world.moveDestinationEffect = nil
+                    world.ui.pathing.moveDestinationEffect = nil
 
                     -- Only player units trigger state changes upon finishing a move.
                     if entity.type == "player" then -- Player finished moving
                         -- Movement is done, open the action menu.
-                        world.playerTurnState = "action_menu"
+                        world.ui.playerTurnState = "action_menu"
 
                         local blueprint = CharacterBlueprints[entity.playerType]
                         local menuOptions = {}
@@ -122,10 +122,10 @@ function TurnBasedMovementSystem.update(dt, world)
 
                         table.insert(menuOptions, {text = "Wait", key = "wait"})
 
-                        world.actionMenu.active = true
-                        world.actionMenu.unit = entity
-                        world.actionMenu.options = menuOptions
-                        world.actionMenu.selectedIndex = 1
+                        world.ui.menus.action.active = true
+                        world.ui.menus.action.unit = entity
+                        world.ui.menus.action.options = menuOptions
+                        world.ui.menus.action.selectedIndex = 1
                     elseif entity.type == "enemy" then
                         -- If an enemy finishes moving, decide what to do.
                         if entity.components.ai and entity.components.ai.pending_attack then

@@ -35,7 +35,15 @@ function CareeningSystem.update(dt, world)
                     local hitTeammate = WorldQueries.isTileOccupiedBySameTeam(nextTileX, nextTileY, s, world)
 
                     if hitWall or hitTeammate then
-                        EffectFactory.createRippleEffect(effect.attacker, s.x + s.size/2, s.y + s.size/2, 10, 3, "all")
+                        -- When a careening unit hits a wall, create a small damaging ripple effect.
+                        -- This requires a corresponding "wall_impact" entry in attack_blueprints.lua.
+                        EffectFactory.createRippleEffect(world,
+                            effect.attacker,
+                            "wall_impact", -- A new, simple attack blueprint for collision damage.
+                            s.x + s.size/2, s.y + s.size/2, -- Center of impact
+                            1, -- The initial size of the ripple (in tiles)
+                            "all" -- The ripple should be able to damage both players and enemies
+                        )
                         s.statusEffects.careening = nil
                         break -- Exit the while loop as the effect is over
                     else

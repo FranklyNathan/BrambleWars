@@ -128,7 +128,17 @@ function AetherfallSystem.update(dt, world)
                             local specialProperties = {
                                 isAetherfallAttack = true -- Flag to prevent counter-attacks.
                             }
-                            EffectFactory.addAttackEffect(unit, "slash", target.x, target.y, target.size, target.size, {1, 0, 0, 1}, 0, false, targetType, nil, nil, specialProperties)
+                            EffectFactory.addAttackEffect(world, {
+                                attacker = unit,
+                                attackName = "slash",
+                                x = target.x,
+                                y = target.y,
+                                width = target.size,
+                                height = target.size,
+                                color = {1, 0, 0, 1},
+                                targetType = targetType,
+                                specialProperties = specialProperties
+                            })
                         end
 
                         -- Update state for the next hit regardless of whether we attacked.
@@ -140,7 +150,7 @@ function AetherfallSystem.update(dt, world)
                 -- Re-check component existence before checking hitsRemaining, as it might have been nilled above.
                 if unit.components.aetherfall_attack and unit.components.aetherfall_attack.hitsRemaining <= 0 then
                    -- Attack is over. End the airborne status on the target.
-                    StatusEffectManager.remove(attack.target, "airborne")
+                    StatusEffectManager.remove(attack.target, "airborne", world)
                     -- Clean up the component. The unit's turn is NOT consumed.
                     unit.components.aetherfall_attack = nil
 

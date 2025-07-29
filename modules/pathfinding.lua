@@ -43,32 +43,44 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
             if nextTileX >= 0 and nextTileX < world.map.width and nextTileY >= 0 and nextTileY < world.map.height then                
                 if nextCost <= unitMovement then
                     -- If we haven't visited this tile, or found a cheaper path to it
-                    if not cost_so_far[nextPosKey] or nextCost < cost_so_far[nextPosKey] then
-                        local isObstacle = WorldQueries.isTileAnObstacle(nextTileX, nextTileY, world)
+                    if not cost_so_far[nextPosKey] or nextCost < cost_so_far[nextPosKey] then                        
+                        -- New logic incorporating impassable obstacles and water tiles.
+                        local obstacle = WorldQueries.getObstacleAt(nextTileX, nextTileY, world)
+                        local isWater = WorldQueries.isTileWater(nextTileX, nextTileY, world)
                         local occupyingUnit = WorldQueries.getUnitAt(nextTileX, nextTileY, startUnit, world)
+                        local isLedgeBlocked = WorldQueries.isLedgeBlockingPath(current.tileX, current.tileY, nextTileX, nextTileY, world)
 
                         local canPass = false
                         local canLand = false
 
-                        -- Check for ledge restrictions using the centralized query function.
-                        local isLedgeBlocked = WorldQueries.isLedgeBlockingPath(current.tileX, current.tileY, nextTileX, nextTileY, world)
-
-                        -- Restructured logic to correctly prioritize obstacles.
-                        if isObstacle then -- Highest priority check.
-                            canPass = startUnit.isFlying -- Can only pass over obstacles if flying.
-                            canLand = false              -- Cannot land on obstacles.
-                        else -- Not an obstacle, now check for units.
-                            if occupyingUnit then
-                                -- Can pass through teammates, but not opponents.
-                                canPass = startUnit.isFlying or (startUnit.type == occupyingUnit.type)
-                                canLand = false -- Cannot land on occupied tiles.
-                            else -- Tile is empty and not an obstacle.
-                                canPass = true
-                                canLand = true
-                            end
+                        if obstacle and obstacle.isImpassable then
+                            -- Impassable obstacles (like Boxes) block everything, even flying units.
+                            canPass = false
+                            canLand = false
+                        elseif isWater then
+                            -- Water tiles can only be passed over or landed on by flying units.
+                            canPass = startUnit.isFlying
+                            canLand = startUnit.isFlying and not occupyingUnit -- Can't land if a unit is there.
+                        elseif obstacle then
+                            -- Regular obstacles (not impassable).
+                            canPass = startUnit.isFlying
+                            canLand = false -- Cannot land on any obstacle.
+                        elseif occupyingUnit then
+                            -- Tile is occupied by another unit.
+                            canPass = startUnit.isFlying or (startUnit.type == occupyingUnit.type) -- Can pass through teammates.
+                            canLand = false
+                        else
+                            -- Tile is empty and not special terrain.
+                            canPass = true
+                            canLand = true
                         end
 
-                        if canPass and not isLedgeBlocked then
+                        -- Ledges are a final check that can override passability.
+                        if isLedgeBlocked then
+                            canPass = false
+                        end
+
+                        if canPass then
                             cost_so_far[nextPosKey] = nextCost
                             came_from[nextPosKey] = {tileX = current.tileX, tileY = current.tileY}
                             -- Add to reachable tiles, but only mark as landable if it's truly empty.

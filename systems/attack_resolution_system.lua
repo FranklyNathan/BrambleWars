@@ -21,22 +21,32 @@ function AttackResolutionSystem.update(dt, world)
         -- Process the effect on the frame it becomes active
         if effect.initialDelay <= 0 and not effect.effectApplied then
             local targets = {}
+            -- Build a list of potential targets for this effect.
             if effect.targetType == "enemy" then
-                targets = world.enemies
+                -- For effects targeting enemies, we also need to include destructible obstacles.
+                for _, unit in ipairs(world.enemies) do table.insert(targets, unit) end
+                for _, obstacle in ipairs(world.obstacles) do
+                    if obstacle.hp and obstacle.hp > 0 then
+                        table.insert(targets, obstacle)
+                    end
+                end
             elseif effect.targetType == "player" then
-                targets = world.players
+                -- For effects targeting players, we just need the player list.
+                for _, unit in ipairs(world.players) do table.insert(targets, unit) end
             elseif effect.targetType == "all" then
-                targets = world.all_entities
+                -- For effects targeting everyone, use the master list.
+                for _, unit in ipairs(world.all_entities) do table.insert(targets, unit) end
             end
 
             for _, target in ipairs(targets) do
                 -- Only process entities that can be targeted by combat actions (i.e., have health)
                 if target.hp then
+                    -- Use target.width/height for obstacles, fallback to target.size for units.
+                    local targetWidth = target.width or target.size
+                    local targetHeight = target.height or target.size
                     -- AABB collision check between the effect rectangle and the target's square.
-                    local collision = target.x < effect.x + effect.width and
-                                      target.x + target.size > effect.x and
-                                      target.y < effect.y + effect.height and
-                                      target.y + target.size > effect.y
+                    local collision = target.x < effect.x + effect.width and target.x + targetWidth > effect.x and
+                                      target.y < effect.y + effect.height and target.y + targetHeight > effect.y
 
                     if collision then
                         if effect.isHeal then
@@ -121,7 +131,7 @@ function AttackResolutionSystem.update(dt, world)
                                         Assets.sounds.attack_miss:stop()
                                         Assets.sounds.attack_miss:play()
                                     end
-                                    EffectFactory.createDamagePopup(target, "Miss!", false, {0.8, 0.8, 0.8, 1})
+                                    EffectFactory.createDamagePopup(world, target, "Miss!", false, {0.8, 0.8, 0.8, 1})
                                 end
                             end
                         end

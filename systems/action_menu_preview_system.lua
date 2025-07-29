@@ -1,69 +1,61 @@
 -- systems/action_menu_preview_system.lua
--- Manages showing the attack range preview when hovering over moves in the action menu.
+-- This system is responsible for calculating and displaying the attack preview
+-- when the player is navigating the action menu.
 
-local EventBus = require("modules.event_bus")
 local RangeCalculator = require("modules.range_calculator")
 local AttackPatterns = require("modules.attack_patterns")
 local AttackBlueprints = require("data.attack_blueprints")
+local EventBus = require("modules.event_bus")
 
 local ActionMenuPreviewSystem = {}
 
--- This is the core logic. It's called by event handlers to update the preview.
-function ActionMenuPreviewSystem.refresh_preview(world)
-    local menu = world.actionMenu
-    local descMenu = world.actionDescriptionMenu
+-- This is the function from the traceback.
+-- It's responsible for calculating and setting the preview tiles based on the selected action.
+local function refresh_preview(world)
+    local menu = world.ui.menus.action
 
-    -- Always clear previous previews before calculating new ones.
-    menu.previewAttackableTiles = nil
-    menu.previewAoeShapes = nil
-    descMenu.active = false
-    descMenu.text = ""
-
-    -- If the range is fading out from a previous state, don't show any new previews yet.
-    if world.rangeFadeEffect and world.rangeFadeEffect.active then
+    -- FIX: Add a guard clause. If the menu doesn't exist, is not active, or has no unit,
+    -- clear any lingering preview data and exit. This prevents the error.
+    if not menu or not menu.active or not menu.unit then
+        if menu then -- Ensure menu table exists before trying to nil out properties
+            menu.previewAttackableTiles = nil
+            menu.previewAoeShapes = nil
+        end
         return
     end
 
-    -- Only show a preview if the action menu is active in the correct state.
-    if menu.active and world.playerTurnState == "action_menu" then
-        local selectedOption = menu.options[menu.selectedIndex]
-        if selectedOption and selectedOption.key then
-            local attackData = AttackBlueprints[selectedOption.key]
+    -- Default to no preview, and clear any previous preview.
+    menu.previewAttackableTiles = nil
+    menu.previewAoeShapes = nil
 
-            -- Update the description text for the currently hovered move.
-            if attackData and attackData.description then
-                descMenu.active = true
-                descMenu.text = attackData.description
-            end
+    local selectedOption = menu.options[menu.selectedIndex]
+    if not selectedOption then return end
 
-            -- Check if the selected option is a valid attack with a range.
-            if attackData and (attackData.useType == "physical" or attackData.useType == "magical" or attackData.useType == "utility") then
-                menu.previewAttackableTiles = RangeCalculator.calculateSingleAttackRange(menu.unit, selectedOption.key, world)
+    local attackName = selectedOption.key
+    local attackData = AttackBlueprints[attackName]
 
-                -- If it's a ground-aimed attack, also generate the AoE shape preview.
-                if attackData.targeting_style == "ground_aim" then
-                    -- We show a representative AoE centered on the attacker's current tile.
-                    menu.previewAoeShapes = AttackPatterns.getGroundAimPreviewShapes(selectedOption.key, menu.unit.tileX, menu.unit.tileY)
-                end
-            end
+    if attackData then
+        if attackData.targeting_style == "ground_aim" then
+            menu.previewAoeShapes = AttackPatterns.getGroundAimPreviewShapes(attackName, menu.unit.tileX, menu.unit.tileY)
+        else
+            menu.previewAttackableTiles = RangeCalculator.calculateSingleAttackRange(menu.unit, attackName, world)
         end
     end
-    -- If the menu is not active, the previews are already nilled out at the start of the function.
 end
 
--- Event handler for when the selection in the action menu changes.
-local function on_selection_changed(data)
-    ActionMenuPreviewSystem.refresh_preview(data.world)
+-- This function is called when the player state changes.
+-- It's used to clear the preview when the menu closes, and to show the initial preview when it opens.
+local function refresh_preview_callback(data)
+    -- The refresh_preview function now has internal checks to see if the menu is active,
+    -- so it's safe to call it. It will correctly show the preview when the menu becomes
+    -- active, and clear it when it becomes inactive.
+    refresh_preview(data.world)
 end
 
--- Event handler for when the player's turn state changes.
--- This is crucial for clearing the preview when the action menu is closed or opened.
-local function on_player_state_changed(data)
-    ActionMenuPreviewSystem.refresh_preview(data.world)
-end
+-- Listen for when the player scrolls through the action menu.
+EventBus:register("action_menu_selection_changed", refresh_preview_callback)
 
--- Register the event listeners.
-EventBus:register("action_menu_selection_changed", on_selection_changed)
-EventBus:register("player_state_changed", on_player_state_changed)
+-- Listen for when the player's state changes (e.g., opening or closing the action menu).
+EventBus:register("player_state_changed", refresh_preview_callback)
 
 return ActionMenuPreviewSystem

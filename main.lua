@@ -112,18 +112,11 @@ function love.load()
     canvas = love.graphics.newCanvas(Config.VIRTUAL_WIDTH, Config.VIRTUAL_HEIGHT)
     canvas:setFilter("nearest", "nearest")
 
-    -- Initialize factories and modules that need a reference to the world
-    local EffectFactory = require("modules.effect_factory")
-    EffectFactory.init(world)
-
     -- Set the background color
     love.graphics.setBackgroundColor(0.1, 0.1, 0.1, 1) -- Dark grey
 
 end
 
--- love.update(dt) is called every frame.
--- dt is the time elapsed since the last frame (delta time).
--- It's used for game logic, such as updating player positions and attacks.
 function love.update(dt)
     -- Only update game logic if not paused
     if world.gameState == "gameplay" then
@@ -142,9 +135,9 @@ function love.update(dt)
         end
 
         -- Check if the turn should end, AFTER all systems have run for this frame.
-        if world.turnShouldEnd then
+        if world.ui.turnShouldEnd then
             world:endTurn()
-            world.turnShouldEnd = false -- Reset the flag
+            world.ui.turnShouldEnd = false -- Reset the flag
         end
 
         -- Process all entity additions and deletions that were queued by the systems.

@@ -72,6 +72,7 @@ local AttackBlueprints = {
         useType = "physical",
         targeting_style = "cycle_target",
         patternType = "standard_melee", -- The 4 adjacent tiles.
+        statusEffect = {type = "poison", duration = 3},
         description = "A physical attack that poisons the target."
     },
     uppercut = {
@@ -83,6 +84,7 @@ local AttackBlueprints = {
         useType = "physical",
         targeting_style = "cycle_target",
         patternType = "standard_melee", -- The 4 adjacent tiles.
+        statusEffect = {type = "airborne", duration = 1.2},
         description = "A powerful physical attack that sends the target airborne."
     },
     slash = {
@@ -181,6 +183,7 @@ local AttackBlueprints = {
         useType = "utility",
         targeting_style = "cycle_target",
         affects = "enemies",
+        statusEffect = {type = "stunned", duration = 1},
         description = "Teleport behind an enemy and strike them, causing stun."
     }, -- Range is dynamic (user's movement stat)
 
@@ -219,6 +222,7 @@ local AttackBlueprints = {
         targeting_style = "auto_hit_all",
         range = 12, -- This is a large radius around the user
         affects = "enemies",
+        statusEffect = {type = "paralyzed", duration = 2},
         description = "Paralyzes all enemies within a wide radius."
     },
 

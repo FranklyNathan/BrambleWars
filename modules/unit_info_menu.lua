@@ -47,16 +47,10 @@ local function wrapText(text, limit, font)
     return lines
 end
 
--- Helper to capitalize the first letter of a string.
-local function capitalize(str)
-    if not str or str == "" then return "" end
-    return str:sub(1,1):upper() .. str:sub(2)
-end
-
 local UnitInfoMenu = {}
 
 function UnitInfoMenu.draw(world)
-    local menu = world.unitInfoMenu
+    local menu = world.ui.menus.unitInfo
     if menu.active and menu.unit then
         local unit = menu.unit
         local font = love.graphics.getFont()

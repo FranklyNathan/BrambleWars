@@ -7,63 +7,66 @@ local WorldQueries = require("modules.world_queries")
 local GrappleHookSystem = {}
 
 function GrappleHookSystem.update(dt, world)
-    -- Loop through all entities to find active grapple hooks
-    for i = #world.all_entities, 1, -1 do
-        local entity = world.all_entities[i]
-        if entity.type == "grapple_hook" and entity.components.grapple_hook then
+    -- Loop through active grapple hooks. This is much more efficient than scanning all_entities.
+    for i = #world.grapple_hooks, 1, -1 do
+        local entity = world.grapple_hooks[i]
+        -- A central system will handle removing entities marked for deletion from all lists.
+        -- We just need to stop processing them here.
+        if not entity.isMarkedForDeletion then
             local hook = entity.components.grapple_hook
 
             if hook.state == "firing" then
                 -- 1. Move the hook forward
                 local moveAmount = hook.speed * dt
-                if hook.direction == "up" then
-                    entity.y = entity.y - moveAmount
-                elseif hook.direction == "down" then
-                    entity.y = entity.y + moveAmount
-                elseif hook.direction == "left" then
-                    entity.x = entity.x - moveAmount
-                elseif hook.direction == "right" then
-                    entity.x = entity.x + moveAmount
-                end
+                if hook.direction == "up" then entity.y = entity.y - moveAmount
+                elseif hook.direction == "down" then entity.y = entity.y + moveAmount
+                elseif hook.direction == "left" then entity.x = entity.x - moveAmount
+                elseif hook.direction == "right" then entity.x = entity.x + moveAmount end
 
                 -- 2. Update distance traveled
                 hook.distanceTraveled = hook.distanceTraveled + moveAmount
 
-                -- 3. Check for collision with units
-                local potentialTargets = {}
-                for _, p in ipairs(world.players) do table.insert(potentialTargets, p) end
-                for _, e in ipairs(world.enemies) do table.insert(potentialTargets, e) end
+                -- 3. Check for collision using efficient, tile-based logic
+                local currentTileX, currentTileY = Grid.toTile(entity.x, entity.y)
+                local hitTarget = nil
 
-                for _, target in ipairs(potentialTargets) do
-                    -- The hook can't hit its own attacker or dead units.
-                    if target ~= hook.attacker and target.hp > 0 then
-                        -- Simple AABB collision check
-                        if entity.x < target.x + target.size and entity.x + entity.size > target.x and
-                           entity.y < target.y + target.size and entity.y + entity.size > target.y then
-                            -- Collision detected!
-                            hook.state = "hit"
-                            hook.target = target -- Store what was hit
-                            EventBus:dispatch("grapple_hook_hit", { hookEntity = entity, world = world, target = target})
-                            break -- Stop checking other units
-                        end
-                    end
-                end
-
-                -- 4. Check for collision with obstacles (if still firing)
-                if hook.state == "firing" then
+                -- Check for map boundary collision first
+                if currentTileX < 0 or currentTileX >= world.map.width or
+                   currentTileY < 0 or currentTileY >= world.map.height then
+                    entity.isMarkedForDeletion = true
+                else
+                    -- Check for collision with any obstacle on the current tile.
                     for _, obstacle in ipairs(world.obstacles) do
-                        if entity.x < obstacle.x + obstacle.width and entity.x + entity.size > obstacle.x and
-                           entity.y < obstacle.y + obstacle.height and entity.y + entity.size > obstacle.y then
-                            hook.state = "hit"
-                            EventBus:dispatch("grapple_hook_hit", { hookEntity = entity, world = world, target = obstacle})
-                            hook.target = obstacle
+                        local obsStartX, obsStartY = obstacle.tileX, obstacle.tileY
+                        local obsEndX, obsEndY = Grid.toTile(obstacle.x + obstacle.width - 1, obstacle.y + obstacle.height - 1)
+                        if currentTileX >= obsStartX and currentTileX <= obsEndX and currentTileY >= obsStartY and currentTileY <= obsEndY then
+                            hitTarget = obstacle
                             break
                         end
                     end
+
+                    -- If no obstacle was hit, check for collision with units.
+                    if not hitTarget then
+                        local potentialTargets = {}
+                        for _, p in ipairs(world.players) do table.insert(potentialTargets, p) end
+                        for _, e in ipairs(world.enemies) do table.insert(potentialTargets, e) end
+
+                        for _, unit in ipairs(potentialTargets) do
+                            if unit.hp > 0 and unit ~= hook.attacker and unit.tileX == currentTileX and unit.tileY == currentTileY then
+                                hitTarget = unit
+                                break
+                            end
+                        end
+                    end
                 end
 
+                -- 4. Handle collision if a target was hit
+                if hitTarget then
+                    hook.state = "hit"
+                    hook.target = hitTarget
+                    EventBus:dispatch("grapple_hook_hit", { hookEntity = entity, world = world, target = hitTarget })
                 -- 5. If no collision, check if max distance is reached
-                if hook.state == "firing" and hook.distanceTraveled >= hook.maxDistance then
+                elseif not entity.isMarkedForDeletion and hook.distanceTraveled >= hook.maxDistance then
                     -- For now, just remove the hook if it misses
                     entity.isMarkedForDeletion = true
                 end
@@ -94,7 +97,7 @@ EventBus:register("grapple_hook_hit", function(data)
     local pullTarget = false
     local pullBoth = false
 
-    if target.isObstacle then
+if target.isObstacle then
         -- If the target is any kind of obstacle, the attacker is always pulled.
         pullAttacker = true
     else

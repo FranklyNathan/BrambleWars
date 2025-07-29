@@ -59,7 +59,7 @@ local function is_unit_in_combat(unit, world)
     -- We also need to check if the unit is an ATTACKER whose target has pending_damage.
     -- This ensures the attacker's health bar also becomes large during the combat sequence.
     for _, entity in ipairs(world.all_entities) do
-        if entity.components.pending_damage and entity.components.pending_damage.attacker == unit then
+        if entity.components.pending_damage and entity.components.pending_damage.attacker == unit then            
             return true
         end
     end
@@ -73,47 +73,57 @@ local function drawHealthBar(square, world)
     if square.components.shrinking_health_bar then
         local shrink = square.components.shrinking_health_bar
         local progress = shrink.timer / shrink.initialTimer
-        barHeight = math.floor(4 + (4 * progress)) -- Lerp from 8 down to 4
+        barHeight = math.floor(6 + (6 * progress)) -- Lerp from 12 down to 6
     else
-        barHeight = inCombat and 8 or 4 -- Twice as tall in combat
+        barHeight = inCombat and 12 or 6 -- Slightly shorter than before, but still taller than original
     end
-    local barYOffset = square.size + 2 -- Always positioned below the unit
-    local x, y = square.x, square.y + barYOffset
+    local barYOffset = square.size - 2 -- Positioned slightly overlapping the unit's bottom edge
+    -- Floor the coordinates to ensure crisp, pixel-perfect rendering and prevent anti-aliasing.
+    local x, y = math.floor(square.x), math.floor(square.y + barYOffset)
 
-    -- 1. Draw the outer frame (the bevel)
-    -- Dark part of bevel (bottom and right)
-    love.graphics.setColor(0.2, 0.2, 0.2, 1)
+    -- 1. Draw the outer black frame first. This guarantees a crisp, 1px border.
+    love.graphics.setColor(0, 0, 0, 1) -- Black
     love.graphics.rectangle("fill", x, y, barWidth, barHeight)
-    -- Light part of bevel (top and left)
-    love.graphics.setColor(0.8, 0.8, 0.8, 1)
-    love.graphics.rectangle("fill", x, y, barWidth - 1, barHeight - 1)
 
-    -- 2. Draw the inner background for the bar
-    local innerBarX = x + 1
-    local innerBarY = y + 1
-    local innerBarWidth = barWidth - 2
-    local innerBarHeight = barHeight - 2 -- This is 2px high.
-    love.graphics.setColor(0.1, 0.1, 0.1, 1) -- Dark background for the bar itself
-    love.graphics.rectangle("fill", innerBarX, innerBarY, innerBarWidth, innerBarHeight)
+    -- 2. Define the inner area for the health content.
+    local innerX, innerY = x + 1, y + 1
+    local innerWidth, innerHeight = barWidth - 2, barHeight - 2
 
-    -- 3. Draw pending damage and current health bars
-    local healthColor = (square.type == "enemy") and {1, 0.2, 0.2, 1} or {0.2, 1, 0.2, 1} -- Red for enemies, Green for players
+    -- 3. Draw the inner background (the empty part of the bar).
+    love.graphics.setColor(0.1, 0.1, 0.1, 1) -- Dark background for the empty part
+    love.graphics.rectangle("fill", innerX, innerY, innerWidth, innerHeight)
 
-    -- The logic for drawing pending damage and current health remains, but uses the new inner bar dimensions.
+    -- 4. Draw pending damage and current health bars on top of the inner background.
+    -- We draw the segments separately to avoid overdraw and ensure shaders apply correctly.
+    local healthColor
+    if square.isObstacle then
+        healthColor = {1, 0.6, 0, 1} -- Orange for obstacles
+    elseif square.type == "enemy" then
+        healthColor = {1, 0.2, 0.2, 1} -- Red for enemies
+    else -- player
+        healthColor = {0.2, 1, 0.2, 1} -- Green for players
+    end
+
+    -- First, draw the current health portion with the shader.
+    local currentHealthWidth = math.floor((square.hp / square.maxHp) * innerWidth)
+    if currentHealthWidth > 0 then
+        love.graphics.setColor(healthColor)
+        love.graphics.rectangle("fill", innerX, innerY, currentHealthWidth, innerHeight)
+    end
+
+    -- Next, draw the pending damage portion right next to the current health.
     if square.components.pending_damage and square.components.pending_damage.displayAmount then
         local pending = square.components.pending_damage
         local totalHealth = math.min(square.maxHp, square.hp + pending.displayAmount)
-        local totalHealthWidth = (totalHealth / square.maxHp) * innerBarWidth
-        local pendingColor = pending.isCrit and {1, 1, 0.2, 1} or {1, 1, 1, 1} -- Yellow for crit, white for normal
-        love.graphics.setColor(pendingColor)
-        love.graphics.rectangle("fill", innerBarX, innerBarY, totalHealthWidth, innerBarHeight)
+        local totalHealthWidth = math.floor((totalHealth / square.maxHp) * innerWidth)
+        local pendingDamageWidth = totalHealthWidth - currentHealthWidth
+        if pendingDamageWidth > 0 then
+            local pendingColor = pending.isCrit and {1, 1, 0.2, 1} or {1, 1, 1, 1} -- Yellow for crit, white for normal
+            love.graphics.setColor(pendingColor)
+            love.graphics.rectangle("fill", innerX + currentHealthWidth, innerY, pendingDamageWidth, innerHeight)
+        end
     end
-
-    local currentHealthWidth = (square.hp / square.maxHp) * innerBarWidth
-    love.graphics.setColor(healthColor)
-    love.graphics.rectangle("fill", innerBarX, innerBarY, currentHealthWidth, innerBarHeight)
-
-    -- 4. If shielded, draw an outline around the health bar.
+    -- 5. If shielded, draw an outline around the health bar.
     if square.components.shielded then
         love.graphics.setColor(0.7, 0.7, 1, 0.8) -- Light blue
         love.graphics.setLineWidth(1)
@@ -123,26 +133,34 @@ local function drawHealthBar(square, world)
 end
 
 local function drawWispBar(square)
-    local barMaxWidth, barHeight, barYOffset = square.size, 3, square.size + 6 -- Slightly below health bar
+    -- Only draw if the unit actually uses Wisp.
+    if not square.wisp or not square.maxWisp then return end
+    -- The HP bar (when not in combat) is 6px tall and its offset is size-2.
+    -- So its bottom edge is at (y + size - 2) + 6 = y + size + 4.
+    -- We position the wisp bar just below that.
+    local barMaxWidth, barHeight = square.size, 3
+    local barYOffset = square.size + 5
+    -- Floor the base coordinates to ensure crisp rendering.
+    local baseX, baseY = math.floor(square.x), math.floor(square.y + barYOffset)
     local maxNotches = 8 -- Character with max 8 wisp will have a bar as long as the health bar
     local currentNotches = math.min(square.maxWisp, maxNotches) -- Cap notches at maxNotches
     local barWidth = (currentNotches / maxNotches) * barMaxWidth -- Adjust bar length
-    local notchWidth = barWidth / currentNotches -- Width of each notch
+    local notchWidth = math.floor(barWidth / currentNotches) -- Width of each notch, floored for crispness
     local wispRatio = square.wisp / square.maxWisp -- 0 to 1
 
     -- Calculate the number of filled notches
     local filledNotches = math.floor(wispRatio * currentNotches)
 
     for i = 1, currentNotches do
-        local notchX = square.x + (i - 1) * notchWidth
+        local notchX = baseX + (i - 1) * notchWidth
         local notchColor = (i <= filledNotches) and {0.5, 0.5, 1, 1} or {0.1, 0.1, 0.3, 1} -- Light blue when full, dark blue when low
         love.graphics.setColor(notchColor)
-        love.graphics.rectangle("fill", notchX, square.y + barYOffset, notchWidth, barHeight)
+        love.graphics.rectangle("fill", notchX, baseY, notchWidth, barHeight)
 
         -- Optionally, draw notch separators for better visibility (adjust color and width as needed).
         if i < currentNotches then
             love.graphics.setColor(0, 0, 0, 0.2)
-            love.graphics.rectangle("fill", notchX + notchWidth - 1, square.y + barYOffset, 1, barHeight)
+            love.graphics.rectangle("fill", notchX + notchWidth - 1, baseY, 1, barHeight)
         end
     end
 end
@@ -431,7 +449,12 @@ local function draw_all_entities_and_effects(world)
             -- obstacles (like from Grovecall), while map-based obstacles (without sprites)
             -- are still drawn by the map renderer to prevent double-drawing.
             if entity.sprite then
-                love.graphics.setColor(1, 1, 1, 1)
+                -- Calculate alpha for fade-out effect.
+                local baseAlpha = 1
+                if entity.components.fade_out then
+                    baseAlpha = entity.components.fade_out.timer / entity.components.fade_out.initialTimer
+                end
+                love.graphics.setColor(1, 1, 1, baseAlpha)
                 local w, h = entity.sprite:getDimensions()
                 -- Anchor to bottom-center of its tile for consistency with characters
                 local drawX = entity.x + entity.size / 2
@@ -439,14 +462,14 @@ local function draw_all_entities_and_effects(world)
                 love.graphics.draw(entity.sprite, drawX, drawY, 0, 1, 1, w / 2, h)
             end
         else -- It's a character
-            local is_active = (entity.type == "player" and entity == world.selectedUnit)
+            local is_active = (entity.type == "player" and entity == world.ui.selectedUnit)
             draw_entity(entity, world, is_active) -- Pass world to draw_entity
         end
     end
 
     -- Draw health bars for combatting units on top of everything else.
     for _, entity in ipairs(drawOrder) do
-        if not entity.isObstacle and is_unit_in_combat(entity, world) and not entity.components.fade_out then
+        if is_unit_in_combat(entity, world) then
             drawAllBars(entity, world)
         end
     end
@@ -520,7 +543,7 @@ local function draw_tile_set(tileSet, r, g, b, a, world)
     -- Determine the center of the ripple effect based on the current game state.
     -- The ripple should be centered on the unit whose range is being displayed.
     -- The unit_info_system is the single source of truth for which unit is the ripple's source.
-    local ripple_center_unit = world.unitInfoMenu.rippleSourceUnit
+    local ripple_center_unit = world.ui.menus.unitInfo.rippleSourceUnit
 
     for posKey, _ in pairs(tileSet) do
         local tileX = tonumber(string.match(posKey, "(-?%d+)"))
@@ -531,7 +554,7 @@ local function draw_tile_set(tileSet, r, g, b, a, world)
             -- If a ripple source is active, calculate and apply the ripple brightness.
             if ripple_center_unit then
                 -- Calculate elapsed time since the ripple started for this unit.
-                local elapsedTime = love.timer.getTime() - (world.unitInfoMenu.rippleStartTime or love.timer.getTime())
+                local elapsedTime = love.timer.getTime() - (world.ui.menus.unitInfo.rippleStartTime or love.timer.getTime())
                 local rippleRadius = (elapsedTime * 10) % (15 + 3) -- (speed) % (maxRadius + width)
                 local baseDist = math.abs(tileX - ripple_center_unit.tileX) + math.abs(tileY - ripple_center_unit.tileY)
                 local deltaDist = math.abs(baseDist - rippleRadius)
@@ -567,14 +590,14 @@ local function draw_world_space_ui(world)
 
     if world.gameState == "gameplay" and world.turn == "player" then
         -- Draw the action menu's attack preview
-        if world.actionMenu.active and world.actionMenu.previewAttackableTiles then
-            draw_tile_set(world.actionMenu.previewAttackableTiles, 1, 0.2, 0.2, 0.5, world) -- Brighter red
+        if world.ui.menus.action.active and world.ui.menus.action.previewAttackableTiles then
+            draw_tile_set(world.ui.menus.action.previewAttackableTiles, 1, 0.2, 0.2, 0.5, world) -- Brighter red
         end
 
         -- Draw the action menu's AoE preview for ground-targeted attacks
-        if world.actionMenu.active and world.actionMenu.previewAoeShapes then
+        if world.ui.menus.action.active and world.ui.menus.action.previewAoeShapes then
             love.graphics.setColor(1, 0.2, 0.2, 0.6) -- Semi-transparent red, same as ground_aiming preview
-            for _, effectData in ipairs(world.actionMenu.previewAoeShapes) do
+            for _, effectData in ipairs(world.ui.menus.action.previewAoeShapes) do
                 local s = effectData.shape
                 if s.type == "rect" then
                     love.graphics.rectangle("fill", s.x, s.y, s.w, s.h)
@@ -584,8 +607,8 @@ local function draw_world_space_ui(world)
         end
 
                 -- New: Draw the fading range indicators after a move is confirmed.
-        if world.rangeFadeEffect and world.rangeFadeEffect.active then
-            local effect = world.rangeFadeEffect
+        if world.ui.pathing.rangeFadeEffect and world.ui.pathing.rangeFadeEffect.active then
+            local effect = world.ui.pathing.rangeFadeEffect
             local progress = effect.timer / effect.initialTimer -- Fades from 1 down to 0
 
             -- Draw fading attackable tiles (danger zone)
@@ -600,36 +623,36 @@ local function draw_world_space_ui(world)
         end
 
         -- 1. Draw the full attack range for the selected unit (the "danger zone").
-        local showDangerZone = world.playerTurnState == "unit_selected" or world.playerTurnState == "ground_aiming" or world.playerTurnState == "cycle_targeting"
-        if showDangerZone and world.attackableTiles then
-            draw_tile_set(world.attackableTiles, 1, 0.2, 0.2, 0.3, world)
+        local showDangerZone = world.ui.playerTurnState == "unit_selected" or world.ui.playerTurnState == "ground_aiming" or world.ui.playerTurnState == "cycle_targeting"
+        if showDangerZone and world.ui.pathing.attackableTiles then
+            draw_tile_set(world.ui.pathing.attackableTiles, 1, 0.2, 0.2, 0.3, world)
         end
 
         -- Draw hovered unit's danger zone (fainter)
-        if world.unitInfoMenu.active and world.hoverAttackableTiles then
-            draw_tile_set(world.hoverAttackableTiles, 1, 0.2, 0.2, 0.2, world)
+        if world.ui.menus.unitInfo.active and world.ui.pathing.hoverAttackableTiles then
+            draw_tile_set(world.ui.pathing.hoverAttackableTiles, 1, 0.2, 0.2, 0.2, world)
         end
 
         -- Draw hovered unit's movement range
-        if world.unitInfoMenu.active and world.hoverReachableTiles then
-            draw_tile_set(world.hoverReachableTiles, 0.2, 0.4, 1, 0.2, world)
+        if world.ui.menus.unitInfo.active and world.ui.pathing.hoverReachableTiles then
+            draw_tile_set(world.ui.pathing.hoverReachableTiles, 0.2, 0.4, 1, 0.2, world)
         end
 
         -- 2. Draw the movement range for the selected unit. This is drawn on top of the attack range.
-        if world.playerTurnState == "unit_selected" and world.reachableTiles then 
-            draw_tile_set(world.reachableTiles, 0.2, 0.4, 1, 0.6, world)
+        if world.ui.playerTurnState == "unit_selected" and world.ui.pathing.reachableTiles then 
+            draw_tile_set(world.ui.pathing.reachableTiles, 0.2, 0.4, 1, 0.6, world)
         end
 
         -- Draw enemy range display if active
-        if world.enemyRangeDisplay.active then
-            draw_tile_set(world.enemyRangeDisplay.attackableTiles, 1, 0.2, 0.2, 0.4, world) -- Red for attack
-            draw_tile_set(world.enemyRangeDisplay.reachableTiles, 0.2, 0.4, 1, 0.4, world) -- Blue for movement
+        if world.ui.menus.enemyRangeDisplay.active then
+            draw_tile_set(world.ui.menus.enemyRangeDisplay.attackableTiles, 1, 0.2, 0.2, 0.4, world) -- Red for attack
+            draw_tile_set(world.ui.menus.enemyRangeDisplay.reachableTiles, 0.2, 0.4, 1, 0.4, world) -- Blue for movement
         end
 
         -- 3. Draw the movement path.
-        if world.playerTurnState == "unit_selected" and world.movementPath and #world.movementPath > 0 then
+        if world.ui.playerTurnState == "unit_selected" and world.ui.pathing.movementPath and #world.ui.pathing.movementPath > 0 then
             local pathTiles = {}
-            for _, node in ipairs(world.movementPath) do
+            for _, node in ipairs(world.ui.pathing.movementPath) do
                 local tileX, tileY = Grid.toTile(node.x, node.y)
                 pathTiles[tileX .. "," .. tileY] = true
             end
@@ -637,8 +660,8 @@ local function draw_world_space_ui(world)
         end
 
         -- Draw the move destination effect (descending cursor and glowing tile)
-        if world.moveDestinationEffect then
-            local effect = world.moveDestinationEffect
+        if world.ui.pathing.moveDestinationEffect then
+            local effect = world.ui.pathing.moveDestinationEffect
             local pixelX, pixelY = Grid.toPixels(effect.tileX, effect.tileY)
             local size = Config.SQUARE_SIZE
 
@@ -705,14 +728,14 @@ local function draw_world_space_ui(world)
         end
 
         -- 4. Draw the map cursor.
-        if world.playerTurnState == "free_roam" or world.playerTurnState == "unit_selected" or
-           world.playerTurnState == "cycle_targeting" or world.playerTurnState == "ground_aiming" or 
-           world.playerTurnState == "enemy_range_display" or
-           world.playerTurnState == "rescue_targeting" or world.playerTurnState == "drop_targeting" or
-           world.playerTurnState == "shove_targeting" or world.playerTurnState == "take_targeting"
+        if world.ui.playerTurnState == "free_roam" or world.ui.playerTurnState == "unit_selected" or
+           world.ui.playerTurnState == "cycle_targeting" or world.ui.playerTurnState == "ground_aiming" or 
+           world.ui.playerTurnState == "enemy_range_display" or
+           world.ui.playerTurnState == "rescue_targeting" or world.ui.playerTurnState == "drop_targeting" or
+           world.ui.playerTurnState == "shove_targeting" or world.ui.playerTurnState == "take_targeting"
            then
             -- Animate the cursor's line width for a "lock in" effect
-            if world.playerTurnState == "unit_selected" or world.playerTurnState == "enemy_range_display" then
+            if world.ui.playerTurnState == "unit_selected" or world.ui.playerTurnState == "enemy_range_display" then
                 target_cursor_line_width = 6 -- Thicker when a unit is selected
             else
                 target_cursor_line_width = 2 -- Normal thickness
@@ -723,16 +746,16 @@ local function draw_world_space_ui(world)
             love.graphics.setColor(1, 1, 1, 1) -- White cursor outline
             love.graphics.setLineWidth(current_cursor_line_width)
             local baseCursorPixelX, baseCursorPixelY
-            if world.playerTurnState == "cycle_targeting" and world.cycleTargeting.active and #world.cycleTargeting.targets > 0 then
-                local target = world.cycleTargeting.targets[world.cycleTargeting.selectedIndex]
+            if world.ui.playerTurnState == "cycle_targeting" and world.ui.targeting.cycle.active and #world.ui.targeting.cycle.targets > 0 then
+                local target = world.ui.targeting.cycle.targets[world.ui.targeting.cycle.selectedIndex]
                 if target then
                     -- In cycle mode, the cursor is on the target itself.
                     baseCursorPixelX, baseCursorPixelY = target.x, target.y
                 else
-                    baseCursorPixelX, baseCursorPixelY = Grid.toPixels(world.mapCursorTile.x, world.mapCursorTile.y)
+                    baseCursorPixelX, baseCursorPixelY = Grid.toPixels(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y)
                 end
             else
-                baseCursorPixelX, baseCursorPixelY = Grid.toPixels(world.mapCursorTile.x, world.mapCursorTile.y)
+                baseCursorPixelX, baseCursorPixelY = Grid.toPixels(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y)
             end
 
             -- New: Hover and projected shadow logic
@@ -754,14 +777,14 @@ local function draw_world_space_ui(world)
         end
 
         -- Draw the ground aiming grid (the valid area for ground-targeted attacks)
-        if world.playerTurnState == "ground_aiming" and world.groundAimingGrid then
-            draw_tile_set(world.groundAimingGrid, 0.2, 0.8, 1, 0.4, world) -- A light, cyan-ish color
+        if world.ui.playerTurnState == "ground_aiming" and world.ui.pathing.groundAimingGrid then
+            draw_tile_set(world.ui.pathing.groundAimingGrid, 0.2, 0.8, 1, 0.4, world) -- A light, cyan-ish color
         end
 
         -- 5. Draw the Attack AoE preview
-        if world.playerTurnState == "ground_aiming" and world.attackAoETiles then
+        if world.ui.playerTurnState == "ground_aiming" and world.ui.targeting.attackAoETiles then
             love.graphics.setColor(1, 0.2, 0.2, 0.6) -- Semi-transparent red
-            for _, effectData in ipairs(world.attackAoETiles) do
+            for _, effectData in ipairs(world.ui.targeting.attackAoETiles) do
                 local s = effectData.shape
                 if s.type == "rect" then
                     love.graphics.rectangle("fill", s.x, s.y, s.w, s.h)
@@ -773,19 +796,19 @@ local function draw_world_space_ui(world)
         end
 
         -- 6. Draw Cycle Targeting UI (previews, etc.)
-        if world.playerTurnState == "cycle_targeting" and world.cycleTargeting.active then
-            local cycle = world.cycleTargeting
+        if world.ui.playerTurnState == "cycle_targeting" and world.ui.targeting.cycle.active then
+            local cycle = world.ui.targeting.cycle
             if #cycle.targets > 0 then
                 local target = cycle.targets[cycle.selectedIndex]
-                local attacker = world.actionMenu.unit
-                local attackData = world.selectedAttackName and AttackBlueprints[world.selectedAttackName]
+                local attacker = world.ui.menus.action.unit
+                local attackData = world.ui.targeting.selectedAttackName and AttackBlueprints[world.ui.targeting.selectedAttackName]
 
                 if target and attacker and attackData then
                     if attackData.useType == "support" then
                         -- Draw a green overlay on the targeted ally.
                         love.graphics.setColor(0.2, 1, 0.2, 0.3) -- Semi-transparent green.
                         love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
-                    elseif world.selectedAttackName == "phantom_step" then
+                    elseif world.ui.targeting.selectedAttackName== "phantom_step" then
                         -- Special preview for Phantom Step: show target and destination.
                         love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
                         love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
@@ -811,7 +834,7 @@ local function draw_world_space_ui(world)
                                 love.graphics.rectangle("fill", s.x, s.y, s.w, s.h)
                             end
                         end
-                    elseif world.selectedAttackName == "hookshot" then
+                    elseif world.ui.targeting.selectedAttackName== "hookshot" then
                         -- Special preview for Hookshot: draw a line to the target.
                         love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
                         local dist = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
@@ -829,7 +852,7 @@ local function draw_world_space_ui(world)
                                 love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                             end
                         end
-                    elseif world.selectedAttackName == "shockwave" then
+                    elseif world.ui.targeting.selectedAttackName== "shockwave" then
                         -- Special preview for Shockwave: show the AoE around the attacker.
                         love.graphics.setColor(1, 0.2, 0.2, 0.6) -- Semi-transparent red
                         if attacker and attackData.range then
@@ -854,8 +877,8 @@ local function draw_world_space_ui(world)
         end
 
         -- 7. Draw Rescue/Drop Targeting UI
-        if world.playerTurnState == "rescue_targeting" and world.rescueTargeting.active then
-            local rescue = world.rescueTargeting
+        if world.ui.playerTurnState == "rescue_targeting" and world.ui.targeting.rescue.active then
+            local rescue = world.ui.targeting.rescue
             -- Draw all potential targets with a base color
             love.graphics.setColor(0.2, 1, 0.2, 0.4) -- Semi-transparent green
             for _, target in ipairs(rescue.targets) do
@@ -872,8 +895,8 @@ local function draw_world_space_ui(world)
                     love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                 end
             end
-        elseif world.playerTurnState == "drop_targeting" and world.dropTargeting.active then
-            local drop = world.dropTargeting
+        elseif world.ui.playerTurnState == "drop_targeting" and world.ui.targeting.drop.active then
+            local drop = world.ui.targeting.drop
             -- Draw all potential drop tiles with a base color
             love.graphics.setColor(1, 0.8, 0.2, 0.4) -- Semi-transparent yellow/gold
             for _, tile in ipairs(drop.tiles) do
@@ -890,8 +913,8 @@ local function draw_world_space_ui(world)
                     love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                 end
             end
-        elseif world.playerTurnState == "shove_targeting" and world.shoveTargeting.active then
-            local shove = world.shoveTargeting
+        elseif world.ui.playerTurnState == "shove_targeting" and world.ui.targeting.shove.active then
+            local shove = world.ui.targeting.shove
             -- Draw all potential targets with a base color
             love.graphics.setColor(0.2, 0.8, 1, 0.4) -- Semi-transparent cyan
             for _, target in ipairs(shove.targets) do
@@ -909,7 +932,7 @@ local function draw_world_space_ui(world)
                     love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
 
                     -- Also highlight the destination tile with the same color
-                    local shover = world.actionMenu.unit
+                    local shover = world.ui.menus.action.unit
                     if shover then
                         local dx = selectedTarget.tileX - shover.tileX
                         local dy = selectedTarget.tileY - shover.tileY
@@ -919,8 +942,8 @@ local function draw_world_space_ui(world)
                     end
                 end
             end
-        elseif world.playerTurnState == "take_targeting" and world.takeTargeting.active then
-            local take = world.takeTargeting
+        elseif world.ui.playerTurnState == "take_targeting" and world.ui.targeting.take.active then
+            local take = world.ui.targeting.take
             -- Draw all potential targets with a base color
             love.graphics.setColor(0.8, 0.2, 0.8, 0.4) -- Semi-transparent magenta
             for _, target in ipairs(take.targets) do
@@ -970,7 +993,7 @@ local function draw_party_select_ui(world)
     -- Draw the grid boxes and character sprites
     for y = 1, gridRows do
         for x = 1, gridCols do
-            local charType = world.characterGrid[y] and world.characterGrid[y][x]
+            local charType = world.ui.partySelect.characterGrid[y] and world.ui.partySelect.characterGrid[y][x]
             local boxX = startX + (x - 1) * (boxSize + spacing)
             local boxY = startY + (y - 1) * (boxSize + spacing)
 
@@ -1001,7 +1024,7 @@ local function draw_party_select_ui(world)
             end
 
             -- Draw selection highlight if a square is selected
-            if world.selectedSquare and world.selectedSquare.x == x and world.selectedSquare.y == y then
+            if world.ui.partySelect.selectedSquare and world.ui.partySelect.selectedSquare.x == x and world.ui.partySelect.selectedSquare.y == y then
                 love.graphics.setColor(1, 1, 0, 1) -- Yellow for selected
                 love.graphics.setLineWidth(3)
                 love.graphics.rectangle("line", boxX, boxY, boxSize, boxSize)
@@ -1013,7 +1036,7 @@ local function draw_party_select_ui(world)
             end
 
             -- Draw cursor on top
-            if world.cursorPos.x == x and world.cursorPos.y == y then
+            if world.ui.partySelect.cursorPos.x == x and world.ui.partySelect.cursorPos.y == y then
                 local alpha = 0.6 + (math.sin(love.timer.getTime() * 5) + 1) / 2 * 0.4
                 love.graphics.setColor(1, 1, 1, alpha)
                 love.graphics.setLineWidth(3)
@@ -1026,8 +1049,8 @@ end
 local function draw_screen_space_ui(world)
     -- Draw Action Menu
     -- Only draw the menu if it's active AND the range fade effect is finished (or not active).
-    if world.actionMenu.active and not (world.rangeFadeEffect and world.rangeFadeEffect.active) then
-        local menu = world.actionMenu
+    if world.ui.menus.action.active and not (world.ui.pathing.rangeFadeEffect and world.ui.pathing.rangeFadeEffect.active) then
+        local menu = world.ui.menus.action
         local unit = menu.unit
         if not unit then return end -- Can't draw without a unit
 
@@ -1160,9 +1183,9 @@ local function draw_screen_space_ui(world)
     end
 
     -- Draw Map Menu
-    if world.mapMenu.active then
-        local menu = world.mapMenu
-        local cursorTile = world.mapCursorTile
+    if world.ui.menus.map.active then
+        local menu = world.ui.menus.map
+        local cursorTile = world.ui.mapCursorTile
         local worldCursorX, worldCursorY = Grid.toPixels(cursorTile.x, cursorTile.y)
         local font = love.graphics.getFont()
 

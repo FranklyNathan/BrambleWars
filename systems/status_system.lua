@@ -22,7 +22,7 @@ local function process_turn_end(entity, world)
         if effectData.duration and effectData.duration ~= math.huge and not effectData.externalControl then
             effectData.duration = effectData.duration - 1
             if effectData.duration <= 0 then
-                StatusEffectManager.remove(entity, effectType)
+                StatusEffectManager.remove(entity, effectType, world)
             end
         end
     end

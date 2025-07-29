@@ -20,7 +20,7 @@ EventBus:register("unit_died", function(data)
         end
         if killerHasBloodrush and killer.hp > 0 then
             killer.hasActed = false
-            EffectFactory.createDamagePopup(killer, "Refreshed!", false, {0.5, 1, 0.5, 1}) -- Green text
+            EffectFactory.createDamagePopup(world, killer, "Refreshed!", false, {0.5, 1, 0.5, 1}) -- Green text
         end
     end
 end)

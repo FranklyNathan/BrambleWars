@@ -24,7 +24,6 @@ function ShoveHandler.shove(shover, target, world)
     -- 3. Apply a lunge animation to the shover.
     shover.components.lunge = { timer = 0.2, initialTimer = 0.2, direction = shover.lastDirection }
 
-    print(shover.displayName .. " shoved " .. target.displayName)
     return true
 end
 

@@ -38,7 +38,17 @@ function CounterAttackSystem.update(dt, world)
                 -- Create a visual effect for the counter-attack. This will handle damage resolution.
                 local targetType = (defender.type == "player") and "enemy" or "player"
                 -- Mark this effect as a counter-attack so it doesn't trigger another counter.
-                EffectFactory.addAttackEffect(defender, basicAttackName, attacker.x, attacker.y, attacker.size, attacker.size, {1, 0, 0, 1}, 0, false, targetType, nil, nil, {isCounterAttack = true})
+                EffectFactory.addAttackEffect(world, {
+                    attacker = defender,
+                    attackName = basicAttackName,
+                    x = attacker.x,
+                    y = attacker.y,
+                    width = attacker.size,
+                    height = attacker.size,
+                    color = {1, 0, 0, 1},
+                    targetType = targetType,
+                    specialProperties = {isCounterAttack = true}
+                })
             end
 
             -- Remove the counter from the pending list.

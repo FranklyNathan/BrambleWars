@@ -52,7 +52,6 @@ function RescueHandler.rescue(rescuer, target, world)
     -- A new system will need to process this component.
     target.components.being_rescued = { timer = 0.25 } -- A short duration for the animation.
 
-    print(rescuer.displayName .. " rescued " .. target.displayName)
     return true
 end
 
@@ -82,7 +81,6 @@ function RescueHandler.drop(rescuer, tileX, tileY, world)
     rescuer.rescuePenalty = 0
     rescuer.weight = rescuer.baseWeight
 
-    print(rescuer.displayName .. " dropped " .. carriedUnit.displayName)
     return true
 end
 

@@ -6,11 +6,11 @@ local Assets = require("modules.assets")
 local BattleInfoMenu = {}
 
 function BattleInfoMenu.draw(world)
-    if not world.battleInfoMenu or not world.battleInfoMenu.active then
+    if not world.ui.menus.battleInfo or not world.ui.menus.battleInfo.active then
         return
     end
 
-	local menu = world.battleInfoMenu
+	local menu = world.ui.menus.battleInfo
 	local font = love.graphics.getFont()
 
 	-- Define column and row dimensions

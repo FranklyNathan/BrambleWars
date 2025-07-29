@@ -32,4 +32,15 @@ function Grid.getDestination(startX, startY, direction, distance)
     return destX, destY
 end
 
+-- Calculates the cardinal direction from a starting point to a destination point.
+function Grid.getDirection(fromX, fromY, toX, toY)
+    local dx = toX - fromX
+    local dy = toY - fromY
+    if math.abs(dx) > math.abs(dy) then
+        return (dx > 0) and "right" or "left"
+    else
+        return (dy > 0) and "down" or "up"
+    end
+end
+
 return Grid

@@ -167,27 +167,21 @@ function Assets.load()
     if success then
         Assets.shaders.outline = shader_or_error
     else
-        -- Shader creation failed, likely because they are not supported on this system/LÖVE version.
         Assets.shaders.outline = nil
-        print("Warning: Could not load outline shader. Shaders may not be supported. Error: " .. tostring(shader_or_error))
     end
 
     local success_solid, shader_or_error_solid = pcall(love.graphics.newShader, "assets/shaders/solid_color.glsl")
     if success_solid then
         Assets.shaders.solid_color = shader_or_error_solid
     else
-        -- Shader creation failed, likely because they are not supported on this system/LÖVE version.
         Assets.shaders.solid_color = nil
-        print("Warning: Could not load solid_color shader. Shaders may not be supported. Error: " .. tostring(shader_or_error_solid))
     end
 
     local success_grey, shader_or_error_grey = pcall(love.graphics.newShader, "assets/shaders/greyscale.glsl")
     if success_grey then
         Assets.shaders.greyscale = shader_or_error_grey
     else
-        -- Shader creation failed, likely because they are not supported on this system/LÖVE version.
         Assets.shaders.greyscale = nil
-        print("Warning: Could not load greyscale shader. Shaders may not be supported. Error: " .. tostring(shader_or_error_grey))
     end
 
     Assets.status_effects = load_data_files("data/status_effects/")

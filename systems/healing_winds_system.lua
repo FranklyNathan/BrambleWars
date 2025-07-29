@@ -7,28 +7,25 @@ local CombatActions = require("modules.combat_actions")
 
 local HealingWindsSystem = {}
 
--- Helper function to apply team-wide healing from Florges's passive.
-local function apply_healing_winds(world)
-    -- Heal player team if the list of living providers for HealingWinds is not empty.
-    if #world.teamPassives.player.HealingWinds > 0 then
-        for _, p in ipairs(world.players) do
-            if p.hp > 0 and p.hp < p.maxHp then
-                if CombatActions.applyDirectHeal(p, 5) then
-                    EffectFactory.createDamagePopup(p, "5", false, {0.5, 1, 0.5, 1}) -- Green text for heal
-                end
+-- Refactored to reduce code duplication. This helper now applies healing to any given list of units.
+local function heal_team(team_list, world)
+    if not team_list or #team_list == 0 then return end
+    for _, unit in ipairs(team_list) do
+        if unit.hp > 0 and unit.hp < unit.maxHp then
+            if CombatActions.applyDirectHeal(unit, 5) then
+                EffectFactory.createDamagePopup(world, unit, "5", false, {0.5, 1, 0.5, 1}) -- Green text for heal
             end
         end
     end
+end
 
-    -- Heal enemy team if the list of living providers for HealingWinds is not empty.
+-- The main function that checks for the passive and triggers the healing.
+local function apply_healing_winds(world)
+    if #world.teamPassives.player.HealingWinds > 0 then
+        heal_team(world.players, world)
+    end
     if #world.teamPassives.enemy.HealingWinds > 0 then
-        for _, e in ipairs(world.enemies) do
-            if e.hp > 0 and e.hp < e.maxHp then
-                if CombatActions.applyDirectHeal(e, 5) then
-                    EffectFactory.createDamagePopup(e, "5", false, {0.5, 1, 0.5, 1}) -- Green text for heal
-                end
-            end
-        end
+        heal_team(world.enemies, world)
     end
 end
 

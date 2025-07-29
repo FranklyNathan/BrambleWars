@@ -7,6 +7,7 @@ local Assets = require("modules.assets")
 local Grid = require("modules.grid")
 local StatusEffectManager = require("modules.status_effect_manager")
 local EntityFactory = require("data.entities")
+local ObjectBlueprints = require("data.object_blueprints")
 
 local World = {}
 World.__index = World
@@ -18,6 +19,7 @@ function World.new(gameMap)
     self.players = {}
     self.enemies = {}
     self.projectiles = {}
+    self.grapple_hooks = {}
     self.obstacles = {}
     self.attackEffects = {}
     self.particleEffects = {}
@@ -26,83 +28,83 @@ function World.new(gameMap)
     self.pendingCounters = {}
     self.new_entities = {}
     self.afterimageEffects = {}
+    self.rippleEffectQueue = {}
     self.enemyPathfindingCache = {} -- Cache for AI pathfinding data for the current turn.
 
-    -- Turn-based state
+    -- Core game state
     self.turn = "player" -- "player" or "enemy"
-    self.selectedUnit = nil -- The unit currently selected by the player
-    self.playerTurnState = "free_roam" -- e.g., "free_roam", "unit_selected", "unit_moving", "action_menu", "attack_targeting", "map_menu"
-    self.previousPlayerTurnState = nil -- Stores the state before entering a sub-state like 'unit_info_locked'
-    self.mapCursorTile = {x = 0, y = 0} -- The player's cursor on the game grid, in tile coordinates
-    self.reachableTiles = nil -- Will hold the table of tiles the selected unit can move to
-    self.came_from = nil -- Holds pathfinding data for path reconstruction
-    self.movementPath = nil -- Will hold the list of nodes for the movement arrow
-    self.actionMenu = { active = false, unit = nil, options = {}, selectedIndex = 1 } -- For post-move actions
-    self.mapMenu = { active = false, options = {}, selectedIndex = 1 } -- For actions on empty tiles
-    self.actionDescriptionMenu = { active = false, text = "" } -- For attack descriptions
-    self.hoverReachableTiles = nil -- For hover previews
-    self.hoverAttackableTiles = nil -- For hover previews
-    self.selectedAttackName = nil -- The name of the attack being targeted
-    self.attackAoETiles = nil -- The shape of the attack for the targeting preview
-    self.attackableTiles = nil -- The full attack range of a selected unit
-    self.groundAimingGrid = nil -- The grid of valid tiles for ground-aiming attacks
-    self.rangeFadeEffect = nil -- For fading out range indicators.
-        self.cycleTargeting = { -- For abilities that cycle through targets
-        active = false,
-        targets = {},
-        selectedIndex = 1
-
-    }
-    self.rescueTargeting = { -- For selecting a unit to rescue
-        active = false,
-        targets = {},
-        selectedIndex = 1
-    }
-    self.dropTargeting = { -- For selecting a tile to drop a unit
-        active = false,
-        tiles = {},
-        selectedIndex = 1
-
-    }
-    self.shoveTargeting = { -- For selecting a unit to shove
-        active = false,
-        targets = {},
-        selectedIndex = 1
-    }
-    self.takeTargeting = { -- For selecting a unit to take from
-        active = false,
-        targets = {},
-        selectedIndex = 1
-    }
-    self.enemyRangeDisplay = { -- For showing a single enemy's movement/attack range
-        active = false,
-        unit = nil,
-        reachableTiles = nil,
-        attackableTiles = nil
-    }
-    self.cursorInput = {
-        timer = 0,
-        initialDelay = 0.35, -- Time before repeat starts
-        repeatDelay = 0.05,  -- Time between subsequent repeats
-        activeKey = nil
-    }
-
-    self.battleInfoMenu = { active = false }
-    self.unitInfoMenu = {
-        active = false,
-        unit = nil,
-        rippleStartTime = 0,
-        rippleSourceUnit = nil,
-        isLocked = false, -- For the new locked-in inspection mode
-        selectedIndex = 1
-    }
-    self.turnShouldEnd = false -- New flag to defer ending the turn
-    -- Game State and UI
     self.gameState = "gameplay"
+
+    -- UI and player turn state are grouped into a 'ui' sub-table for better organization.
+    -- This separates the transient state of the user interface from the persistent state of the game world.
+    self.ui = {
+        playerTurnState = "free_roam", -- e.g., "free_roam", "unit_selected", "action_menu"
+        previousPlayerTurnState = nil, -- Stores the state before entering a sub-state like 'unit_info_locked'
+        selectedUnit = nil, -- The unit currently selected by the player
+        mapCursorTile = {x = 0, y = 0}, -- The player's cursor on the game grid, in tile coordinates
+        turnShouldEnd = false, -- Flag to defer ending the turn
+        cursorInput = {
+            timer = 0,
+            initialDelay = 0.35, -- Time before repeat starts
+            repeatDelay = 0.05,  -- Time between subsequent repeats
+            activeKey = nil
+        },
+
+        -- Pathing and range display data
+        pathing = {
+            reachableTiles = nil, -- Tiles the selected unit can move to
+            attackableTiles = nil, -- Full attack range of a selected unit
+            came_from = nil, -- Pathfinding data for path reconstruction
+            cost_so_far = nil, -- Pathfinding cost data
+            movementPath = nil, -- List of nodes for the movement arrow
+            hoverReachableTiles = nil, -- For hover previews
+            hoverAttackableTiles = nil, -- For hover previews
+            groundAimingGrid = nil, -- Valid tiles for ground-aiming attacks
+            rangeFadeEffect = nil, -- For fading out range indicators
+            moveDestinationEffect = nil, -- For the descending cursor effect
+        },
+
+        -- Targeting-specific data
+        targeting = {
+            selectedAttackName = nil, -- The name of the attack being targeted
+            attackAoETiles = nil, -- The shape of the attack for the targeting preview
+            cycle = { active = false, targets = {}, selectedIndex = 1 },
+            rescue = { active = false, targets = {}, selectedIndex = 1 },
+            drop = { active = false, tiles = {}, selectedIndex = 1 },
+            shove = { active = false, targets = {}, selectedIndex = 1 },
+            take = { active = false, targets = {}, selectedIndex = 1 },
+        },
+
+        -- Menu states
+        menus = {
+            action = { active = false, unit = nil, options = {}, selectedIndex = 1 },
+            map = { active = false, options = {}, selectedIndex = 1 },
+            battleInfo = { active = false },
+            unitInfo = {
+                active = false,
+                unit = nil,
+                rippleStartTime = 0,
+                rippleSourceUnit = nil,
+                isLocked = false, -- For the new locked-in inspection mode
+                selectedIndex = 1
+            },
+            enemyRangeDisplay = {
+                active = false,
+                unit = nil,
+                reachableTiles = nil,
+                attackableTiles = nil
+            },
+        },
+
+        -- Party selection screen state
+        partySelect = {
+            cursorPos = {x = 1, y = 1},
+            selectedSquare = nil,
+        }
+    }
+
     self.roster = {}
     self.characterGrid = {}
-    self.cursorPos = {x = 1, y = 1}
-    self.selectedSquare = nil
 
     -- Holds the state of active passives for each team, calculated once per frame.
     -- The boolean flags are set by the PassiveSystem and read by other systems.
@@ -168,43 +170,85 @@ function World.new(gameMap)
         end
     end
 
-    -- Create and place obstacles from the map's object layers.
-    -- This looks for a layer named "Obstacles" or "Trees" and makes them fully interactive.
-    print("--- Loading Obstacles from Object Layers ---")    
-    local obstacleLayerNames = {"Obstacles", "Trees", "Walls"}
-    local anyLayerFound = false
+    -- Create and place obstacles from the map's object and tile layers.
+    local obstacleLayerNames = {"Obstacles", "Trees", "Walls", "Boxes"}
     for _, layerName in ipairs(obstacleLayerNames) do
-        local obstacleLayer = self.map.layers[layerName]
-        if obstacleLayer and obstacleLayer.type == "objectgroup" then
-            anyLayerFound = true
-            print("Found obstacle layer: " .. obstacleLayer.name)
-            for _, obj in ipairs(obstacleLayer.objects) do
-                -- Tiled positions objects with GIDs from their bottom-left corner.
-                -- We must account for this difference, as rectangle objects are positioned from their top-left.
-                local objTopLeftX = obj.x
-                local objTopLeftY = obj.y
-                if obj.gid then
-                    -- This is a tile object, so adjust its Y-position from bottom-left to top-left.
-                    objTopLeftY = obj.y - obj.height
-                end
-                local tileX, tileY = Grid.toTile(objTopLeftX, objTopLeftY)
-                -- Recalculate pixel coordinates from tile coordinates to ensure perfect grid alignment.
-                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+        local layer = self.map.layers[layerName]
+        if layer then
+            if layer.type == "objectgroup" then
+                for _, obj in ipairs(layer.objects) do
+                    -- Tiled positions objects with GIDs from their bottom-left corner.
+                    -- We must account for this difference, as rectangle objects are positioned from their top-left.
+                    local objTopLeftX = obj.x
+                    local objTopLeftY = obj.y
+                    if obj.gid then
+                        -- This is a tile object, so adjust its Y-position from bottom-left to top-left.
+                        objTopLeftY = obj.y - obj.height
+                    end
+                    local tileX, tileY = Grid.toTile(objTopLeftX, objTopLeftY)
+                    -- Recalculate pixel coordinates from tile coordinates to ensure perfect grid alignment.
+                    local pixelX, pixelY = Grid.toPixels(tileX, tileY)
 
-                local obstacle = {
-                    x = pixelX, y = pixelY, tileX = tileX, tileY = tileY,
-                    width = obj.width, height = obj.height,
-                    size = obj.width, -- Assuming square obstacles for now
-                    weight = (obj.properties and obj.properties.weight) or "Heavy",
-                    components = {}, isObstacle = true
-                }
-                print(string.format("  - Queuing obstacle from object '%s': tile(%d,%d), pixels(%.1f,%.1f), size(%.1fx%.1f)", obj.name or "unnamed", tileX, tileY, pixelX, pixelY, obj.width, obj.height))
-                self:queue_add_entity(obstacle)
+                    local obstacle = {
+                        x = pixelX, y = pixelY,
+                        tileX = tileX, tileY = tileY,
+                        width = obj.width, height = obj.height, size = obj.width, -- Assuming square obstacles for now
+                        weight = (obj.properties and obj.properties.weight) or "Heavy", isObstacle = true,
+                        isImpassable = (obj.properties and obj.properties.isImpassable) or false,
+                        components = {},
+                        objectType = "generic" -- Default type
+                    }
+
+                    -- If the object is on a "Trees" layer, or has a Tiled type of "tree",
+                    -- treat it as a destructible tree by applying the blueprint.
+                    if (layerName == "Trees") or (obj.type == "tree") then
+                        local blueprint = ObjectBlueprints.tree
+                        if blueprint then
+                            for k, v in pairs(blueprint) do obstacle[k] = v end
+                            obstacle.hp = obstacle.maxHp
+                            obstacle.witStat = obstacle.witStat or 0
+                            obstacle.statusEffects = obstacle.statusEffects or {}
+                            obstacle.objectType = "tree"
+                            obstacle.sprite = Assets.images.Flag -- Assign the tree sprite
+                        end
+                    end
+                    self:queue_add_entity(obstacle)
+                end
+            elseif layer.type == "tilelayer" then
+                for y = 1, layer.height do
+                    for x = 1, layer.width do
+                        local tile = layer.data[y] and layer.data[y][x]
+                        if tile then -- A tile exists here
+                            local tileX, tileY = x - 1, y - 1 -- Tiled data is 1-based, our grid is 0-based
+                            local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+
+                            local obstacle = {
+                                x = pixelX, y = pixelY,
+                                tileX = tileX, tileY = tileY,
+                                width = tile.width, height = tile.height, size = tile.width,
+                                isObstacle = true,
+                                components = {},
+                                objectType = "generic"
+                            }
+
+                            -- If the tile is on a "Trees" layer, treat it as a destructible tree.
+                            if layerName == "Trees" then
+                                local blueprint = ObjectBlueprints.tree
+                                if blueprint then
+                                    for k, v in pairs(blueprint) do obstacle[k] = v end
+                                    obstacle.hp = obstacle.maxHp
+                                    obstacle.witStat = obstacle.witStat or 0
+                                    obstacle.statusEffects = obstacle.statusEffects or {}
+                                    obstacle.objectType = "tree"
+                                    obstacle.sprite = Assets.images.Flag -- Assign the tree sprite
+                                end
+                            end
+                            self:queue_add_entity(obstacle)
+                        end
+                    end
+                end
             end
         end
-    end
-    if not anyLayerFound then
-        print("No 'Obstacles', 'Trees', or 'Walls' object layer found.")
     end
 
     -- Set the initial camera position based on a "CameraStart" object in the map.
@@ -236,13 +280,13 @@ function World.new(gameMap)
     -- Manually initialize start-of-turn positions for the very first turn.
     -- This ensures the "undo move" feature works from the start.
     for _, player in ipairs(self.players) do
-        player.startOfTurnTileX, player.startOfTurnTileY = player.tileX, player.tileY
+        player.startOfMoveTileX, player.startOfMoveTileY = player.tileX, player.tileY
     end
 
     -- Set the initial cursor position to the first player.
     if self.players[1] then
-        self.mapCursorTile.x = self.players[1].tileX
-        self.mapCursorTile.y = self.players[1].tileY
+        self.ui.mapCursorTile.x = self.players[1].tileX
+        self.ui.mapCursorTile.y = self.players[1].tileY
     end
 
     -- Populate the 3x3 character selection grid based on the fixed order.
@@ -262,13 +306,6 @@ function World.new(gameMap)
     -- Process all queued additions to ensure entities like walls and obstacles are fully loaded.
     self:process_additions_and_deletions()
 
-    print("--- World Loading Complete ---")
-    print("Total obstacles loaded: " .. #self.obstacles)
-    for i, obs in ipairs(self.obstacles) do
-        print(string.format("  - Obstacle %d at tile(%d,%d)", i, obs.tileX, obs.tileY))
-    end
-    print("----------------------------")
-
     return self
 end
 
@@ -278,8 +315,8 @@ function World:endTurn()
         -- Announce that the player's turn has ended so systems can react.
         EventBus:dispatch("player_turn_ended", {world = self})
         self.turn = "enemy"
-        -- Clean up any lingering player selection UI state.
-        self.selectedUnit = nil
+        -- Clean up any lingering player selection UI state by resetting the selected unit.
+        self.ui.selectedUnit = nil
         -- Reset player state so they are no longer greyed out.
         for _, player in ipairs(self.players) do
             player.hasActed = false
@@ -291,7 +328,7 @@ function World:endTurn()
         -- Announce that the enemy's turn has ended.
         EventBus:dispatch("enemy_turn_ended", {world = self})
         self.turn = "player"
-        self.playerTurnState = "free_roam"
+        self.ui.playerTurnState = "free_roam"
         -- Reset enemy state so they are no longer greyed out.
         for _, enemy in ipairs(self.enemies) do
            enemy.hasActed = false
@@ -299,9 +336,9 @@ function World:endTurn()
         -- Reset player state for their upcoming turn.
         for _, player in ipairs(self.players) do
            player.hasActed = false
-           -- Store the starting position for this turn, in case of move cancellation.
-           player.startOfTurnTileX, player.startOfTurnTileY = player.tileX, player.tileY
-           player.startOfTurnDirection = player.lastDirection
+           -- Store the starting position for the upcoming move, in case of cancellation.
+           player.startOfMoveTileX, player.startOfMoveTileY = player.tileX, player.tileY
+           player.startOfMoveDirection = player.lastDirection
         end
         -- Clear the AI pathfinding cache for the next enemy turn.
         self.enemyPathfindingCache = {}
@@ -309,8 +346,8 @@ function World:endTurn()
         -- At the start of the player's turn, move the cursor to the first available unit.
         for _, p in ipairs(self.players) do
             if p.hp > 0 and not p.hasActed then
-                self.mapCursorTile.x = p.tileX
-                self.mapCursorTile.y = p.tileY
+                self.ui.mapCursorTile.x = p.tileX
+                self.ui.mapCursorTile.y = p.tileY
                 break -- Found the first one, stop searching.
             end
         end
@@ -355,6 +392,8 @@ function World:_add_entity(entity)
         table.insert(self.enemies, entity)
     elseif entity.type == "projectile" then
         table.insert(self.projectiles, entity)
+    elseif entity.type == "grapple_hook" then
+        table.insert(self.grapple_hooks, entity)
     elseif entity.isObstacle then
         table.insert(self.obstacles, entity)
     end
@@ -372,6 +411,8 @@ function World:_remove_from_specific_list(entity)
         list = self.enemies
     elseif entity.type == "projectile" then
         list = self.projectiles
+    elseif entity.type == "grapple_hook" then
+        list = self.grapple_hooks
     elseif entity.isObstacle then
         list = self.obstacles
     end

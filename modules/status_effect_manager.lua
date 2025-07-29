@@ -23,7 +23,7 @@ function StatusEffectManager.apply(target, effectData, world)
     EventBus:dispatch("status_applied", {target = target, effect = effectData, world = world})
 end
 -- Remove a status effect from a target.
-function StatusEffectManager.remove(target, effectType)
+function StatusEffectManager.remove(target, effectType, world)
     if not target or not target.statusEffects or not target.statusEffects[effectType] then return end
 
     -- Remove effect.
@@ -31,7 +31,7 @@ function StatusEffectManager.remove(target, effectType)
     target.statusEffects[effectType] = nil
 
     -- Dispatch event for the removal of a status effect, allowing other systems to react.
-    EventBus:dispatch("status_removed", {target = target, effect = effectData})
+    EventBus:dispatch("status_removed", {target = target, effect = effectData, world = world})
 end
 
 -- Process status effects at the start of a unit's turn (for ticking effects).
@@ -53,7 +53,7 @@ function StatusEffectManager.processTurnStart(target, world)
 
        -- Create a "Poison!" popup to signal the damage
        local popupText = "Poison! -" .. damage
-       EffectFactory.createDamagePopup(target, popupText, false, {0.5, 0.1, 0.8, 1}) -- Dark purple text
+       EffectFactory.createDamagePopup(world, target, popupText, false, {0.5, 0.1, 0.8, 1}) -- Dark purple text
    end
 end
 

@@ -4,6 +4,7 @@
 local StatusEffectManager = require("modules.status_effect_manager")
 local EventBus = require("modules.event_bus")
 local EffectFactory = require("modules.effect_factory")
+local Assets = require("modules.assets")
 
 local CombatActions = {}
 
@@ -24,7 +25,7 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
     if target.components.shielded then
         target.components.shielded = nil -- Consume the shield
         -- Create a "Blocked!" popup instead of a damage number.
-        EffectFactory.createDamagePopup(target, "Blocked!", false, {0.7, 0.7, 1, 1}) -- Light blue text
+        EffectFactory.createDamagePopup(world, target, "Blocked!", false, {0.7, 0.7, 1, 1}) -- Light blue text
         return -- Stop further processing, no damage is taken.
     end 
 
@@ -35,7 +36,7 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
         target.hp = math.max(0, target.hp - roundedDamage)
         -- Only create the default popup if not explicitly told otherwise.
         if options.createPopup ~= false then
-            EffectFactory.createDamagePopup(target, roundedDamage, isCrit)
+            EffectFactory.createDamagePopup(world, target, roundedDamage, isCrit)
         end
         target.components.shake = { timer = 0.2, intensity = 2 }
         target.components.damage_tint = { timer = 0.3, initialTimer = 0.3 } -- Add red tint effect
@@ -53,25 +54,24 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
 
         -- If the unit was alive and is now at 0 HP, it just died.
         if wasAlive and target.hp <= 0 then
-            -- Announce the death to any interested systems (quests, passives, etc.)
-            -- This is the primary source for kill-related events.
-            EventBus:dispatch("unit_died", { victim = target, killer = attacker, world = world })
-        end
-    end
-end
-
-function CombatActions.executeShockwave(attacker, attackData, world)
-    if not attacker or not attackData or not world then return false end
-    for _, entity in ipairs(world.all_entities) do
-        if entity.hp ~= nil and entity.hp > 0 and entity.type ~= attacker.type then
-            -- Shockwave hits all enemies within range of the *attacker*, not the target.
-            local distance = math.abs(attacker.tileX - entity.tileX) + math.abs(attacker.tileY - entity.tileY)
-            if distance <= attackData.range then                
-                StatusEffectManager.applyStatusEffect(entity, {type = "paralyzed", duration = 2, attacker = attacker}, world)
+            if target.isObstacle then
+                -- The obstacle was destroyed.
+                -- Don't delete immediately. Start a fade-out so the HP bar animation can play.
+                -- The effect_timer_system will mark it for deletion when the timer is up.
+                target.components.fade_out = { timer = 0.8, initialTimer = 0.8 }
+                -- Create a shatter effect for visual feedback.
+                local shatterColor = {0.4, 0.3, 0.2, 1} -- Brownish wood color
+                EffectFactory.createShatterEffect(world, target.x, target.y, target.size, shatterColor)
+                -- Play a sound effect.
+                if Assets.sounds.tree_break then
+                    Assets.sounds.tree_break:play()
+                end
+            else
+                -- A unit died. Announce the death to any interested systems (quests, passives, etc.)
+                EventBus:dispatch("unit_died", { victim = target, killer = attacker, world = world })
             end
         end
     end
-    return true
 end
 
 return CombatActions

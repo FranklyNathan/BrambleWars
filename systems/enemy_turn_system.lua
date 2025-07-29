@@ -23,39 +23,6 @@ local function findClosestPlayer(enemy, world)
     return closestPlayer
 end
 
--- Finds the best tile in a unit's range from which to attack a target using a directional pattern.
-local function findBestAttackPosition(enemy, target, patternFunc, reachableTiles, world)
-    if not patternFunc then return nil end
-    
-    local bestPosKey, closestDistSq = nil, math.huge
-    -- Create a temporary enemy object to test positions without modifying the real one.
-    -- It needs both tile and pixel coordinates for the pattern functions to work correctly.
-    local tempEnemy = { tileX = 0, tileY = 0, x = 0, y = 0, size = enemy.size, lastDirection = "down" }
-    
-    for posKey, _ in pairs(reachableTiles) do
-        local tileX = tonumber(string.match(posKey, "(-?%d+)"))
-        local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
-        tempEnemy.tileX, tempEnemy.tileY = tileX, tileY
-        tempEnemy.x, tempEnemy.y = Grid.toPixels(tileX, tileY)
-        
-        -- Make the temporary unit face the target from its potential new spot.
-        local dx, dy = target.tileX - tempEnemy.tileX, target.tileY - tempEnemy.tileY
-        if math.abs(dx) > math.abs(dy) then tempEnemy.lastDirection = (dx > 0) and "right" or "left"
-        else tempEnemy.lastDirection = (dy > 0) and "down" or "up" end
-        
-        -- Check if the target is in the attack pattern from this new position.
-        if WorldQueries.isTargetInPattern(tempEnemy, patternFunc, {target}, world) then
-            -- This is a valid attack spot. Is it the best one so far (closest to target)?
-            local distSq = (tileX - target.tileX)^2 + (tileY - target.tileY)^2
-            if distSq < closestDistSq then
-                closestDistSq = distSq
-                bestPosKey = posKey
-            end
-        end
-    end
-    return bestPosKey -- Return the best spot found, or nil.
-end
-
 -- Finds the best tile in a unit's range from which to use a cycle_target attack on a target.
 local function findBestCycleTargetAttackPosition(enemy, target, attackName, reachableTiles, world)
     local bestPosKey, closestDistSq = nil, math.huge
@@ -162,7 +129,6 @@ end
 function EnemyTurnSystem.update(dt, world)
     if world.turn ~= "enemy" then return end
 
-    -- print("--- EnemyTurnSystem Frame ---")
     -- If any action is ongoing (animations, projectiles, etc.), wait for it to resolve.
     if WorldQueries.isActionOngoing(world) then return end
 
@@ -182,14 +148,14 @@ function EnemyTurnSystem.update(dt, world)
             if actingEnemy.components.ai and actingEnemy.components.ai.pending_attack then
                 -- Execute the pending attack.
                 local pending = actingEnemy.components.ai.pending_attack
-                world.cycleTargeting.active = true
-                world.cycleTargeting.targets = {pending.target}
-                world.cycleTargeting.selectedIndex = 1
-                world.selectedAttackName = pending.name
+                world.ui.targeting.cycle.active = true
+                world.ui.targeting.cycle.targets = {pending.target}
+                world.ui.targeting.cycle.selectedIndex = 1
+                world.ui.targeting.selectedAttackName = pending.name
                 UnitAttacks[pending.name](actingEnemy, world)
                 actingEnemy.components.ai.pending_attack = nil
-                world.cycleTargeting.active = false
-                world.selectedAttackName = nil
+                world.ui.targeting.cycle.active = false
+                world.ui.targeting.selectedAttackName= nil
                 actingEnemy.components.action_in_progress = true
                 return
             elseif actingEnemy.components.action_in_progress then
@@ -275,14 +241,14 @@ function EnemyTurnSystem.update(dt, world)
         if bestAction then -- An optimal action was found
             if bestAction.type == "attack_now" then
                 -- Attack from the current position.
-                world.cycleTargeting.active = true
-                world.cycleTargeting.targets = {targetPlayer}
-                world.cycleTargeting.selectedIndex = 1
-                world.selectedAttackName = bestAction.attackName
+                world.ui.targeting.cycle.active = true
+                world.ui.targeting.cycle.targets = {targetPlayer}
+                world.ui.targeting.cycle.selectedIndex = 1
+                world.ui.targeting.selectedAttackName= bestAction.attackName
                 UnitAttacks[bestAction.attackName](actingEnemy, world)
 
-                world.cycleTargeting.active = false
-                world.selectedAttackName = nil
+                world.ui.targeting.cycle.active = false
+                world.ui.targeting.selectedAttackName= nil
                 actingEnemy.components.action_in_progress = true
                 return
 
@@ -318,7 +284,7 @@ function EnemyTurnSystem.update(dt, world)
         end
     else
         -- No more enemies to act, which means the enemy turn is over.
-        world.turnShouldEnd = true
+        world.ui.turnShouldEnd = true
     end
 end
 

@@ -948,11 +948,21 @@ end
 --- Draw an individual Layer
 -- @param layer The Layer to draw
 function Map.drawLayer(_, layer)
-	-- Custom check to prevent drawing special logical layers like spawn points.
-	-- These layers are for game logic, not visual representation.
-	if layer.name == "PlayerSpawns" or layer.name == "EnemySpawns" or layer.name == "Obstacles" or layer.name == "Permanents" or layer.name == "Walls" then
+	-- First, check for a generic custom property to hide a layer. This is the preferred method.
+	-- To use this, set a custom boolean property "isLogicLayer" to true on any layer in Tiled.
+	if layer.properties and layer.properties.isLogicLayer then
 		return
 	end
+
+	-- As a fallback, also check for hardcoded logical layer names to prevent them from rendering.
+	-- This ensures spawn points and other logical layers don't appear as white boxes if the
+	-- "isLogicLayer" property isn't set in Tiled.
+	local logicLayers = {
+		["PlayerSpawns"] = true, ["EnemySpawns"] = true, ["Obstacles"] = true,
+		["Walls"] = true, ["Boxes"] = true, ["Water"] = true, ["Ridges"] = true,
+		["Trees"] = true,
+	}
+	if logicLayers[layer.name] then return end
 
 	local r,g,b,a = lg.getColor()
 	-- if the layer has a tintcolor set

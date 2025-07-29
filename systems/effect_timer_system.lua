@@ -150,12 +150,12 @@ function EffectTimerSystem.update(dt, world)
     end
 
     -- 3. Update range fade-out effect timer
-    if world.rangeFadeEffect and world.rangeFadeEffect.active then
-        local effect = world.rangeFadeEffect
+    if world.ui.pathing.rangeFadeEffect and world.ui.pathing.rangeFadeEffect.active then
+        local effect = world.ui.pathing.rangeFadeEffect
         effect.timer = math.max(0, effect.timer - dt)
         if effect.timer == 0 then
             -- The fade is complete, clear the effect.
-            world.rangeFadeEffect = nil
+            world.ui.pathing.rangeFadeEffect = nil
         end
     end
 
@@ -170,7 +170,19 @@ function EffectTimerSystem.update(dt, world)
             local color = {1, 0, 0, 1} -- Default color (adjust if needed)
 
             -- Create a single attack effect with its delay
-            EffectFactory.addAttackEffect(rippleData.attacker, rippleData.attackName, s.x, s.y, s.w, s.h, color, effectData.delay, false, rippleData.targetType, nil, rippleData.statusEffect, rippleData.specialProperties)
+            EffectFactory.addAttackEffect(world, {
+                attacker = rippleData.attacker,
+                attackName = rippleData.attackName,
+                x = s.x,
+                y = s.y,
+                width = s.w,
+                height = s.h,
+                color = color,
+                delay = effectData.delay,
+                targetType = rippleData.targetType,
+                statusEffect = rippleData.statusEffect,
+                specialProperties = rippleData.specialProperties
+            })
             
             -- Move to the next effect in the ripple
             rippleData.currentIndex = rippleData.currentIndex + 1
