@@ -4,6 +4,9 @@
 local Grid = require("modules.grid")
 local AttackBlueprints = require("data.attack_blueprints")
 local EffectFactory = require("modules.effect_factory")
+local WorldQueries = require("modules.world_queries")
+local CombatFormulas = require("modules.combat_formulas")
+local CombatActions = require("modules.combat_actions")
 
 local ProjectileSystem = {}
 
@@ -11,63 +14,54 @@ function ProjectileSystem.update(dt, world)
     -- Iterate backwards to safely remove projectiles
     for i = #world.projectiles, 1, -1 do
         local p = world.projectiles[i]
-        local projComp = p.components.projectile
+        local comp = p.components.projectile
 
-        projComp.timer = projComp.timer - dt
-        if projComp.timer <= 0 then
-            projComp.timer = projComp.timer + projComp.moveDelay
+        comp.timer = comp.timer - dt
+        if comp.timer <= 0 then
+            comp.timer = comp.timer + comp.moveDelay
 
-            -- Move the projectile one step
-            p.x, p.y = Grid.getDestination(p.x, p.y, projComp.direction, projComp.moveStep)
-            local currentTileX, currentTileY = Grid.toTile(p.x, p.y)
+            -- 1. Move the projectile one step and update its tile coordinates.
+            p.x, p.y = Grid.getDestination(p.x, p.y, comp.direction, comp.moveStep)
+            p.tileX, p.tileY = Grid.toTile(p.x, p.y)
 
-          -- Check for map boundary collision
-            if currentTileX < 0 or currentTileX >= world.map.width or
-               currentTileY < 0 or currentTileY >= world.map.height then
+            -- 2. Check for map boundary collision.
+            if p.tileX < 0 or p.tileX >= world.map.width or p.tileY < 0 or p.tileY >= world.map.height then
                 p.isMarkedForDeletion = true
             else
-                -- Check for collision with an obstacle.
-                local hitObstacle = false
-                for _, obstacle in ipairs(world.obstacles) do
-                    local obsStartX, obsStartY = obstacle.tileX, obstacle.tileY
-                    local obsEndX, obsEndY = Grid.toTile(obstacle.x + obstacle.width - 1, obstacle.y + obstacle.height - 1)
-                    if currentTileX >= obsStartX and currentTileX <= obsEndX and currentTileY >= obsStartY and currentTileY <= obsEndY then
-                        hitObstacle = true
-                        break
+                -- 3. Check for collision with units.
+                local targetType = comp.isEnemyProjectile and "player" or "enemy"
+                local targets = (targetType == "player") and world.players or world.enemies
+                for _, target in ipairs(targets) do
+                    if target.hp > 0 and not comp.hitTargets[target] and target.tileX == p.tileX and target.tileY == p.tileY then
+                        local attackData = AttackBlueprints[comp.attackName]
+                        local damage = CombatFormulas.calculateBaseDamage(comp.attacker, target, attackData)
+                        CombatActions.applyDirectDamage(world, target, damage, false, comp.attacker)
+                        
+                        comp.hitTargets[target] = true -- Mark as hit to prevent multi-hits.
+
+                        if not comp.isPiercing then
+                            p.isMarkedForDeletion = true
+                            break -- Stop checking other targets.
+                        end
                     end
                 end
 
-                if hitObstacle then
-                    p.isMarkedForDeletion = true
-                else
-                    -- Check for collision with units
-                    local targetType = projComp.isEnemyProjectile and "player" or "enemy"
-                    local targets = (targetType == "player") and world.players or world.enemies
+                -- 4. Check for collision with obstacles, but only if the projectile is still active.
+                if not p.isMarkedForDeletion then
+                    local hitObstacle = WorldQueries.getObstacleAt(p.tileX, p.tileY, world)
+                    if hitObstacle and not comp.hitTargets[hitObstacle] then
+                        if hitObstacle.hp then -- It's a destructible obstacle (e.g., a tree).
+                            local attackData = AttackBlueprints[comp.attackName]
+                            local damage = CombatFormulas.calculateBaseDamage(comp.attacker, hitObstacle, attackData)
+                            CombatActions.applyDirectDamage(world, hitObstacle, damage, false, comp.attacker)
+                            
+                            comp.hitTargets[hitObstacle] = true -- Mark as hit.
 
-                    for _, target in ipairs(targets) do
-                        if target.hp > 0 and not projComp.hitTargets[target] and target.tileX == currentTileX and target.tileY == currentTileY then
-                            -- Collision detected! Create an attack effect to deal damage.
-                            local attackName = projComp.attackName
-                            EffectFactory.addAttackEffect(world, {
-                                attacker = projComp.attacker,
-                                attackName = attackName,
-                                x = target.x,
-                                y = target.y,
-                                width = target.size,
-                                height = target.size,
-                                color = {1, 0.5, 0, 1},
-                                targetType = targetType,
-                                statusEffect = projComp.statusEffect
-                            })
-
-                            -- Mark target as hit to prevent re-hitting
-                            projComp.hitTargets[target] = true
-
-                            -- If the projectile is not piercing, destroy it.
-                            if not projComp.isPiercing then
+                            if not comp.isPiercing then
                                 p.isMarkedForDeletion = true
-                                break -- Stop checking other targets for this projectile
                             end
+                        else -- It's an indestructible obstacle (e.g., a box).
+                            p.isMarkedForDeletion = true
                         end
                     end
                 end

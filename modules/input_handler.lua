@@ -302,10 +302,12 @@ local function handle_unit_info_locked_input(key, world)
         if key == "a" or key == "d" then
             -- Horizontal navigation only applies within the stat grid
             if oldIndex >= STATS_START and oldIndex <= STATS_END then
-                if key == "a" then -- Move left
-                    if oldIndex % 2 == 0 then newIndex = oldIndex - 1 end -- Is it a right-side stat (even index)?
-                else -- Move right
-                    if oldIndex % 2 == 1 then newIndex = oldIndex + 1 end -- Is it a left-side stat (odd index)?
+                if key == "a" then -- Move left from a right-side stat
+                    -- Right-side stats (Def, Res, Wgt) have odd indices (7, 9, 11).
+                    if oldIndex % 2 == 1 then newIndex = oldIndex - 1 end
+                else -- Move right (key == "d") from a left-side stat
+                    -- Left-side stats (Atk, Mag, Wit) have even indices (6, 8, 10).
+                    if oldIndex % 2 == 0 then newIndex = oldIndex + 1 end
                 end
             end
         end

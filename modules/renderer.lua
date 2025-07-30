@@ -240,9 +240,24 @@ local function draw_visual_effect_overlays(entity, currentAnim, spriteSheet, w, 
 end
 
 -- Draws shader-based overlays for game states, like "has acted" or "is selected".
-local function draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation)
+local function draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, onWater)
     -- Dying units should not have state overlays.
     if entity.components.fade_out then return end
+
+    -- If the unit is swimming, set up the scissor clipping for all state overlays.
+    -- This ensures that effects like the greyscale overlay are also clipped correctly.
+    local oldScissor = {love.graphics.getScissor()}
+    if onWater then
+        -- The sprite is drawn anchored at bottom-center. Its top-left corner in world space is at
+        -- (drawX - w / 2, finalDrawY - h).
+        -- We want to set a scissor for the top half of the sprite's area.
+        local scissorWorldX = drawX - w / 2
+        local scissorWorldY = finalDrawY - h
+        local scissorWorldW = w
+        local scissorWorldH = h * 0.7 -- Show the top 70% of the sprite, hiding the bottom 30%.
+        -- Convert world coordinates to screen coordinates for the scissor.
+        love.graphics.setScissor(scissorWorldX - Camera.x, scissorWorldY - Camera.y, scissorWorldW, scissorWorldH)
+    end
 
     -- If the unit has acted, draw a greyscale version on top of everything else.
     if entity.hasActed and Assets.shaders.greyscale then
@@ -250,7 +265,7 @@ local function draw_state_overlays(entity, is_active_player, currentAnim, sprite
         Assets.shaders.greyscale:send("strength", 1.0)
         currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
     end
-
+ 
     -- If this is the active player, draw the outline on top as an overlay.
     if is_active_player and Assets.shaders.outline then
         love.graphics.setShader(Assets.shaders.outline)
@@ -259,6 +274,10 @@ local function draw_state_overlays(entity, is_active_player, currentAnim, sprite
         Assets.shaders.outline:send("outline_only", true)
         currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
     end
+
+    -- Reset the scissor regardless of whether it was set. This restores the clipping
+    -- rectangle to its previous state (usually the full screen).
+    love.graphics.setScissor(unpack(oldScissor))
 end
 
 local function draw_entity(entity, world, is_active_player)
@@ -379,7 +398,7 @@ local function draw_entity(entity, world, is_active_player)
         draw_visual_effect_overlays(entity, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, baseAlpha)
 
         -- 5. Draw overlays for game state (acted, selected)
-        draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation)
+        draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, onWater)
 
         -- 6. Reset shader state
         love.graphics.setShader()

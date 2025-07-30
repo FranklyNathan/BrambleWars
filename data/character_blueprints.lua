@@ -6,7 +6,7 @@
 local CharacterBlueprints = {
     clementine = {
         displayName = "Clementine",
-        species = "Ducklin",
+        species = "Duckling",
         originType = "marshborn",
         class = "warrior",
         maxHp = 28,
@@ -124,7 +124,7 @@ local CharacterBlueprints = {
             witStat = 20,
         },
         attacks = {
-            "walnut_toss", "slash", "fireball"
+            "walnut_toss", "slash", "fireball", "hookshot"
         }
     },
     cedric = {

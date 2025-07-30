@@ -275,6 +275,31 @@ local function findTargetsForPhantomStep(target, world)
     return not WorldQueries.isTileOccupied(behindTileX, behindTileY, nil, world)
 end
 
+-- Helper for findValidTargets_Cycle: Checks for line-of-sight that is blocked only by obstacles, not units.
+local function isLineOfSightBlockedByObstacle(attacker, target, world)
+    local isStraightLine = (attacker.tileX == target.tileX or attacker.tileY == target.tileY)
+    if not isStraightLine then return true end -- Not a straight line, so it's "blocked" for this purpose
+
+    local dist = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
+    if attacker.tileX == target.tileX then -- Vertical line
+        local dirY = (target.tileY > attacker.tileY) and 1 or -1
+        for i = 1, dist - 1 do
+            local checkY = attacker.tileY + i * dirY
+            if WorldQueries.getObstacleAt(attacker.tileX, checkY, world) then
+                return true -- Path is blocked by an obstacle
+            end
+        end
+    else -- Horizontal line
+        local dirX = (target.tileX > attacker.tileX) and 1 or -1
+        for i = 1, dist - 1 do
+            if WorldQueries.getObstacleAt(attacker.tileX + i * dirX, attacker.tileY, world) then
+                return true -- Path is blocked by an obstacle
+            end
+        end
+    end
+    return false -- Path is clear of obstacles
+end
+
 -- Helper function to find targets for "cycle_target" style attacks.
 local function findValidTargets_Cycle(attacker, attackData, world)
     local validTargets = {}
@@ -328,11 +353,9 @@ local function findValidTargets_Cycle(attacker, attackData, world)
                 if inRange then
                     if attackData.line_of_sight_only then
                         -- Fireball ignores blocking units/ledges for its LOS check.
-                        if attackName == "fireball" then
-                            if (attacker.tileX == target.tileX or attacker.tileY == target.tileY) then
-                                table.insert(validTargets, target)
-                            end
-                        elseif findTargetsInLineOfSight(attacker, target, world) then
+                        if attackName == "fireball" and not isLineOfSightBlockedByObstacle(attacker, target, world) then
+                            table.insert(validTargets, target)
+                        elseif findTargetsInLineOfSight(attacker, target, world) and attackName ~= "fireball" then
                             table.insert(validTargets, target)
                         end
                     elseif attackName == "phantom_step" then

@@ -359,7 +359,8 @@ function UnitInfoMenu.draw(world)
                 end
                 local displayText = (speciesText ~= "" and (speciesText .. " ") or "") .. classText
                 -- The key "class" is added for selection logic in the input handler later.
-                drawFullSlice(displayText, nil, "class", true)
+                -- Set the last parameter to `false` to left-align the text like the name.
+                drawFullSlice(displayText, nil, "class", false)
             end
 
             -- 3. Draw Equipped Weapon
@@ -369,17 +370,18 @@ function UnitInfoMenu.draw(world)
                     weaponName = WeaponBlueprints[unit.equippedWeapon].name
                 end
                 -- The key "weapon" is added for selection logic in the input handler later.
-                drawFullSlice(weaponName, nil, "weapon", true) -- Treat as header
+                -- Set the last parameter to `false` to left-align the text for consistency.
+                drawFullSlice(weaponName, nil, "weapon", false)
             end
 
             -- 4. Draw HP and Wisp
-            drawFullSlice("HP", math.floor(unit.hp) .. "/" .. unit.maxHp, "maxHp")
-            drawFullSlice("Wisp", math.floor(unit.wisp) .. "/" .. unit.maxWisp, "maxWisp")
+            drawFullSlice("HP", math.floor(unit.hp) .. "/" .. unit.finalMaxHp, "maxHp")
+            drawFullSlice("Wisp", math.floor(unit.wisp) .. "/" .. unit.finalMaxWisp, "maxWisp")
 
             -- 5. Draw Stats Grid
-            drawStatSlicePair("Atk:", unit.attackStat, "attackStat", "Def:", unit.defenseStat, "defenseStat")
-            drawStatSlicePair("Mag:", unit.magicStat, "magicStat", "Res:", unit.resistanceStat, "resistanceStat")
-            drawStatSlicePair("Wit:", unit.witStat, "witStat", "Wgt:", unit.weight, "weight")
+            drawStatSlicePair("Atk:", unit.finalAttackStat, "attackStat", "Def:", unit.finalDefenseStat, "defenseStat")
+            drawStatSlicePair("Mag:", unit.finalMagicStat, "magicStat", "Res:", unit.finalResistanceStat, "resistanceStat")
+            drawStatSlicePair("Wit:", unit.finalWitStat, "witStat", "Wgt:", unit.finalWeight, "weight")
 
             -- 6. Draw Moves Header and List
         love.graphics.setColor(0, 0, 0, 0.3)
