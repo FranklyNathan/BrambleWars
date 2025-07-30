@@ -4,10 +4,11 @@
 -- which are implemented in unit_attacks.lua.
 
 local CharacterBlueprints = {
-    drapionsquare = {
-        displayName = "Drapion",
-        originType = "cavernborn",
-        class = "lancer",
+    clementine = {
+        displayName = "Clementine",
+        species = "Ducklin",
+        originType = "marshborn",
+        class = "warrior",
         maxHp = 28,
         wispStat = 2,
         portrait = "Default_Portrait.png",
@@ -18,9 +19,10 @@ local CharacterBlueprints = {
         witStat = 5, -- Used when calculating if a move hits/misses and if a move is a critical hit
         movement = 6, -- How many tiles a character can move in a turn
         weight = 8, -- Heavy
-        equippedWeapon = "travelers_lance",
-        dominantColor = {0.5, 0.2, 0.8}, -- Drapion: Purple
-        passives = {"Bloodrush"}, -- Characters can have multiple 
+        equippedWeapon = "travelers_sword",
+        canSwim = true,
+        dominantColor = {0.5, 0.2, 0.8}, -- Clementine: Purple
+        passives = {}, -- Characters can have multiple
         growths = {
             maxHp = 90,
             attackStat = 50,
@@ -30,11 +32,12 @@ local CharacterBlueprints = {
             witStat = 35,
         },
         attacks = {
-            "froggy_rush", "venom_stab", "impale", "phantom_step"
+            "snap", "venom_stab", "slash", "phantom_step"
         } --The first attack must always be a basic attack, the rest can be any attack(s) defined in attack_blueprints.lua
     },
-    florgessquare = {
-        displayName = "Florges",
+    biblo = {
+        displayName = "Biblo",
+        species = "Owl",
         originType = "forestborn",
         class = "bard",
         maxHp = 20,
@@ -48,7 +51,8 @@ local CharacterBlueprints = {
         movement = 5,
         weight = 3, -- Light
         equippedWeapon = "travelers_staff",
-        dominantColor = {1.0, 0.6, 0.8}, -- Florges: Light Florges
+        isFlying = true,
+        dominantColor = {1.0, 0.6, 0.8}, -- Biblo: Light Pink
         passives = {"HealingWinds"},
         growths = {
             maxHp = 70,
@@ -62,10 +66,11 @@ local CharacterBlueprints = {
             "quill_jab", "mend", "invigoration"
         }
     },
-    venusaursquare = {
-        displayName = "Venusaur",
-        originType = "cavernborn",
-        class = "druid",
+    winthrop = {
+        displayName = "Winthrop",
+        species = "Beaver",
+        originType = "marshborn",
+        class = "mage",
         maxHp = 25,
         wispStat = 4,
         portrait = "Default_Portrait.png",
@@ -77,7 +82,8 @@ local CharacterBlueprints = {
         movement = 5,
         weight = 9, -- Very Heavy
         equippedWeapon = "travelers_tome",
-        dominantColor = {0.6, 0.9, 0.6}, -- Venusaur: Pale Green
+        canSwim = true,
+        dominantColor = {0.6, 0.9, 0.6}, -- Winthrop: Pale Green
         passives = {},
         growths = {
             maxHp = 80,
@@ -91,10 +97,11 @@ local CharacterBlueprints = {
             "quill_jab", "fireball", "eruption", "shockwave"
         }
     },
-    magnezonesquare = {
-        displayName = "Magnezone",
-        originType = "cavernborn",
-        class = "mage",
+    mortimer = {
+        displayName = "Mortimer",
+        species = "Toad",
+        originType = "forestborn",
+        class = "druid",
         maxHp = 26,
         wispStat = 4,
         portrait = "Default_Portrait.png",
@@ -106,7 +113,7 @@ local CharacterBlueprints = {
         movement = 4,
         weight = 10, -- Heaviest
         equippedWeapon = "travelers_tome",
-        dominantColor = {0.6, 0.6, 0.7}, -- Magnezone: Steel Grey
+        dominantColor = {0.6, 0.6, 0.7}, -- Mortimer: Steel Grey
         passives = {},
         growths = {
             maxHp = 75,
@@ -120,10 +127,11 @@ local CharacterBlueprints = {
             "walnut_toss", "slash", "fireball"
         }
     },
-    electiviresquare = {
-        displayName = "Electivire",
+    cedric = {
+        displayName = "Cedric",
+        species = "Mole",
         originType = "cavernborn",
-        class = "warrior",
+        class = "trickster",
         maxHp = 24,
         wispStat = 4,
         portrait = "Default_Portrait.png",
@@ -134,9 +142,9 @@ local CharacterBlueprints = {
         witStat = 7,
         movement = 5,
         weight = 7, -- Medium-Heavy
-        equippedWeapon = "travelers_sword",
-        dominantColor = {1.0, 0.8, 0.1}, -- Electivire: Electric Venusaur
-        passives = {},
+        equippedWeapon = "travelers_whip",
+        dominantColor = {1.0, 0.8, 0.1}, -- Cedric: Electric Yellow
+        passives = {"Whiplash"},
         growths = {
             maxHp = 85,
             attackStat = 55,
@@ -146,13 +154,14 @@ local CharacterBlueprints = {
             witStat = 45,
         },
         attacks = {
-            "snap", "uppercut", "quick_step", "longshot"
+            "snap", "uppercut", "quick_step", "hookshot"
         }
     },
-    tangrowthsquare = {
-        displayName = "Tangrowth",
-        originType = "marshborn",
-        class = "trickster",
+    ollo = {
+        displayName = "Ollo",
+        species = "Fox",
+        originType = "forestborn",
+        class = "scout",
         maxHp = 30,
         wispStat = 4,
         portrait = "Default_Portrait.png",
@@ -163,9 +172,9 @@ local CharacterBlueprints = {
         witStat = 3,
         movement = 4,
         weight = 9, -- Very Heavy
-        equippedWeapon = "travelers_whip",
-        dominantColor = {0.1, 0.3, 0.8}, -- Tangrowth: Dark Blue
-        passives = {"Whiplash"},
+        equippedWeapon = "travelers_bow",
+        dominantColor = {0.1, 0.3, 0.8}, -- Ollo: Dark Blue
+        passives = {},
         growths = {
             maxHp = 100,
             attackStat = 45,
@@ -175,16 +184,17 @@ local CharacterBlueprints = {
             witStat = 20,
         },
         attacks = {
-            "froggy_rush", "hookshot"
+            "quill_jab", "longshot", "hookshot"
         }
     },
-    sceptilesquare = {
-        displayName = "Sceptile",
+    plop = {
+        displayName = "Plop",
+        species = "Frog",
         originType = "marshborn",
-        class = "thief",
+        class = "lancer",
         maxHp = 22,
         wispStat = 4,
-        portrait = "Sceptile_Portrait.png",
+        portrait = "Default_Portrait.png",
         attackStat = 7,
         defenseStat = 4,
         magicStat = 5,
@@ -192,9 +202,9 @@ local CharacterBlueprints = {
         witStat = 8,
         movement = 6,
         weight = 6, -- Medium
-        equippedWeapon = "travelers_knife",
+        equippedWeapon = "travelers_lance",
         canSwim = true,
-        dominantColor = {0.1, 0.8, 0.3}, -- Sceptile: Leaf Green
+        dominantColor = {0.1, 0.8, 0.3}, -- Plop: Leaf Green
         passives = {},
         growths = {
             maxHp = 75,
@@ -205,13 +215,14 @@ local CharacterBlueprints = {
             witStat = 50,
         },
         attacks = {
-            "froggy_rush", "slash", "grovecall", "hookshot"
+            "froggy_rush", "impale", "grovecall", "hookshot"
         }
     },
-    pidgeotsquare = {
-        displayName = "Pidgeot",
-        originType = "forestborn",
-        class = "scout",
+    dupe = {
+        displayName = "Dupe",
+        species = "Bat",
+        originType = "caverborn",
+        class = "thief",
         maxHp = 21,
         wispStat = 4,
         portrait = "Default_Portrait.png",
@@ -222,10 +233,10 @@ local CharacterBlueprints = {
         witStat = 8,
         movement = 8,
         weight = 5, -- Medium-Light
-        equippedWeapon = "travelers_bow",
+        equippedWeapon = "travelers_knife",
         isFlying = true,
-        dominantColor = {0.8, 0.7, 0.4}, -- Pidgeot: Sandy Brown
-        passives = {"Aetherfall"},
+        dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown
+        passives = {},
         growths = {
             maxHp = 80,
             attackStat = 45,
@@ -235,7 +246,7 @@ local CharacterBlueprints = {
             witStat = 60,
         },
         attacks = {
-            "froggy_rush", "slash"
+            "snap", "slash"
         }
     }
 }

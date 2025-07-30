@@ -34,6 +34,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         -- We'll set it to the character's dominant color for visual consistency.
         square.color = {blueprint.dominantColor[1], blueprint.dominantColor[2], blueprint.dominantColor[3], 1}
         square.isFlying = blueprint.isFlying or false -- Add the flying trait to the entity
+        square.species = blueprint.species
         square.canSwim = blueprint.canSwim or false -- Add the swimming trait to the entity
         square.weight = blueprint.weight or 1 -- Default to a light weight
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
@@ -57,14 +58,14 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
 
         -- A mapping from the internal player type to the asset name for scalability.
         local playerSpriteMap = {
-            drapionsquare = "Drapion",
-            florgessquare = "Florges",
-            magnezonesquare = "Magnezone",
-            tangrowthsquare = "Tangrowth",
-            venusaursquare = "Venusaur",
-            electiviresquare = "Electivire",
-            sceptilesquare = "Sceptile",
-            pidgeotsquare = "Pidgeot"
+            clementine = "Clementine",
+            biblo = "Biblo",
+            winthrop = "Winthrop",
+            mortimer = "Mortimer",
+            cedric = "Cedric",
+            ollo = "Ollo",
+            plop = "Plop",
+            dupe = "Dupe"
         }
 
         local spriteName = playerSpriteMap[subType]

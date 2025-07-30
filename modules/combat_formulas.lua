@@ -102,11 +102,11 @@ function CombatFormulas.calculateExpGain(attacker, defender, isKill)
     -- Failsafe if defender has no expReward defined.
     if not defender.expReward then return 0 end
 
-    local baseExp = 50
+    local baseExp = 20
     local levelDifference = defender.level - attacker.level
     local rewardDivisor = isKill and 10 or 100
 
-    local expGained = baseExp + levelDifference * (defender.expReward / rewardDivisor)
+    local expGained = (baseExp + levelDifference) * (defender.expReward / rewardDivisor)
 
     -- EXP gain should not be negative. If the player is a much higher level,
     -- they get a minimum amount of EXP (e.g., 1).

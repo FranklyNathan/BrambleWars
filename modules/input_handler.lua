@@ -93,16 +93,6 @@ local function move_cursor(dx, dy, world, isFastMove)
     end
 end
 
--- Finds a player unit at a specific tile coordinate.
-local function getPlayerUnitAt(tileX, tileY, world)
-    for _, p in ipairs(world.players) do
-        if p.hp > 0 and p.tileX == tileX and p.tileY == tileY then
-            return p
-        end
-    end
-    return nil
-end
-
 -- Centralized function to clean up UI and state after a player action is confirmed.
 local function finalize_player_action(unit, world)
     -- 1. Flag that the unit has completed its action for this turn.
@@ -139,39 +129,44 @@ end
 
 -- Handles input when the player is freely moving the cursor around the map.
 local function handle_free_roam_input(key, world)
-    if key == "j" then -- Universal "Confirm" / "Action" key
-        local unit = getPlayerUnitAt(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y, world)
-        if unit and not unit.hasActed and not unit.isCarried then
+    if key == "j" then
+        local unit = WorldQueries.getUnitAt(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y, nil, world)
+        if unit then
+            -- A unit is on the tile
+            if unit.type == "player" and not unit.hasActed and not unit.isCarried then
             -- If the cursor is on an available player unit, select it.
-            world.ui.selectedUnit = unit
-            set_player_turn_state("unit_selected", world)
-            -- Calculate movement range and pathing data
-            world.ui.pathing.reachableTiles, world.ui.pathing.came_from, world.ui.pathing.cost_so_far = Pathfinding.calculateReachableTiles(unit, world)
-            world.ui.pathing.attackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, world.ui.pathing.reachableTiles)
-            world.ui.pathing.movementPath = {} -- Start with an empty path
-            world.ui.pathing.cursorPath = {} -- Start with an empty cursor path
+                world.ui.selectedUnit = unit
+                set_player_turn_state("unit_selected", world)
+                -- Calculate movement range and pathing data
+                world.ui.pathing.reachableTiles, world.ui.pathing.came_from, world.ui.pathing.cost_so_far = Pathfinding.calculateReachableTiles(unit, world)
+                world.ui.pathing.attackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, world.ui.pathing.reachableTiles)
+                world.ui.pathing.movementPath = {} -- Start with an empty path
+                world.ui.pathing.cursorPath = {} -- Start with an empty cursor path
 
-            -- Store the unit's position at the start of this specific move action.
-            -- This is crucial for the "undo" logic to work correctly for multi-move turns.
-            unit.startOfMoveTileX, unit.startOfMoveTileY = unit.tileX, unit.tileY
-            unit.startOfMoveDirection = unit.lastDirection
+                -- Store the unit's position at the start of this specific move action.
+                -- This is crucial for the "undo" logic to work correctly for multi-move turns.
+                unit.startOfMoveTileX, unit.startOfMoveTileY = unit.tileX, unit.tileY
+                unit.startOfMoveDirection = unit.lastDirection
 
-            -- Add a selection flash effect to the unit.
-            unit.components.selection_flash = { timer = 0, duration = 0.25 }
-
-        else
-            local anyUnit = WorldQueries.getUnitAt(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y, nil, world)
-            if anyUnit and anyUnit.type == "enemy" then
+                -- Add a selection flash effect to the unit.
+                unit.components.selection_flash = { timer = 0, duration = 0.25 }
+            elseif unit.type == "enemy" then
                 -- Pressing 'J' on an enemy now shows their range.
                 -- Set up the data *before* changing the state, so event listeners have the correct info.
                 local display = world.ui.menus.enemyRangeDisplay
                 display.active = true
-                display.unit = anyUnit
-                local reachable, _ = Pathfinding.calculateReachableTiles(anyUnit, world)
+                display.unit = unit
+                local reachable, _ = Pathfinding.calculateReachableTiles(unit, world)
                 display.reachableTiles = reachable
-                display.attackableTiles = RangeCalculator.calculateAttackableTiles(anyUnit, world, reachable)
+                display.attackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, reachable)
                 set_player_turn_state("enemy_range_display", world)
             end
+        else
+            -- No unit on the tile, it's empty. Open map menu.
+            world.ui.menus.map.active = true
+            world.ui.menus.map.options = {{text = "End Turn", key = "end_turn"}}
+            world.ui.menus.map.selectedIndex = 1
+            set_player_turn_state("map_menu", world)
         end
     elseif key == "l" then -- Lock Unit Info Menu
         local unit = WorldQueries.getUnitAt(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y, nil, world)
@@ -182,14 +177,6 @@ local function handle_free_roam_input(key, world)
             menu.selectedIndex = 1 -- Reset index
             world.ui.previousPlayerTurnState = "free_roam"
             set_player_turn_state("unit_info_locked", world)
-        end
-    elseif key == "k" then -- Open map menu on empty tile
-        local anyUnit = WorldQueries.getUnitAt(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y, nil, world)
-        if not anyUnit then
-            world.ui.menus.map.active = true
-            world.ui.menus.map.options = {{text = "End Turn", key = "end_turn"}}
-            world.ui.menus.map.selectedIndex = 1
-            set_player_turn_state("map_menu", world)
         end
     end
 end
@@ -592,13 +579,23 @@ local function handle_action_menu_input(key, world)
         local selectedOption = menu.options[menu.selectedIndex]
         if not selectedOption then return end
 
+        -- Check for wisp cost and target validity before proceeding.
+        local attackData = getAttackDataByName(selectedOption.key)
+        if attackData then
+            if attackData.wispCost and menu.unit.wisp < attackData.wispCost then
+                return -- Not enough wisp, do nothing.
+            end
+            if attackData.targeting_style == "cycle_target" and #WorldQueries.findValidTargetsForAttack(menu.unit, selectedOption.key, world) == 0 then
+                return -- No valid targets, do nothing.
+            end
+        end
+
         -- Use the new handler table for special actions.
         local handler = specialActionHandlers[selectedOption.key]
         if handler then
             handler(menu.unit, world)
         else -- It's an attack.
             local attackName = selectedOption.key
-            local attackData = getAttackDataByName(attackName)
             local unit = menu.unit
             world.ui.targeting.selectedAttackName= attackName
             menu.active = false

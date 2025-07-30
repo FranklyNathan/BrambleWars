@@ -11,7 +11,7 @@ function PromotionMenu.draw(world)
     local unit = menu.unit
 
     -- Menu dimensions and positioning
-    local menuWidth = 250
+    local menuWidth = 300
     local menuHeight = 320
     local menuX = (Config.VIRTUAL_WIDTH - menuWidth) / 2
     local menuY = (Config.VIRTUAL_HEIGHT - menuHeight) / 2

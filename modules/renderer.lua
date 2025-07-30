@@ -1009,14 +1009,14 @@ local function draw_party_select_ui(world)
 
     -- A local mapping from player type to asset name, mirroring entities.lua
     local playerSpriteMap = {
-        drapionsquare = "Drapion",
-        florgessquare = "Florges",
-        magnezonesquare = "Magnezone",
-        tangrowthsquare = "Tangrowth",
-        venusaursquare = "Venusaur",
-        electiviresquare = "Electivire",
-        sceptilesquare = "Sceptile",
-        pidgeotsquare = "Pidgeot"
+        clementine = "Clementine",
+        biblo = "Biblo",
+        winthrop = "Winthrop",
+        mortimer = "Mortimer",
+        cedric = "Cedric",
+        ollo = "Ollo",
+        plop = "Plop",
+        dupe = "Dupe"
     }
 
     -- Draw the grid boxes and character sprites
@@ -1207,14 +1207,21 @@ local function draw_screen_space_ui(world)
             local sliceX = menuX
             local sliceY = menuY + (i - 1) * sliceHeight
             local sliceColor, textColor
-
-            -- Check if an attack option is invalid (has no valid targets)
-            local is_valid = true
+ 
+            -- Determine if the option is usable (has targets and enough wisp)
+            local is_usable = true
             local attackData = AttackBlueprints[option.key]
-            if attackData and attackData.targeting_style == "cycle_target" then
-                local validTargets = WorldQueries.findValidTargetsForAttack(menu.unit, option.key, world)
-                if #validTargets == 0 then
-                    is_valid = false
+            if attackData then
+                -- Check for wisp cost
+                if attackData.wispCost and menu.unit.wisp < attackData.wispCost then
+                    is_usable = false
+                end
+                -- Check for valid targets if wisp is sufficient
+                if is_usable and attackData.targeting_style == "cycle_target" then
+                    local validTargets = WorldQueries.findValidTargetsForAttack(menu.unit, option.key, world)
+                    if #validTargets == 0 then
+                        is_usable = false
+                    end
                 end
             end
 
@@ -1229,8 +1236,8 @@ local function draw_screen_space_ui(world)
                 textColor = {1, 1, 1, 1} -- White
             end
 
-            -- If the option is invalid, grey it out
-            if not is_valid then
+            -- If the option is not usable, grey it out
+            if not is_usable then
                 sliceColor = {0.2, 0.2, 0.2, 0.8} -- Dark grey
                 textColor = {0.5, 0.5, 0.5, 1} -- Grey
             end

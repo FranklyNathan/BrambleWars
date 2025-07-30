@@ -111,9 +111,20 @@ function UnitInfoMenu.draw(world)
                 currentSliceIndex = currentSliceIndex + 1
                 local isSelected = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == currentSliceIndex
 
+                local canAfford = true
+                -- Check if the key corresponds to an attack and if the unit can afford it.
+                if key and type(key) == "string" and AttackBlueprints[key] then
+                    local attackData = AttackBlueprints[key]
+                    if attackData.wispCost and unit.wisp < attackData.wispCost then
+                        canAfford = false
+                    end
+                end
+
                 -- Draw slice background with selection highlight
                 if isSelected then
                     love.graphics.setColor(0.95, 0.95, 0.7, 0.9) -- Bright yellow/cream for selected
+                elseif not canAfford then
+                    love.graphics.setColor(0.2, 0.2, 0.2, 0.8) -- Dark grey for unaffordable
                 else
                     love.graphics.setColor(0.2, 0.2, 0.1, 0.9) -- Dark brown/grey
                 end
@@ -126,7 +137,9 @@ function UnitInfoMenu.draw(world)
 
                 local textY = yOffset + (sliceHeight - font:getHeight()) / 2
                 if isHeader then
-                    if isSelected then love.graphics.setColor(0, 0, 0, 1) else love.graphics.setColor(1, 1, 1, 1) end
+                    if isSelected then love.graphics.setColor(0, 0, 0, 1)
+                    else love.graphics.setColor(1, 1, 1, 1)
+                    end
                     love.graphics.printf(text, menuX, textY, menuWidth, "center")
                 else
                     -- Set color for the stat name (e.g., "HP")
@@ -139,6 +152,7 @@ function UnitInfoMenu.draw(world)
                         end
                         love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
                     elseif isSelected then love.graphics.setColor(0, 0, 0, 1)
+                    elseif not canAfford then love.graphics.setColor(0.5, 0.5, 0.5, 1) -- Grey text
                     else love.graphics.setColor(1, 1, 1, 1) end
                     love.graphics.print(text, menuX + 10, textY)
 
@@ -159,6 +173,8 @@ function UnitInfoMenu.draw(world)
                             love.graphics.setColor(0.5, 1, 0.5, 1) -- Green
                         elseif isSelected then
                             love.graphics.setColor(0, 0, 0, 1)
+                        elseif not canAfford then
+                            love.graphics.setColor(0.5, 0.5, 0.5, 1) -- Grey text
                         else
                             love.graphics.setColor(1, 1, 1, 1)
                         end
@@ -336,12 +352,14 @@ function UnitInfoMenu.draw(world)
 
             -- 2. Draw Class
             do
-                local className = "Unknown"
+                local speciesText = unit.species or ""
+                local classText = "Unknown"
                 if unit.class and ClassBlueprints[unit.class] then
-                    className = ClassBlueprints[unit.class].name
+                    classText = ClassBlueprints[unit.class].name
                 end
+                local displayText = (speciesText ~= "" and (speciesText .. " ") or "") .. classText
                 -- The key "class" is added for selection logic in the input handler later.
-                drawFullSlice(className, nil, "class", true)
+                drawFullSlice(displayText, nil, "class", true)
             end
 
             -- 3. Draw Equipped Weapon
@@ -371,14 +389,14 @@ function UnitInfoMenu.draw(world)
                 if attackData then
                     local formattedName = formatAttackName(attackName)
                     local wispString = (attackData.wispCost and attackData.wispCost > 0) and string.rep("♦", attackData.wispCost) or ""
-                    drawFullSlice(formattedName, wispString)
+                    drawFullSlice(formattedName, wispString, attackName)
                 end
             end
 
             -- 7. Draw carried unit info if it exists
             if unit.carriedUnit then
                 local carried = unit.carriedUnit
-                drawFullSlice("Carrying: " .. (carried.displayName or carried.enemyType), nil, true)
+                drawFullSlice("Carrying: " .. (carried.displayName or carried.enemyType), nil, "carried", true)
             end
 
             -- Draw the appended Power and Description slices if a move is selected

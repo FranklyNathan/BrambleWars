@@ -171,9 +171,9 @@ function World.new(gameMap)
     -- Define the full roster in a fixed order based on the asset load sequence.
     -- This order determines their position in the party select grid.
     local characterOrder = {
-        "drapionsquare", "sceptilesquare", "pidgeotsquare",
-        "venusaursquare", "florgessquare", "magnezonesquare",
-        "tangrowthsquare", "electiviresquare"
+        "clementine", "plop", "dupe",
+        "winthrop", "biblo", "mortimer",
+        "ollo", "cedric"
     }
 
     -- Create all playable characters and store them in the roster.
@@ -190,10 +190,18 @@ function World.new(gameMap)
 
     -- Populate the active party based on the map's "PlayerSpawns" object layer.
     if self.map.layers["PlayerSpawns"] then
+        -- 1. Collect and sort spawn points to ensure a consistent order.
+        local spawnPoints = {}
         for _, spawnPoint in ipairs(self.map.layers["PlayerSpawns"].objects) do
-            -- The 'name' property of the Tiled object should match the character's blueprint key.
-            local playerType = spawnPoint.name
-            if self.roster[playerType] then
+            table.insert(spawnPoints, spawnPoint)
+        end
+        -- Sort by name, e.g., "SpawnTile1", "SpawnTile2", ...
+        table.sort(spawnPoints, function(a, b) return a.name < b.name end)
+
+        -- 2. Iterate through the character roster and assign them to spawn points.
+        for i, playerType in ipairs(characterOrder) do
+            local spawnPoint = spawnPoints[i]
+            if spawnPoint and self.roster[playerType] then
                 local playerEntity = self.roster[playerType]
                 -- Tiled object coordinates are in pixels. Convert them to tile coordinates.
                 local tileX, tileY = Grid.toTile(spawnPoint.x, spawnPoint.y)

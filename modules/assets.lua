@@ -14,14 +14,14 @@ local Assets = {
 -- This function should be called once in love.load()
 function Assets.load()
     -- Load images
-    Assets.images.Drapion = love.graphics.newImage("assets/Drapion.png")
-    Assets.images.Sceptile = love.graphics.newImage("assets/Sceptile.png")
-    Assets.images.Pidgeot = love.graphics.newImage("assets/Pidgeot.png")
-    Assets.images.Venusaur = love.graphics.newImage("assets/Venusaur.png")
-    Assets.images.Florges = love.graphics.newImage("assets/Florges.png")
-    Assets.images.Magnezone = love.graphics.newImage("assets/Magnezone.png")
-    Assets.images.Tangrowth = love.graphics.newImage("assets/Tangrowth.png")
-    Assets.images.Electivire = love.graphics.newImage("assets/Electivire.png")
+    Assets.images.Clementine = love.graphics.newImage("assets/PlayerUnits/Clementine.png")
+    Assets.images.Plop = love.graphics.newImage("assets/PlayerUnits/Plop.png")
+    Assets.images.Dupe = love.graphics.newImage("assets/PlayerUnits/Dupe.png")
+    Assets.images.Winthrop = love.graphics.newImage("assets/PlayerUnits/Winthrop.png")
+    Assets.images.Biblo = love.graphics.newImage("assets/PlayerUnits/Biblo.png")
+    Assets.images.Mortimer = love.graphics.newImage("assets/PlayerUnits/Mortimer.png")
+    Assets.images.Ollo = love.graphics.newImage("assets/PlayerUnits/Ollo.png")
+    Assets.images.Cedric = love.graphics.newImage("assets/PlayerUnits/Cedric.png")
     Assets.images.Brawler = love.graphics.newImage("assets/brawler.png")
     Assets.images.Archer = love.graphics.newImage("assets/archer.png")
     Assets.images.Flag = love.graphics.newImage("assets/tree.png") -- For Sceptile's attack
@@ -29,8 +29,6 @@ function Assets.load()
 
     -- Load portraits
     Assets.images.Default_Portrait = love.graphics.newImage("assets/Portraits/Default_Portrait.png")
-    Assets.images.Sceptile_Portrait = love.graphics.newImage("assets/Portraits/Sceptile_Portrait.png")
-    Assets.images.Rapidash_Portrait = love.graphics.newImage("assets/Portraits/Rapidash_Portrait.png")
 
     -- Load sounds
     Assets.sounds.cursor_move = love.audio.newSource("assets/sfx/cursor_move.wav", "static")
@@ -53,75 +51,75 @@ function Assets.load()
     local animSpeed = 0.15 -- A shared speed for walking animations
     
     -- Grid and animations for Drapion (drapionsquare)
-    local gDrapion = anim8.newGrid(frameWidth, frameHeight, Assets.images.Drapion:getWidth(), Assets.images.Drapion:getHeight())
-    Assets.animations.Drapion = {
-        down  = anim8.newAnimation(gDrapion('1-4', 1), animSpeed),
-        left  = anim8.newAnimation(gDrapion('1-4', 2), animSpeed),
-        right = anim8.newAnimation(gDrapion('1-4', 3), animSpeed),
-        up    = anim8.newAnimation(gDrapion('1-4', 4), animSpeed)
+    local gClementine = anim8.newGrid(frameWidth, frameHeight, Assets.images.Clementine:getWidth(), Assets.images.Clementine:getHeight())
+    Assets.animations.Clementine = {
+        down  = anim8.newAnimation(gClementine('1-4', 1), animSpeed),
+        left  = anim8.newAnimation(gClementine('1-4', 2), animSpeed),
+        right = anim8.newAnimation(gClementine('1-4', 3), animSpeed),
+        up    = anim8.newAnimation(gClementine('1-4', 4), animSpeed)
     }
 
     -- Grid and animations for Venusaur (venusaursquare)
-    local gVenusaur = anim8.newGrid(frameWidth, frameHeight, Assets.images.Venusaur:getWidth(), Assets.images.Venusaur:getHeight())
-    Assets.animations.Venusaur = {
-        down  = anim8.newAnimation(gVenusaur('1-4', 1), animSpeed),
-        left  = anim8.newAnimation(gVenusaur('1-4', 2), animSpeed),
-        right = anim8.newAnimation(gVenusaur('1-4', 3), animSpeed),
-        up    = anim8.newAnimation(gVenusaur('1-4', 4), animSpeed)
+    local gWinthrop = anim8.newGrid(frameWidth, frameHeight, Assets.images.Winthrop:getWidth(), Assets.images.Winthrop:getHeight())
+    Assets.animations.Winthrop = {
+        down  = anim8.newAnimation(gWinthrop('1-4', 1), animSpeed),
+        left  = anim8.newAnimation(gWinthrop('1-4', 2), animSpeed),
+        right = anim8.newAnimation(gWinthrop('1-4', 3), animSpeed),
+        up    = anim8.newAnimation(gWinthrop('1-4', 4), animSpeed)
     }
 
     -- Grid and animations for Florges (florgessquare)
-    local gFlorges = anim8.newGrid(frameWidth, frameHeight, Assets.images.Florges:getWidth(), Assets.images.Florges:getHeight())
-    Assets.animations.Florges = {
-        down  = anim8.newAnimation(gFlorges('1-4', 1), animSpeed),
-        left  = anim8.newAnimation(gFlorges('1-4', 2), animSpeed),
-        right = anim8.newAnimation(gFlorges('1-4', 3), animSpeed),
-        up    = anim8.newAnimation(gFlorges('1-4', 4), animSpeed)
+    local gBiblo = anim8.newGrid(frameWidth, frameHeight, Assets.images.Biblo:getWidth(), Assets.images.Biblo:getHeight())
+    Assets.animations.Biblo = {
+        down  = anim8.newAnimation(gBiblo('1-4', 1), animSpeed),
+        left  = anim8.newAnimation(gBiblo('1-4', 2), animSpeed),
+        right = anim8.newAnimation(gBiblo('1-4', 3), animSpeed),
+        up    = anim8.newAnimation(gBiblo('1-4', 4), animSpeed)
     }
 
     -- Grid and animations for Magnezone (magnezonesquare)
-    local gMagnezone = anim8.newGrid(frameWidth, frameHeight, Assets.images.Magnezone:getWidth(), Assets.images.Magnezone:getHeight())
-    Assets.animations.Magnezone = {
-        down  = anim8.newAnimation(gMagnezone('1-4', 1), animSpeed),
-        left  = anim8.newAnimation(gMagnezone('1-4', 2), animSpeed),
-        right = anim8.newAnimation(gMagnezone('1-4', 3), animSpeed),
-        up    = anim8.newAnimation(gMagnezone('1-4', 4), animSpeed)
+    local gMortimer = anim8.newGrid(frameWidth, frameHeight, Assets.images.Mortimer:getWidth(), Assets.images.Mortimer:getHeight())
+    Assets.animations.Mortimer = {
+        down  = anim8.newAnimation(gMortimer('1-4', 1), animSpeed),
+        left  = anim8.newAnimation(gMortimer('1-4', 2), animSpeed),
+        right = anim8.newAnimation(gMortimer('1-4', 3), animSpeed),
+        up    = anim8.newAnimation(gMortimer('1-4', 4), animSpeed)
     }
 
     -- Grid and animations for Tangrowth (tangrowthsquare)
-    local gTangrowth = anim8.newGrid(frameWidth, frameHeight, Assets.images.Tangrowth:getWidth(), Assets.images.Tangrowth:getHeight())
-    Assets.animations.Tangrowth = {
-        down  = anim8.newAnimation(gTangrowth('1-4', 1), animSpeed),
-        left  = anim8.newAnimation(gTangrowth('1-4', 2), animSpeed),
-        right = anim8.newAnimation(gTangrowth('1-4', 3), animSpeed),
-        up    = anim8.newAnimation(gTangrowth('1-4', 4), animSpeed)
+    local gOllo = anim8.newGrid(frameWidth, frameHeight, Assets.images.Ollo:getWidth(), Assets.images.Ollo:getHeight())
+    Assets.animations.Ollo = {
+        down  = anim8.newAnimation(gOllo('1-4', 1), animSpeed),
+        left  = anim8.newAnimation(gOllo('1-4', 2), animSpeed),
+        right = anim8.newAnimation(gOllo('1-4', 3), animSpeed),
+        up    = anim8.newAnimation(gOllo('1-4', 4), animSpeed)
     }
 
     -- Grid and animations for Electivire (electiviresquare)
-    local gElectivire = anim8.newGrid(frameWidth, frameHeight, Assets.images.Electivire:getWidth(), Assets.images.Electivire:getHeight())
-    Assets.animations.Electivire = {
-        down  = anim8.newAnimation(gElectivire('1-4', 1), animSpeed),
-        left  = anim8.newAnimation(gElectivire('1-4', 2), animSpeed),
-        right = anim8.newAnimation(gElectivire('1-4', 3), animSpeed),
-        up    = anim8.newAnimation(gElectivire('1-4', 4), animSpeed)
+    local gCedric = anim8.newGrid(frameWidth, frameHeight, Assets.images.Cedric:getWidth(), Assets.images.Cedric:getHeight())
+    Assets.animations.Cedric = {
+        down  = anim8.newAnimation(gCedric('1-4', 1), animSpeed),
+        left  = anim8.newAnimation(gCedric('1-4', 2), animSpeed),
+        right = anim8.newAnimation(gCedric('1-4', 3), animSpeed),
+        up    = anim8.newAnimation(gCedric('1-4', 4), animSpeed)
     }
 
-    -- Grid and animations for Sceptile (sceptilesquare)
-    local gSceptile = anim8.newGrid(frameWidth, frameHeight, Assets.images.Sceptile:getWidth(), Assets.images.Sceptile:getHeight())
-    Assets.animations.Sceptile = {
-        down  = anim8.newAnimation(gSceptile('1-4', 1), animSpeed),
-        left  = anim8.newAnimation(gSceptile('1-4', 2), animSpeed),
-        right = anim8.newAnimation(gSceptile('1-4', 3), animSpeed),
-        up    = anim8.newAnimation(gSceptile('1-4', 4), animSpeed)
+    -- Grid and animations for Plop (plop)
+    local gPlop = anim8.newGrid(frameWidth, frameHeight, Assets.images.Plop:getWidth(), Assets.images.Plop:getHeight())
+    Assets.animations.Plop = {
+        down  = anim8.newAnimation(gPlop('1-4', 1), animSpeed),
+        left  = anim8.newAnimation(gPlop('1-4', 2), animSpeed),
+        right = anim8.newAnimation(gPlop('1-4', 3), animSpeed),
+        up    = anim8.newAnimation(gPlop('1-4', 4), animSpeed)
     }
 
     -- Grid and animations for Pidgeot (pidgeotsquare)
-    local gPidgeot = anim8.newGrid(frameWidth, frameHeight, Assets.images.Pidgeot:getWidth(), Assets.images.Pidgeot:getHeight())
-    Assets.animations.Pidgeot = {
-        down  = anim8.newAnimation(gPidgeot('1-4', 1), animSpeed),
-        left  = anim8.newAnimation(gPidgeot('1-4', 2), animSpeed),
-        right = anim8.newAnimation(gPidgeot('1-4', 3), animSpeed),
-        up    = anim8.newAnimation(gPidgeot('1-4', 4), animSpeed)
+    local gDupe = anim8.newGrid(frameWidth, frameHeight, Assets.images.Dupe:getWidth(), Assets.images.Dupe:getHeight())
+    Assets.animations.Dupe = {
+        down  = anim8.newAnimation(gDupe('1-4', 1), animSpeed),
+        left  = anim8.newAnimation(gDupe('1-4', 2), animSpeed),
+        right = anim8.newAnimation(gDupe('1-4', 3), animSpeed),
+        up    = anim8.newAnimation(gDupe('1-4', 4), animSpeed)
     }
 
     -- Grid and animations for Brawler
