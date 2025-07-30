@@ -11,7 +11,7 @@ local ObjectBlueprints = {
         defenseStat = 2,
         resistanceStat = 2,
         witStat = 0, -- Needed for hit calculations
-        weight = "Permanent", -- Ensures hookshot pulls the user to the tree
+        weight = 500, -- A very high number to make it effectively permanent/immovable
         sprite = Assets.images.Flag, -- The tree sprite
         attacks = {}, -- Empty attack list to prevent errors in systems that iterate over attacks.
     }

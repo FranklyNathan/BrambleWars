@@ -4,6 +4,7 @@
 local EnemyBlueprints = {
     brawler = {
         originType = "cavernborn",
+        class = "warrior",
         maxHp = 25,
         portrait = "Default_Portrait.png",
         wispStat = 2,
@@ -28,6 +29,7 @@ local EnemyBlueprints = {
     },
     archer = {
         originType = "cavernborn",
+        class = "scout",
         maxHp = 18,
         portrait = "Default_Portrait.png",
         wispStat = 4,
@@ -52,6 +54,7 @@ local EnemyBlueprints = {
     },
     punter = {
         originType = "cavernborn",
+        class = "lancer",
         maxHp = 22,
         portrait = "Rapidash_Portrait.png",
         wispStat = 3,

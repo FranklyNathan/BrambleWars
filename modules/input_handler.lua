@@ -14,6 +14,8 @@ local RescueHandler = require("modules.rescue_handler")
 local EffectFactory = require("modules.effect_factory")
 local TakeHandler = require("modules/take_handler")
 local WeaponBlueprints = require("weapon_blueprints")
+local ClassBlueprints = require("data/class_blueprints")
+local PromotionSystem = require("systems.promotion_system")
 
 local InputHandler = {}
 
@@ -106,10 +108,6 @@ local function finalize_player_action(unit, world)
     -- 1. Flag that the unit has completed its action for this turn.
     -- The ActionFinalizationSystem will set hasActed = true when all animations are done.
     unit.components.action_in_progress = true
-
-    -- The EXP gain sequence is over, so reset the tracker for the next turn.
-    -- This is crucial to prevent the action_finalization_system from re-triggering the EXP bar.
-    unit.expGainedThisTurn = nil
 
     -- 2. Reset all targeting states to clean up the UI.
     world.ui.targeting.cycle.active = false
@@ -213,13 +211,38 @@ local function handle_weapon_select_input(key, world)
         if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
         menu.active = false
         set_player_turn_state("unit_info_locked", world)
-    elseif key == "j" then -- Confirm
-        local selectedWeaponKey = menu.options[menu.selectedIndex]
-        -- Check if the weapon is already equipped by someone else.
-        if not menu.equippedByOther[selectedWeaponKey] then
+    elseif key == "j" then -- Confirm selection
+        local selectedOption = menu.options[menu.selectedIndex]
+
+        if selectedOption == "unequip" then
             local unit = menu.unit
-            unit.equippedWeapon = selectedWeaponKey
-            -- Dispatch event so StatSystem and PassiveSystem can update.
+            if unit.equippedWeapon then
+                table.insert(world.playerInventory.weapons, unit.equippedWeapon)
+                unit.equippedWeapon = nil
+                EventBus:dispatch("weapon_equipped", { unit = unit, world = world })
+            end
+            menu.active = false
+            set_player_turn_state("unit_info_locked", world)
+            if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+        elseif not menu.equippedByOther[selectedOption] then
+            local unit = menu.unit
+            local oldWeaponKey = unit.equippedWeapon
+
+            -- 1. Add the old weapon back to the inventory if one was equipped.
+            if oldWeaponKey then
+                table.insert(world.playerInventory.weapons, oldWeaponKey)
+            end
+
+            -- 2. Remove the new weapon from the inventory.
+            for i, weaponKey in ipairs(world.playerInventory.weapons) do
+                if weaponKey == selectedOption then
+                    table.remove(world.playerInventory.weapons, i)
+                    break
+                end
+            end
+
+            -- 3. Equip the new weapon and dispatch the event.
+            unit.equippedWeapon = selectedOption
             EventBus:dispatch("weapon_equipped", { unit = unit, world = world })
             -- Close the menu
             menu.active = false
@@ -255,12 +278,13 @@ local function handle_unit_info_locked_input(key, world)
 
         -- Define menu sections and total number of slices
         local NAME_INDEX = 1
-        local WEAPON_INDEX = 2
-        local HP_INDEX = 3
-        local WISP_INDEX = 4
-        local STATS_START = 5
-        local STATS_END = 10 -- 3 rows of 2 stats each
-        local MOVES_START = 11
+        local CLASS_INDEX = 2
+        local WEAPON_INDEX = 3
+        local HP_INDEX = 4
+        local WISP_INDEX = 5
+        local STATS_START = 6
+        local STATS_END = 11 -- 3 rows of 2 stats each
+        local MOVES_START = 12
         local numAttacks = #menu.unit.attacks
         local MOVES_END = MOVES_START + numAttacks - 1
         
@@ -310,7 +334,7 @@ local function handle_unit_info_locked_input(key, world)
             EventBus:dispatch("unit_info_menu_selection_changed", { world = world })
         end
     elseif key == "j" then -- Confirm/Select
-        local WEAPON_INDEX = 2 -- The weapon slice is the 2nd item in the menu.
+        local WEAPON_INDEX = 3 -- The weapon slice is now the 3rd item in the menu.
         if menu.selectedIndex == WEAPON_INDEX then
             -- Open the weapon selection menu
             local weaponMenu = world.ui.menus.weaponSelect
@@ -320,9 +344,31 @@ local function handle_unit_info_locked_input(key, world)
             weaponMenu.equippedByOther = {}
             weaponMenu.selectedIndex = 1
 
-            -- Populate the options from the player's global inventory
+            -- Get the unit's allowed weapon types from its class
+            local allowedWeaponTypes = {}
+            if menu.unit.class and ClassBlueprints[menu.unit.class] then
+                allowedWeaponTypes = ClassBlueprints[menu.unit.class].weaponTypes
+            end
+
+            -- Helper to check if a value is in a table
+            local function table_contains(tbl, val)
+                for _, value in ipairs(tbl) do
+                    if value == val then return true end
+                end
+                return false
+            end
+
+            -- Populate the options from the player's global inventory, filtered by class
             for _, weaponKey in ipairs(world.playerInventory.weapons) do
-                table.insert(weaponMenu.options, weaponKey)
+                local weaponData = WeaponBlueprints[weaponKey]
+                if weaponData and table_contains(allowedWeaponTypes, weaponData.type) then
+                    table.insert(weaponMenu.options, weaponKey)
+                end
+            end
+
+            -- Add an "Unequip" option at the bottom if the unit has a weapon equipped.
+            if weaponMenu.unit.equippedWeapon then
+                table.insert(weaponMenu.options, "unequip")
             end
 
             -- Find which weapons are equipped by other units
@@ -953,6 +999,26 @@ local function handle_enemy_range_display_input(key, world)
     -- No other input is processed in this state.
 end
 
+-- Handles input when the player is choosing a class promotion.
+local function handle_promotion_select_input(key, world)
+    local menu = world.ui.menus.promotion
+    if not menu.active then return end
+
+    if key == "w" or key == "s" then
+        if #menu.options == 0 then return end
+        if key == "w" then
+            menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
+        else -- key == "s"
+            menu.selectedIndex = menu.selectedIndex % #menu.options + 1
+        end
+        if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+    elseif key == "j" then -- Confirm
+        local selectedOption = menu.options[menu.selectedIndex]
+        PromotionSystem.apply(menu.unit, selectedOption, world)
+        menu.active = false -- Close the menu
+    end
+end
+
 -- A dispatch table for player state input handlers. This is more scalable than a long if/elseif chain.
 local playerStateInputHandlers = {
     free_roam = handle_free_roam_input,
@@ -969,6 +1035,7 @@ local playerStateInputHandlers = {
     unit_info_locked = handle_unit_info_locked_input,
     weapon_select = handle_weapon_select_input,
     map_menu = handle_map_menu_input,
+    promotion_select = handle_promotion_select_input,
 }
 
 

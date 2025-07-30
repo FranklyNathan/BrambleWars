@@ -110,6 +110,12 @@ function World.new(gameMap)
                 reachableTiles = nil,
                 attackableTiles = nil
             },
+            promotion = {
+                active = false,
+                unit = nil,
+                options = {},
+                selectedIndex = 1
+            },
         },
 
         -- For the animated stat gains on level up
@@ -230,8 +236,8 @@ function World.new(gameMap)
                     local obstacle = {
                         x = pixelX, y = pixelY,
                         tileX = tileX, tileY = tileY,
-                        width = obj.width, height = obj.height, size = obj.width, -- Assuming square obstacles for now
-                        weight = (obj.properties and obj.properties.weight) or "Heavy", isObstacle = true,
+                        width = obj.width, height = obj.height, size = obj.width,
+                        weight = (obj.properties and tonumber(obj.properties.weight)) or 100, isObstacle = true,
                         isImpassable = (obj.properties and obj.properties.isImpassable) or false,
                         components = {},
                         objectType = "generic" -- Default type
@@ -376,17 +382,9 @@ function World.new(gameMap)
     -- Process all queued additions to ensure entities like walls and obstacles are fully loaded.
     self:process_additions_and_deletions()
 
-    -- Populate the player's inventory based on the starting party's equipment.
-    -- This ensures the player only has access to weapons their units are carrying.
-    do
-        local weaponExists = {}
-        for _, player in ipairs(self.players) do
-            if player.equippedWeapon and not weaponExists[player.equippedWeapon] then
-                table.insert(self.playerInventory.weapons, player.equippedWeapon)
-                weaponExists[player.equippedWeapon] = true
-            end
-        end
-    end
+    -- The player's inventory of unequipped weapons starts empty.
+    -- Weapons are added to it when they are found or unequipped.
+    self.playerInventory.weapons = { "durendal" }
 
     return self
 end

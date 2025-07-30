@@ -23,8 +23,6 @@ local MODIFIABLE_STATS = {
 
 -- This is the core logic. It recalculates all final stats for a single unit.
 function StatSystem.recalculate_for_unit(unit)
-    -- Only operate on units that have stats.
-    if not unit.attackStat then return end
 
     -- 1. Start with base stats.
     for _, statName in ipairs(MODIFIABLE_STATS) do

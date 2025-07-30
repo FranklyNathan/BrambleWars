@@ -102,9 +102,7 @@ if target.isObstacle then
         pullAttacker = true
     else
         -- Standard unit-vs-unit logic
-        if targetWeight == "Permanent" then
-            pullAttacker = true
-        elseif attackerWeight < targetWeight then
+        if attackerWeight < targetWeight then
             pullAttacker = true
         elseif attackerWeight > targetWeight then
             pullTarget = true

@@ -4,7 +4,7 @@
 local WeaponBlueprints = {
     travelers_sword = {
         name = "Traveler's Sword",
-        type = "Sword",
+        type = "sword",
         description = "A reliable sword for a traveler. Well-balanced for quick strikes.",
         stats = {
             witStat = 2,
@@ -16,7 +16,7 @@ local WeaponBlueprints = {
 
     travelers_lance = {
         name = "Traveler's Lance",
-        type = "Lance",
+        type = "lance",
         description = "A simple but sturdy lance for a journeying warrior. Grants the Impale skill.",
         stats = {
             attackStat = 2,
@@ -28,7 +28,7 @@ local WeaponBlueprints = {
 
     travelers_knife = {
         name = "Traveler's Knife",
-        type = "Knife",
+        type = "knife",
         description = "A sharp, concealable knife. Perfect for applying debilitating toxins.",
         stats = {
             witStat = 3,
@@ -39,7 +39,7 @@ local WeaponBlueprints = {
 
     travelers_bow = {
         name = "Traveler's Bow",
-        type = "Bow",
+        type = "bow",
         description = "A simple wooden bow for hunting beasts and fending off foes from a distance.",
         stats = {
             attackStat = 2,
@@ -48,9 +48,18 @@ local WeaponBlueprints = {
         grants_passives = {},
     },
 
+    durendal = {
+        name = "Durendal",
+        type = "sword",
+        stats = {
+            attackStat = 6,
+            witStat = 2,
+            defenseStat = 1,
+        },
+    },
     travelers_tome = {
         name = "Traveler's Tome",
-        type = "Tome",
+        type = "tome",
         description = "A book of basic elemental magic for the studious adventurer.",
         stats = {
             magicStat = 2,
@@ -62,7 +71,7 @@ local WeaponBlueprints = {
 
     travelers_staff = {
         name = "Traveler's Staff",
-        type = "Staff",
+        type = "staff",
         description = "A blessed staff that can mend allies' wounds.",
         stats = {
             resistanceStat = 2,
@@ -73,7 +82,7 @@ local WeaponBlueprints = {
 
     travelers_whip = {
         name = "Traveler's Whip",
-        type = "Whip",
+        type = "whip",
         description = "A leather whip that can knock foes off balance.",
         stats = {
             attackStat = 1,

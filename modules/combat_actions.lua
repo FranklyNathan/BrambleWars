@@ -111,11 +111,6 @@ function CombatActions.grantExp(unit, amount, world)
     end
 
     unit.exp = unit.exp + amount
-    -- Track the amount gained this turn for the post-combat UI.
-    if not unit.expGainedThisTurn then
-        unit.expGainedThisTurn = 0
-    end
-    unit.expGainedThisTurn = unit.expGainedThisTurn + amount
     -- The level up check and UI update will be handled by another system after combat resolves.
 end
 

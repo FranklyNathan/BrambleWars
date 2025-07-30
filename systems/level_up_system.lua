@@ -1,8 +1,6 @@
 -- systems/level_up_system.lua
 -- This system handles the logic for units leveling up and gaining stats.
 
-local LevelUpDisplaySystem = require("systems.level_up_display_system")
-
 local LevelUpSystem = {}
 
 -- The maximum level a unit can reach.
@@ -55,6 +53,9 @@ end
 -- @return (boolean): True if a level up was triggered, false otherwise.
 function LevelUpSystem.checkForLevelUp(unit, world)
     -- Only player units can level up from EXP, and only if they are not at max level.
+    -- Lazily require the display system here to break the circular dependency.
+    local LevelUpDisplaySystem = require("systems.level_up_display_system")
+
     if unit.type ~= "player" or not unit.exp or unit.level >= MAX_LEVEL then
         return false
     end

@@ -3,6 +3,8 @@
 -- which is visually rendered by the a file that is not yet created.
 
 local EventBus = require("modules.event_bus")
+local PromotionSystem = require("systems.promotion_system")
+local LevelUpSystem = require("systems.level_up_system")
 
 local LevelUpDisplaySystem = {}
 
@@ -133,12 +135,26 @@ function LevelUpDisplaySystem.update(dt, world)
         LevelUpDisplaySystem.animationState = "finished"
         LevelUpDisplaySystem.timer = LevelUpDisplaySystem.FINISH_DELAY
     elseif LevelUpDisplaySystem.animationState == "finished" and LevelUpDisplaySystem.timer <= 0 then
-        -- Animation is fully complete. Clean up everything.
-        LevelUpDisplaySystem.unit.hasActed = true -- The action is now fully complete.
+        -- Animation is fully complete.
+        local unit = LevelUpDisplaySystem.unit
         LevelUpDisplaySystem.active = false
         world.ui.levelUpAnimation.active = false
-        -- Dispatch an event to force the UI to refresh and hide the info panel.
-        EventBus:dispatch("action_finalized", { world = world })
+
+        -- Check if another level-up is pending for the same unit.
+        local leveledUpAgain = LevelUpSystem.checkForLevelUp(unit, world)
+
+        if not leveledUpAgain then
+            -- No more level-ups. Now check for promotion.
+            -- The PromotionSystem will handle setting hasActed and finalizing the action.
+            if unit.level == 2 then
+                PromotionSystem.start(unit, world)
+            else
+                -- No promotion, so finalize the action now.
+                unit.hasActed = true
+                EventBus:dispatch("action_finalized", { world = world })
+            end
+        end
+        -- If leveledUpAgain is true, a new animation has started, so we do nothing here.
     end
 end
 

@@ -12,6 +12,7 @@ local WorldQueries = require("modules.world_queries")
 local BattleInfoMenu = require("modules.battle_info_menu")
 local UnitInfoMenu = require("modules.unit_info_menu")
 local ExpBarRendererSystem = require("systems.exp_bar_renderer_system")
+local PromotionMenu = require("modules/promotion_menu")
 
 local Renderer = {}
 
@@ -1126,23 +1127,35 @@ local function draw_weapon_select_menu(world)
 
     -- Draw weapon options
     local yOffset = menuY + headerHeight
-    for i, weaponKey in ipairs(menu.options) do
-        local weapon = WeaponBlueprints[weaponKey]
-        if weapon then
-            local isSelected = (i == menu.selectedIndex)
-            local isEquippedByOther = menu.equippedByOther[weaponKey]
+    for i, optionKey in ipairs(menu.options) do
+        local isSelected = (i == menu.selectedIndex)
 
+        if optionKey == "unequip" then
+            -- Special drawing for the "Unequip" option
             if isSelected then
                 love.graphics.setColor(0.95, 0.95, 0.7, 0.9) -- Cream/yellow for selected
                 love.graphics.rectangle("fill", menuX + 1, yOffset, menuWidth - 2, sliceHeight)
+                love.graphics.setColor(0, 0, 0, 1) -- Black text
+            else
+                love.graphics.setColor(1, 1, 1, 1) -- White text
             end
-
-            if isEquippedByOther then love.graphics.setColor(1, 0.4, 0.4, 1) -- Red for equipped by other
-            elseif isSelected then love.graphics.setColor(0, 0, 0, 1) -- Black for selected text
-            else love.graphics.setColor(1, 1, 1, 1) end -- White for normal
-
             local textY = yOffset + (sliceHeight - font:getHeight()) / 2
-            love.graphics.print(weapon.name, menuX + 10, textY)
+            love.graphics.print("Unequip", menuX + 10, textY)
+        else
+            -- Existing logic for drawing weapon names
+            local weapon = WeaponBlueprints[optionKey]
+            if weapon then
+                local isEquippedByOther = menu.equippedByOther[optionKey]
+
+                if isSelected then
+                    love.graphics.setColor(0.95, 0.95, 0.7, 0.9) -- Cream/yellow for selected
+                    love.graphics.rectangle("fill", menuX + 1, yOffset, menuWidth - 2, sliceHeight)
+                end
+
+                if isEquippedByOther then love.graphics.setColor(1, 0.4, 0.4, 1) else if isSelected then love.graphics.setColor(0, 0, 0, 1) else love.graphics.setColor(1, 1, 1, 1) end end
+                local textY = yOffset + (sliceHeight - font:getHeight()) / 2
+                love.graphics.print(weapon.name, menuX + 10, textY)
+            end
         end
         yOffset = yOffset + sliceHeight
     end
@@ -1339,6 +1352,9 @@ local function draw_screen_space_ui(world)
 
     -- Draw Weapon Select Menu
     draw_weapon_select_menu(world)
+
+    -- Draw Promotion Menu
+    PromotionMenu.draw(world)
 
     -- Draw Game Over Screen (this is a screen-space UI)
     if world.gameState == "game_over" then

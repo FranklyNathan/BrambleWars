@@ -41,10 +41,12 @@ local function add_unit_to_passives(unit, world)
 
     -- 3. Add the unit to the provider list for each of its unique passives.
     for _, passiveName in ipairs(all_passives) do
-        -- Ensure the passive list exists before trying to insert.
-        if world.teamPassives[unit.type][passiveName] then
-            table.insert(world.teamPassives[unit.type][passiveName], unit)
+        -- If this passive type doesn't exist in the team's list yet, create it.
+        if not world.teamPassives[unit.type][passiveName] then
+            world.teamPassives[unit.type][passiveName] = {}
         end
+        -- Now it's safe to add the unit to the provider list.
+        table.insert(world.teamPassives[unit.type][passiveName], unit)
     end
 end
 

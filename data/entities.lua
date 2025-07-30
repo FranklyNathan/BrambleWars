@@ -48,6 +48,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.equippedWeapon = blueprint.equippedWeapon
         square.attacks = blueprint.attacks
         square.displayName = blueprint.displayName -- Use display name from blueprint
+        square.class = blueprint.class
         square.level = 1
         square.exp = 0
         square.maxExp = 100
@@ -92,6 +93,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.resistanceStat = blueprint.resistanceStat
         square.witStat = blueprint.witStat
         square.maxWisp = blueprint.wispStat
+        square.class = blueprint.class
         square.equippedWeapon = blueprint.equippedWeapon
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
         square.weight = blueprint.weight
