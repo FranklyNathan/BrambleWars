@@ -6,6 +6,7 @@ local CombatFormulas = require("modules.combat_formulas")
 local AttackBlueprints = require("data.attack_blueprints")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
+local WeaponBlueprints = require("weapon_blueprints")
 local AttackPatterns = require("modules.attack_patterns")
 
 local BattleInfoSystem = {}
@@ -65,14 +66,41 @@ function BattleInfoSystem.refresh_forecast(world)
             if CombatFormulas.calculateTypeEffectiveness(attackData.originType, target.originType) > 1 then
                 menu.playerDamage = menu.playerDamage .. "!"
             end
-            local playerHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(attacker.witStat, target.witStat, attackData.Accuracy or 100)))
-            local playerCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(attacker.witStat, target.witStat, attackData.CritChance or 0)))
+            local playerHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(attacker, target, attackData.Accuracy or 100)))
+            local playerCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(attacker, target, attackData.CritChance or 0)))
             menu.playerHitChance = math.floor(playerHit * 100)
             menu.playerCritChance = math.floor(playerCrit * 100)
 
             -- Enemy's counter-attack forecast
-            local defenderBlueprint = (target.type == "player") and CharacterBlueprints[target.playerType] or EnemyBlueprints[target.enemyType] -- target is the defender
-            local counterAttackName = defenderBlueprint and defenderBlueprint.attacks and defenderBlueprint.attacks[1]
+            -- Combine innate moves and moves granted by the equipped weapon for the defender (target).
+            local all_defender_moves = {}
+            local move_exists = {} -- Use a set to track existing moves and prevent duplicates
+
+            -- 1. Add moves from the character/enemy blueprint's innate list.
+            local defenderBlueprint = (target.type == "player") and CharacterBlueprints[target.playerType] or EnemyBlueprints[target.enemyType]
+            if defenderBlueprint and defenderBlueprint.attacks then
+                for _, attackName in ipairs(defenderBlueprint.attacks) do
+                    if not move_exists[attackName] then
+                        table.insert(all_defender_moves, attackName)
+                        move_exists[attackName] = true
+                    end
+                end
+            end
+
+            -- 2. Add moves from the equipped weapon.
+            if target.equippedWeapon and WeaponBlueprints[target.equippedWeapon] then
+                local weapon = WeaponBlueprints[target.equippedWeapon]
+                if weapon.grants_moves then
+                    for _, attackName in ipairs(weapon.grants_moves) do
+                        if not move_exists[attackName] then
+                            table.insert(all_defender_moves, attackName)
+                            move_exists[attackName] = true
+                        end
+                    end
+                end
+            end
+
+            local counterAttackName = all_defender_moves[1]
 
             if not counterAttackName then
                 menu.enemyDamage, menu.enemyHitChance, menu.enemyCritChance = "--", "--", "--"
@@ -98,8 +126,8 @@ function BattleInfoSystem.refresh_forecast(world)
                     if CombatFormulas.calculateTypeEffectiveness(counterAttackData.originType, attacker.originType) > 1 then
                         menu.enemyDamage = menu.enemyDamage .. "!"
                     end
-                    local enemyHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(target.witStat, attacker.witStat, counterAttackData.Accuracy or 100)))
-                    local enemyCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(target.witStat, attacker.witStat, counterAttackData.CritChance or 0)))
+                    local enemyHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(target, attacker, counterAttackData.Accuracy or 100)))
+                    local enemyCrit = math.max(0, math.min(1, CombatFormulas.calculateCritChance(target, attacker, counterAttackData.CritChance or 0)))
                     menu.enemyHitChance = math.floor(enemyHit * 100)
                     menu.enemyCritChance = math.floor(enemyCrit * 100)
                 else

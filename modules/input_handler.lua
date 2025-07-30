@@ -13,6 +13,7 @@ local ShoveHandler = require("modules/shove_handler")
 local RescueHandler = require("modules.rescue_handler")
 local EffectFactory = require("modules.effect_factory")
 local TakeHandler = require("modules/take_handler")
+local WeaponBlueprints = require("weapon_blueprints")
 
 local InputHandler = {}
 
@@ -195,15 +196,52 @@ local function handle_free_roam_input(key, world)
     end
 end
 
+-- Handles input when the weapon selection menu is open.
+local function handle_weapon_select_input(key, world)
+    local menu = world.ui.menus.weaponSelect
+    if not menu.active then return end
+
+    if key == "w" or key == "s" then
+        if #menu.options == 0 then return end -- Do nothing if there are no options to scroll through.
+        if key == "w" then
+            menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
+        else -- key == "s"
+            menu.selectedIndex = menu.selectedIndex % #menu.options + 1
+        end
+        if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+    elseif key == "k" then -- Cancel
+        if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+        menu.active = false
+        set_player_turn_state("unit_info_locked", world)
+    elseif key == "j" then -- Confirm
+        local selectedWeaponKey = menu.options[menu.selectedIndex]
+        -- Check if the weapon is already equipped by someone else.
+        if not menu.equippedByOther[selectedWeaponKey] then
+            local unit = menu.unit
+            unit.equippedWeapon = selectedWeaponKey
+            -- Dispatch event so StatSystem and PassiveSystem can update.
+            EventBus:dispatch("weapon_equipped", { unit = unit, world = world })
+            -- Close the menu
+            menu.active = false
+            set_player_turn_state("unit_info_locked", world)
+            if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+        else
+            -- TODO: Play an error/invalid sound if you have one.
+        end
+    end
+end
+
 -- Handles input when the unit info menu is locked.
 local function handle_unit_info_locked_input(key, world)
     local menu = world.ui.menus.unitInfo
-    if not menu.isLocked or not menu.unit then return end
+    if not menu.isLocked or not menu.unit then
+        return
+    end
+    print("[DEBUG] handle_unit_info_locked_input called with key: " .. key)
 
     if key == "k" then -- Unlock menu
         if Assets.sounds.back_out then
-            Assets.sounds.back_out:stop()
-            Assets.sounds.back_out:play()
+            Assets.sounds.back_out:stop(); Assets.sounds.back_out:play()
         end
         menu.isLocked = false
         menu.selectedIndex = 1
@@ -216,10 +254,13 @@ local function handle_unit_info_locked_input(key, world)
         local newIndex = oldIndex
 
         -- Define menu sections and total number of slices
-        local TOP_SECTION_END = 3 -- Name, HP, Wisp
-        local STATS_START = 4
-        local STATS_END = 9 -- 3 rows of 2 stats each
-        local MOVES_START = 10
+        local NAME_INDEX = 1
+        local WEAPON_INDEX = 2
+        local HP_INDEX = 3
+        local WISP_INDEX = 4
+        local STATS_START = 5
+        local STATS_END = 10 -- 3 rows of 2 stats each
+        local MOVES_START = 11
         local numAttacks = #menu.unit.attacks
         local MOVES_END = MOVES_START + numAttacks - 1
         
@@ -232,14 +273,14 @@ local function handle_unit_info_locked_input(key, world)
         -- Vertical Navigation (W/S)
         if key == "w" then -- Up
             if oldIndex > MOVES_START then newIndex = oldIndex - 1 -- In moves or carried unit
-            elseif oldIndex == MOVES_START then newIndex = STATS_END - 1 -- From first move to Wit
+            elseif oldIndex == MOVES_START then newIndex = STATS_END -- From first move to Wit/Wgt
             elseif oldIndex > STATS_START + 1 then newIndex = oldIndex - 2 -- In stats grid (not top row)
-            elseif oldIndex > STATS_START - 1 then newIndex = TOP_SECTION_END -- From top row of stats to Wisp
-            elseif oldIndex > 1 then newIndex = oldIndex - 1 -- In top section
+            elseif oldIndex > STATS_START - 1 then newIndex = WISP_INDEX -- From top row of stats to Wisp
+            elseif oldIndex > NAME_INDEX then newIndex = oldIndex - 1 -- In top section
             else newIndex = totalSlices end -- Wrap from top to bottom
         elseif key == "s" then -- Down
-            if oldIndex < TOP_SECTION_END then newIndex = oldIndex + 1 -- In top section
-            elseif oldIndex == TOP_SECTION_END then newIndex = STATS_START -- From Wisp to Atk
+            if oldIndex < WISP_INDEX then newIndex = oldIndex + 1 -- In top section
+            elseif oldIndex == WISP_INDEX then newIndex = STATS_START -- From Wisp to Atk
             elseif oldIndex < STATS_END - 1 then newIndex = oldIndex + 2 -- In stats grid (not last row)
             elseif oldIndex <= STATS_END then newIndex = MOVES_START -- From last row of stats to first move
             elseif oldIndex < totalSlices then newIndex = oldIndex + 1 -- In moves/carried
@@ -250,10 +291,10 @@ local function handle_unit_info_locked_input(key, world)
         if key == "a" or key == "d" then
             -- Horizontal navigation only applies within the stat grid
             if oldIndex >= STATS_START and oldIndex <= STATS_END then
-                if key == "a" then -- Left
-                    if oldIndex % 2 == 1 then newIndex = oldIndex - 1 end -- Is it a right-side stat (index 5, 7, 9)?
-                else -- 'd', Right
-                    if oldIndex % 2 == 0 then newIndex = oldIndex + 1 end -- Is it a left-side stat (index 4, 6, 8)?
+                if key == "a" then -- Move left
+                    if oldIndex % 2 == 0 then newIndex = oldIndex - 1 end -- Is it a right-side stat (even index)?
+                else -- Move right
+                    if oldIndex % 2 == 1 then newIndex = oldIndex + 1 end -- Is it a left-side stat (odd index)?
                 end
             end
         end
@@ -267,6 +308,39 @@ local function handle_unit_info_locked_input(key, world)
             end
             -- Dispatch an event so the UI can react (e.g., show move description)
             EventBus:dispatch("unit_info_menu_selection_changed", { world = world })
+        end
+    elseif key == "j" then -- Confirm/Select
+        local WEAPON_INDEX = 2 -- The weapon slice is the 2nd item in the menu.
+        if menu.selectedIndex == WEAPON_INDEX then
+            -- Open the weapon selection menu
+            local weaponMenu = world.ui.menus.weaponSelect
+            weaponMenu.active = true
+            weaponMenu.unit = menu.unit
+            weaponMenu.options = {}
+            weaponMenu.equippedByOther = {}
+            weaponMenu.selectedIndex = 1
+
+            -- Populate the options from the player's global inventory
+            for _, weaponKey in ipairs(world.playerInventory.weapons) do
+                table.insert(weaponMenu.options, weaponKey)
+            end
+
+            -- Find which weapons are equipped by other units
+            for _, p in ipairs(world.players) do
+                if p ~= weaponMenu.unit and p.equippedWeapon then
+                    weaponMenu.equippedByOther[p.equippedWeapon] = true
+                end
+            end
+
+            -- Set the initial selected index to the currently equipped weapon
+            for i, weaponKey in ipairs(weaponMenu.options) do
+                if weaponKey == weaponMenu.unit.equippedWeapon then
+                    weaponMenu.selectedIndex = i
+                    break
+                end
+            end
+
+            set_player_turn_state("weapon_select", world)
         end
     end
 end
@@ -893,6 +967,7 @@ local playerStateInputHandlers = {
     take_targeting = handle_take_targeting_input,
     enemy_range_display = handle_enemy_range_display_input,
     unit_info_locked = handle_unit_info_locked_input,
+    weapon_select = handle_weapon_select_input,
     map_menu = handle_map_menu_input,
 }
 

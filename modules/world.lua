@@ -8,6 +8,7 @@ local Grid = require("modules.grid")
 local StatusEffectManager = require("modules.status_effect_manager")
 local EntityFactory = require("data.entities")
 local ObjectBlueprints = require("data.object_blueprints")
+local WeaponBlueprints = require("weapon_blueprints")
 
 local World = {}
 World.__index = World
@@ -30,6 +31,11 @@ function World.new(gameMap)
     self.afterimageEffects = {}
     self.rippleEffectQueue = {}
     self.enemyPathfindingCache = {} -- Cache for AI pathfinding data for the current turn.
+
+    -- Player's global inventory
+    self.playerInventory = {
+        weapons = {} -- A list of weapon blueprint keys the player owns.
+    }
 
     -- Core game state
     self.turn = "player" -- "player" or "enemy"
@@ -90,6 +96,13 @@ function World.new(gameMap)
                 rippleSourceUnit = nil,
                 isLocked = false, -- For the new locked-in inspection mode
                 selectedIndex = 1
+            },
+            weaponSelect = {
+                active = false,
+                unit = nil,
+                options = {},
+                selectedIndex = 1,
+                equippedByOther = {} -- To track weapons used by other units
             },
             enemyRangeDisplay = {
                 active = false,
@@ -362,6 +375,18 @@ function World.new(gameMap)
 
     -- Process all queued additions to ensure entities like walls and obstacles are fully loaded.
     self:process_additions_and_deletions()
+
+    -- Populate the player's inventory based on the starting party's equipment.
+    -- This ensures the player only has access to weapons their units are carrying.
+    do
+        local weaponExists = {}
+        for _, player in ipairs(self.players) do
+            if player.equippedWeapon and not weaponExists[player.equippedWeapon] then
+                table.insert(self.playerInventory.weapons, player.equippedWeapon)
+                weaponExists[player.equippedWeapon] = true
+            end
+        end
+    end
 
     return self
 end

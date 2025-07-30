@@ -33,9 +33,6 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         -- The 'color' property is now used for effects like the death shatter.
         -- We'll set it to the character's dominant color for visual consistency.
         square.color = {blueprint.dominantColor[1], blueprint.dominantColor[2], blueprint.dominantColor[3], 1}
-        square.maxHp = blueprint.maxHp
-        square.baseAttackStat = blueprint.attackStat
-        square.baseDefenseStat = blueprint.defenseStat
         square.isFlying = blueprint.isFlying or false -- Add the flying trait to the entity
         square.canSwim = blueprint.canSwim or false -- Add the swimming trait to the entity
         square.weight = blueprint.weight or 1 -- Default to a light weight
@@ -48,6 +45,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.resistanceStat = blueprint.resistanceStat
         square.witStat = blueprint.witStat
         square.maxWisp = blueprint.wispStat
+        square.equippedWeapon = blueprint.equippedWeapon
         square.attacks = blueprint.attacks
         square.displayName = blueprint.displayName -- Use display name from blueprint
         square.level = 1
@@ -94,6 +92,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.resistanceStat = blueprint.resistanceStat
         square.witStat = blueprint.witStat
         square.maxWisp = blueprint.wispStat
+        square.equippedWeapon = blueprint.equippedWeapon
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
         square.weight = blueprint.weight
         square.attacks = blueprint.attacks

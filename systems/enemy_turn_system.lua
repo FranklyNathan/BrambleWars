@@ -7,6 +7,7 @@ local AttackPatterns = require("modules.attack_patterns")
 local CombatFormulas = require("modules.combat_formulas")
 local EntityFactory = require("data.entities")
 local EnemyBlueprints = require("data.enemy_blueprints")
+local WeaponBlueprints = require("weapon_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
 local UnitAttacks = require("data.unit_attacks")
 local Grid = require("modules.grid")
@@ -171,24 +172,51 @@ local function findBestPlayerAttackAction(enemy, reachableTiles, world)
     local bestAction = nil
     local bestScore = -1 -- Kills will have a score > 1000
 
+    -- Combine innate moves and moves granted by the equipped weapon.
+    local all_moves = {}
+    local move_exists = {} -- Use a set to track existing moves and prevent duplicates
+
+    -- 1. Add moves from the enemy blueprint's innate list.
     local blueprint = EnemyBlueprints[enemy.enemyType]
-    if not blueprint or not blueprint.attacks then return nil end
+    if blueprint and blueprint.attacks then
+        for _, attackName in ipairs(blueprint.attacks) do
+            if not move_exists[attackName] then
+                table.insert(all_moves, attackName)
+                move_exists[attackName] = true
+            end
+        end
+    end
+
+    -- 2. Add moves from the equipped weapon.
+    if enemy.equippedWeapon and WeaponBlueprints[enemy.equippedWeapon] then
+        local weapon = WeaponBlueprints[enemy.equippedWeapon]
+        if weapon.grants_moves then
+            for _, attackName in ipairs(weapon.grants_moves) do
+                if not move_exists[attackName] then
+                    table.insert(all_moves, attackName)
+                    move_exists[attackName] = true
+                end
+            end
+        end
+    end
 
     -- Check every player unit to find the best possible target.
     for _, targetPlayer in ipairs(world.players) do
         if targetPlayer.hp > 0 then
-            -- Check every available attack.
-            for _, attackName in ipairs(blueprint.attacks) do
+            for _, attackName in ipairs(all_moves) do
                 local attackData = AttackBlueprints[attackName]
                 if attackData and enemy.wisp >= (attackData.wispCost or 0) then
-                    local baseScore = (attackData.power or 0) - (attackData.wispCost or 0) * 5
-
                     -- Check if we can attack from the current position.
                     local currentTargets = WorldQueries.findValidTargetsForAttack(enemy, attackName, world)
                     if table_contains(currentTargets, targetPlayer) then
                         local damage = CombatFormulas.calculateFinalDamage(enemy, targetPlayer, attackData, false)
-                        local score = baseScore
-                        if damage >= targetPlayer.hp then score = 1000 + baseScore end -- Prioritize kills heavily.
+                        local hitChance = CombatFormulas.calculateHitChance(enemy, targetPlayer, attackData.Accuracy or 100)
+                        local expectedDamage = damage * hitChance
+                        local score = expectedDamage - (attackData.wispCost or 0) * 5
+
+                        if damage >= targetPlayer.hp then
+                            score = (1000 + expectedDamage) * hitChance -- Prioritize likely kills.
+                        end
 
                         if score > bestScore then
                             bestScore = score
@@ -196,13 +224,18 @@ local function findBestPlayerAttackAction(enemy, reachableTiles, world)
                         end
                     end
 
-                    -- Check if we can move to a position to attack.
+                    -- Check if we can move to a position to attack (only for cycle_target attacks).
                     if attackData.targeting_style == "cycle_target" then
                         local bestMovePosKey = findBestCycleTargetAttackPosition(enemy, targetPlayer, attackName, reachableTiles, world)
                         if bestMovePosKey then
                             local damage = CombatFormulas.calculateFinalDamage(enemy, targetPlayer, attackData, false)
-                            local score = baseScore - 1 -- A small penalty for moving first.
-                            if damage >= targetPlayer.hp then score = 1000 + baseScore - 1 end
+                            local hitChance = CombatFormulas.calculateHitChance(enemy, targetPlayer, attackData.Accuracy or 100)
+                            local expectedDamage = damage * hitChance
+                            local score = (expectedDamage - (attackData.wispCost or 0) * 5) - 1 -- A small penalty for moving first.
+
+                            if damage >= targetPlayer.hp then
+                                score = ((1000 + expectedDamage) * hitChance) - 1
+                            end
 
                             if score > bestScore then
                                 bestScore = score
@@ -222,14 +255,38 @@ local function findBestObstacleAttackAction(enemy, moveTarget, reachableTiles, w
     local bestAction = nil
     local closestDistSq = math.huge
 
+    -- Combine innate moves and moves granted by the equipped weapon.
+    local all_moves = {}
+    local move_exists = {} -- Use a set to track existing moves and prevent duplicates
+
+    -- 1. Add moves from the enemy blueprint's innate list.
     local blueprint = EnemyBlueprints[enemy.enemyType]
-    if not blueprint or not blueprint.attacks then return nil end
+    if blueprint and blueprint.attacks then
+        for _, attackName in ipairs(blueprint.attacks) do
+            if not move_exists[attackName] then
+                table.insert(all_moves, attackName)
+                move_exists[attackName] = true
+            end
+        end
+    end
+
+    -- 2. Add moves from the equipped weapon.
+    if enemy.equippedWeapon and WeaponBlueprints[enemy.equippedWeapon] then
+        local weapon = WeaponBlueprints[enemy.equippedWeapon]
+        if weapon.grants_moves then
+            for _, attackName in ipairs(weapon.grants_moves) do
+                if not move_exists[attackName] then
+                    table.insert(all_moves, attackName)
+                    move_exists[attackName] = true
+                end
+            end
+        end
+    end
 
     -- Check every destructible obstacle on the map.
     for _, obstacle in ipairs(world.obstacles) do
         if obstacle.hp and obstacle.hp > 0 then
-            -- Check every available attack.
-            for _, attackName in ipairs(blueprint.attacks) do
+            for _, attackName in ipairs(all_moves) do
                 local attackData = AttackBlueprints[attackName]
                 -- Only consider damaging attacks.
                 if attackData and enemy.wisp >= (attackData.wispCost or 0) and attackData.useType ~= "support" then

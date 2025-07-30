@@ -6,6 +6,7 @@ local Camera = require("modules.camera")
 local Assets = require("modules.assets")
 local CharacterBlueprints = require("data.character_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
+local WeaponBlueprints = require("weapon_blueprints")
 local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local BattleInfoMenu = require("modules.battle_info_menu")
@@ -1093,6 +1094,59 @@ local function draw_game_over_screen(world)
     love.graphics.printf("Press [Escape] to Exit", 0, Config.VIRTUAL_HEIGHT / 2 + 20, Config.VIRTUAL_WIDTH, "center")
 end
 
+local function draw_weapon_select_menu(world)
+    local menu = world.ui.menus.weaponSelect
+    if not menu.active then return end
+
+    local font = love.graphics.getFont()
+
+    -- Menu dimensions and positioning
+    -- Position it to the left of the unit info menu.
+    local menuWidth = 160
+    local unitInfoMenuX = Config.VIRTUAL_WIDTH - 160
+    local menuX = unitInfoMenuX - menuWidth - 10 -- Place it to the left with a 10px gap.
+
+    -- Calculate height based on number of options.
+    local sliceHeight = 22
+    local headerHeight = 30
+    local menuHeight = headerHeight + (#menu.options * sliceHeight)
+    local menuY = 10 -- Align with the top of the unit info menu.
+
+    -- Draw background
+    love.graphics.setColor(0.1, 0.1, 0.2, 0.9) -- Dark blueish background
+    love.graphics.rectangle("fill", menuX, menuY, menuWidth, menuHeight)
+    love.graphics.setColor(0.8, 0.8, 0.9, 1) -- Light border
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", menuX, menuY, menuWidth, menuHeight)
+    love.graphics.setLineWidth(1)
+
+    -- Draw header
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf("Equip Weapon", menuX, menuY + 5, menuWidth, "center")
+
+    -- Draw weapon options
+    local yOffset = menuY + headerHeight
+    for i, weaponKey in ipairs(menu.options) do
+        local weapon = WeaponBlueprints[weaponKey]
+        if weapon then
+            local isSelected = (i == menu.selectedIndex)
+            local isEquippedByOther = menu.equippedByOther[weaponKey]
+
+            if isSelected then
+                love.graphics.setColor(0.95, 0.95, 0.7, 0.9) -- Cream/yellow for selected
+                love.graphics.rectangle("fill", menuX + 1, yOffset, menuWidth - 2, sliceHeight)
+            end
+
+            if isEquippedByOther then love.graphics.setColor(1, 0.4, 0.4, 1) -- Red for equipped by other
+            elseif isSelected then love.graphics.setColor(0, 0, 0, 1) -- Black for selected text
+            else love.graphics.setColor(1, 1, 1, 1) end -- White for normal
+
+            local textY = yOffset + (sliceHeight - font:getHeight()) / 2
+            love.graphics.print(weapon.name, menuX + 10, textY)
+        end
+        yOffset = yOffset + sliceHeight
+    end
+end
 
 local function draw_screen_space_ui(world)
     -- Draw Action Menu
@@ -1282,6 +1336,9 @@ local function draw_screen_space_ui(world)
 
     -- Draw Unit Info Menu
     UnitInfoMenu.draw(world)
+
+    -- Draw Weapon Select Menu
+    draw_weapon_select_menu(world)
 
     -- Draw Game Over Screen (this is a screen-space UI)
     if world.gameState == "game_over" then

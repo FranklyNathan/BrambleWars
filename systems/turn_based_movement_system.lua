@@ -5,6 +5,7 @@ local Grid = require("modules.grid")
 local WorldQueries = require("modules.world_queries")
 local CharacterBlueprints = require("data.character_blueprints")
 local RangeCalculator = require("modules.range_calculator")
+local WeaponBlueprints = require("weapon_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
 
 local TurnBasedMovementSystem = {}
@@ -70,10 +71,37 @@ function TurnBasedMovementSystem.update(dt, world)
                         world.ui.playerTurnState = "action_menu"
 
                         local blueprint = CharacterBlueprints[entity.playerType]
-                        local menuOptions = {}
-                        -- Populate with attacks from the blueprint's attack list.
+                        
+                        -- Combine innate moves and moves granted by the equipped weapon.
+                        local all_moves = {}
+                        local move_exists = {} -- Use a set to track existing moves and prevent duplicates
+
+                        -- 1. Add moves from the character blueprint's innate list.
                         if blueprint and blueprint.attacks then
                             for _, attackName in ipairs(blueprint.attacks) do
+                                if not move_exists[attackName] then
+                                    table.insert(all_moves, attackName)
+                                    move_exists[attackName] = true
+                                end
+                            end
+                        end
+
+                        -- 2. Add moves from the equipped weapon.
+                        if entity.equippedWeapon and WeaponBlueprints[entity.equippedWeapon] then
+                            local weapon = WeaponBlueprints[entity.equippedWeapon]
+                            if weapon.grants_moves then
+                                for _, attackName in ipairs(weapon.grants_moves) do
+                                    if not move_exists[attackName] then
+                                        table.insert(all_moves, attackName)
+                                        move_exists[attackName] = true
+                                    end
+                                end
+                            end
+                        end
+
+                        local menuOptions = {}
+                        -- Populate menu with attacks from the combined list.
+                        for _, attackName in ipairs(all_moves) do
                                 -- Only show attacks that are actually usable from the current position.
                                 local attackData = AttackBlueprints[attackName]
                                 if attackData then
@@ -95,7 +123,6 @@ function TurnBasedMovementSystem.update(dt, world)
                                     end
                                 end
                             end
-                        end
 
                         -- If the unit is carrying someone, add a "Drop" option.
                         if entity.carriedUnit then

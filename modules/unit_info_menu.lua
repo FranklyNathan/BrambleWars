@@ -1,6 +1,7 @@
 -- modules/unit_info_menu.lua
 -- Contains the drawing logic for the unit information menu.
 
+local WeaponBlueprints = require("weapon_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
 
 -- Define colors for origin types
@@ -332,16 +333,26 @@ function UnitInfoMenu.draw(world)
                 yOffset = yOffset + sliceHeight
             end
 
-            -- 2. Draw HP and Wisp
+            -- 2. Draw Equipped Weapon
+            do
+                local weaponName = "Unarmed"
+                if unit.equippedWeapon and WeaponBlueprints[unit.equippedWeapon] then
+                    weaponName = WeaponBlueprints[unit.equippedWeapon].name
+                end
+                -- The key "weapon" is added for selection logic in the input handler later.
+                drawFullSlice(weaponName, nil, "weapon", true)
+            end
+
+            -- 3. Draw HP and Wisp
             drawFullSlice("HP", math.floor(unit.hp) .. "/" .. unit.maxHp, "maxHp")
             drawFullSlice("Wisp", math.floor(unit.wisp) .. "/" .. unit.maxWisp, "maxWisp")
 
-            -- 3. Draw Stats Grid
+            -- 4. Draw Stats Grid
             drawStatSlicePair("Atk:", unit.attackStat, "attackStat", "Def:", unit.defenseStat, "defenseStat")
             drawStatSlicePair("Mag:", unit.magicStat, "magicStat", "Res:", unit.resistanceStat, "resistanceStat")
             drawStatSlicePair("Wit:", unit.witStat, "witStat", "Wgt:", unit.weight, "weight")
 
-            -- 4. Draw Moves Header and List
+            -- 5. Draw Moves Header and List
         love.graphics.setColor(0, 0, 0, 0.3)
         love.graphics.rectangle("fill", menuX, yOffset, menuWidth, 2)
             for _, attackName in ipairs(unit.attacks) do
@@ -353,14 +364,14 @@ function UnitInfoMenu.draw(world)
                 end
             end
 
-            -- 5. Draw carried unit info if it exists
+            -- 6. Draw carried unit info if it exists
             if unit.carriedUnit then
                 local carried = unit.carriedUnit
                 drawFullSlice("Carrying: " .. (carried.displayName or carried.enemyType), nil, true)
             end
 
             -- Draw the appended Power and Description slices if a move is selected
-            local movesStartIndex = 9 -- 1(Name)+2(HP/Wisp)+6(Stats) = 9. So moves start at index 10.
+            local movesStartIndex = 10 -- 1(Name)+1(Weapon)+2(HP/Wisp)+6(Stats) = 10. So moves start at index 11.
             local selectedAttackIndex = menu.selectedIndex - movesStartIndex
             if menu.isLocked and selectedAttackIndex > 0 and selectedAttackIndex <= #unit.attacks then
                 local attackName = unit.attacks[selectedAttackIndex]

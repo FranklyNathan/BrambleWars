@@ -28,38 +28,42 @@ function CombatFormulas.calculateTypeEffectiveness(attackType, defenderType)
 end
 
 -- Helper to calculate the chance of a critical hit
-function CombatFormulas.calculateCritChance(attackerWit, defenderWit, moveCritChance)
+function CombatFormulas.calculateCritChance(attacker, defender, moveCritChance)
     -- The final crit chance is the move's base chance, modified by the difference in Wit.
     -- A higher attacker Wit increases the chance, a higher defender Wit decreases it.
+    local attackerWit = attacker.finalWitStat or 0
+    local defenderWit = defender.finalWitStat or 0
     return (moveCritChance + (attackerWit - defenderWit)) / 100
 end
 
 -- Helper function to calculate hit chance
-function CombatFormulas.calculateHitChance(attackerWit, defenderWit, moveAccuracy)
+function CombatFormulas.calculateHitChance(attacker, defender, moveAccuracy)
+    local attackerWit = attacker.finalWitStat or 0
+    local defenderWit = defender.finalWitStat or 0
     return ((moveAccuracy / 100) + (attackerWit - defenderWit) / 100)
 end
 
 -- Helper to calculate base damage for physical and magical attacks
 function CombatFormulas.calculateBaseDamage(attacker, defender, attackData)
-    local statUsed = (attackData.useType == "physical") and attacker.attackStat or attacker.magicStat
+    local statUsed = (attackData.useType == "physical") and attacker.finalAttackStat or attacker.finalMagicStat
     local power = attackData.power or 0
     local effectiveness = CombatFormulas.calculateTypeEffectiveness(attackData.originType, defender.originType)
 
     -- Apply the type effectiveness to the attack power + attacker's stat.
-    local adjustedPower = (power + statUsed) * effectiveness
+    local adjustedPower = (power + (statUsed or 0)) * effectiveness
 
     local rawDamage = 0
     local defenseStatUsed = 0
     -- Calculate damage dealt by a physical attack.
     if attackData.useType == "physical" then
-        defenseStatUsed = defender.defenseStat
+        defenseStatUsed = defender.finalDefenseStat or 0
         rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's defense.
     elseif attackData.useType == "magical" then
-        defenseStatUsed = defender.resistanceStat
+        defenseStatUsed = defender.finalResistanceStat or 0
         rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's resistance.
     elseif attackData.useType == "utility" and power > 0 then
         -- Utility moves with power use physical stats by default.
-        defenseStatUsed = defender.defenseStat
+        defenseStatUsed = defender.finalDefenseStat or 0
         rawDamage = math.max(0, adjustedPower - defenseStatUsed)
     end
 
@@ -80,7 +84,7 @@ end
 -- Formula: (User's Magic Stat) + (Healing Move Power)
 function CombatFormulas.calculateHealingAmount(attacker, attackData)
     if not attacker or not attackData then return 0 end
-    local magicStat = attacker.magicStat or 0
+    local magicStat = attacker.finalMagicStat or 0
     local movePower = attackData.power or 0
     local healing = magicStat + movePower
     return math.floor(healing)

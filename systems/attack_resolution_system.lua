@@ -64,7 +64,7 @@ function AttackResolutionSystem.update(dt, world)
                             local attackData = AttackBlueprints[effect.attackName]
                             if attackData then
                                 -- Centralized logic: Check for hit chance first.
-                                local hitChance = CombatFormulas.calculateHitChance(effect.attacker.witStat, target.witStat, attackData.Accuracy or 100)
+                                local hitChance = CombatFormulas.calculateHitChance(effect.attacker, target, attackData.Accuracy or 100)
                                 if love.math.random() < hitChance then
                                     -- The attack hits.
                                     if Assets.sounds.attack_hit then
@@ -72,7 +72,7 @@ function AttackResolutionSystem.update(dt, world)
                                         Assets.sounds.attack_hit:play()
                                     end
 
-                                    local critChance = CombatFormulas.calculateCritChance(effect.attacker.witStat, target.witStat, attackData.CritChance or 0)
+                                    local critChance = CombatFormulas.calculateCritChance(effect.attacker, target, attackData.CritChance or 0)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
                                     local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit)                                    
                                     -- Apply damage multipliers from special properties (e.g., Impale).
