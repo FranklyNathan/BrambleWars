@@ -10,6 +10,18 @@ local UnitInfoSystem = {}
 
 -- This is the core logic. It's called by event handlers to update the UI.
 function UnitInfoSystem.refresh_display(world)
+    -- If a level up is happening, we *always* show the info panel for that unit.
+    -- This takes precedence over all other logic.
+    if world.ui.levelUpAnimation and world.ui.levelUpAnimation.active then
+        world.ui.menus.unitInfo.active = true
+        world.ui.menus.unitInfo.unit = world.ui.levelUpAnimation.unit
+        -- Clear hover previews during level up to avoid visual clutter.
+        world.ui.pathing.hoverReachableTiles = nil
+        world.ui.pathing.hoverAttackableTiles= nil
+        world.ui.menus.unitInfo.rippleSourceUnit = nil -- Disable ripple during level up
+        return -- Exit early, level-up display takes precedence.
+    end
+
     -- If a major action is happening (animations, etc.), or a menu is open that should
     -- hide the info box, then we ensure it's hidden.
     local shouldHide = WorldQueries.isActionOngoing(world) or

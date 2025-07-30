@@ -33,7 +33,10 @@ function World.new(gameMap)
 
     -- Core game state
     self.turn = "player" -- "player" or "enemy"
-    self.gameState = "gameplay"
+    self.turnCount = 1 -- To track game progression for reinforcements
+    self.reinforcementTiles = {} -- To store spawn locations
+    self.winTiles = {} -- To store win condition locations
+    self.gameState = "gameplay" -- "gameplay", "party_select", "game_over"
 
     -- UI and player turn state are grouped into a 'ui' sub-table for better organization.
     -- This separates the transient state of the user interface from the persistent state of the game world.
@@ -94,6 +97,28 @@ function World.new(gameMap)
                 reachableTiles = nil,
                 attackableTiles = nil
             },
+        },
+
+        -- For the animated stat gains on level up
+        levelUpStatAnimation = {
+            active = false,
+            unit = nil,
+            statGains = nil,
+            phase = "idle", -- "showing_gains", "finished"
+            timer = 0
+        },
+
+        -- For the animated EXP bar
+        expGainAnimation = {
+            active = false,
+            state = "idle", -- "filling", "lingering"
+            unit = nil,
+            expStart = 0,
+            expCurrentDisplay = 0,
+            expGained = 0,
+            animationTimer = 0,
+            animationDuration = 1.0,
+            lingerTimer = 0,
         },
 
         -- Party selection screen state
@@ -251,6 +276,38 @@ function World.new(gameMap)
         end
     end
 
+    -- New: Parse reinforcement tiles from the map.
+    if self.map.layers["ReinforcementTiles"] then
+        local layer = self.map.layers["ReinforcementTiles"]
+        if layer.type == "tilelayer" then
+            for y = 1, layer.height do
+                for x = 1, layer.width do
+                    local tile = layer.data[y] and layer.data[y][x]
+                    if tile then -- A tile exists here, marking it as a spawn point.
+                        local tileX, tileY = x - 1, y - 1 -- Tiled data is 1-based, our grid is 0-based
+                        table.insert(self.reinforcementTiles, {x = tileX, y = tileY})
+                    end
+                end
+            end
+        end
+    end
+
+    -- New: Parse win condition tiles from the map.
+    if self.map.layers["WinTiles"] then
+        local layer = self.map.layers["WinTiles"]
+        if layer.type == "tilelayer" then
+            for y = 1, layer.height do
+                for x = 1, layer.width do
+                    local tile = layer.data[y] and layer.data[y][x]
+                    if tile then -- A tile exists here, marking it as a win condition point.
+                        local tileX, tileY = x - 1, y - 1 -- Tiled data is 1-based, our grid is 0-based
+                        table.insert(self.winTiles, {x = tileX, y = tileY})
+                    end
+                end
+            end
+        end
+    end
+
     -- Set the initial camera position based on a "CameraStart" object in the map.
     -- If not found, it will default to (0,0) and pan to the first player.
     local cameraStartX, cameraStartY = nil, nil
@@ -322,6 +379,7 @@ function World:endTurn()
             player.hasActed = false
         end
     elseif self.turn == "enemy" then
+        self.turnCount = self.turnCount + 1 -- Increment turn count at the start of the new player turn.
         for _, enemy in ipairs(self.enemies) do
             if enemy.hp > 0 then StatusEffectManager.processTurnStart(enemy, self) end
         end

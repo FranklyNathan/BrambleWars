@@ -954,16 +954,6 @@ function Map.drawLayer(_, layer)
 		return
 	end
 
-	-- As a fallback, also check for hardcoded logical layer names to prevent them from rendering.
-	-- This ensures spawn points and other logical layers don't appear as white boxes if the
-	-- "isLogicLayer" property isn't set in Tiled.
-	local logicLayers = {
-		["PlayerSpawns"] = true, ["EnemySpawns"] = true, ["Obstacles"] = true,
-		["Walls"] = true, ["Boxes"] = true, ["Water"] = true, ["Ridges"] = true,
-		["Trees"] = true,
-	}
-	if logicLayers[layer.name] then return end
-
 	local r,g,b,a = lg.getColor()
 	-- if the layer has a tintcolor set
 	if layer.tintcolor then 

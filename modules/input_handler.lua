@@ -46,17 +46,6 @@ local function allPlayersHaveActed(world)
     return true -- All living players have acted.
 end
 
--- Jumps the cursor to the next available player unit.
-local function focus_next_available_player(world)
-    for _, player in ipairs(world.players) do
-        if player.hp > 0 and not player.hasActed then
-            world.ui.mapCursorTile.x = player.tileX
-            world.ui.mapCursorTile.y = player.tileY
-            return -- Found the first available player and focused.
-        end
-    end
-end
-
 -- Helper to move the cursor and update the movement path if applicable.
 local function move_cursor(dx, dy, world, isFastMove)
     local oldTileX = world.ui.mapCursorTile.x
@@ -117,6 +106,10 @@ local function finalize_player_action(unit, world)
     -- The ActionFinalizationSystem will set hasActed = true when all animations are done.
     unit.components.action_in_progress = true
 
+    -- The EXP gain sequence is over, so reset the tracker for the next turn.
+    -- This is crucial to prevent the action_finalization_system from re-triggering the EXP bar.
+    unit.expGainedThisTurn = nil
+
     -- 2. Reset all targeting states to clean up the UI.
     world.ui.targeting.cycle.active = false
     world.ui.targeting.cycle.targets = {}
@@ -140,9 +133,9 @@ local function finalize_player_action(unit, world)
     -- 4. Return to the free roam state.
     set_player_turn_state("free_roam", world)
 
-    -- 5. Move the cursor to the next available player to provide immediate feedback.
-    -- If all players have acted, this will do nothing, and the turn will end shortly.
-    focus_next_available_player(world)
+    -- 5. Leave the cursor on the unit that just acted.
+    world.ui.mapCursorTile.x = unit.tileX
+    world.ui.mapCursorTile.y = unit.tileY
 end
 
 -- Handles input when the player is freely moving the cursor around the map.
@@ -179,12 +172,6 @@ local function handle_free_roam_input(key, world)
                 display.reachableTiles = reachable
                 display.attackableTiles = RangeCalculator.calculateAttackableTiles(anyUnit, world, reachable)
                 set_player_turn_state("enemy_range_display", world)
-            elseif not anyUnit then
-                -- The tile is empty, so open the map menu.
-                world.ui.menus.map.active = true
-                world.ui.menus.map.options = {{text = "End Turn", key = "end_turn"}}
-                world.ui.menus.map.selectedIndex = 1
-                set_player_turn_state("map_menu", world)
             end
         end
     elseif key == "l" then -- Lock Unit Info Menu
@@ -197,8 +184,15 @@ local function handle_free_roam_input(key, world)
             world.ui.previousPlayerTurnState = "free_roam"
             set_player_turn_state("unit_info_locked", world)
         end
+    elseif key == "k" then -- Open map menu on empty tile
+        local anyUnit = WorldQueries.getUnitAt(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y, nil, world)
+        if not anyUnit then
+            world.ui.menus.map.active = true
+            world.ui.menus.map.options = {{text = "End Turn", key = "end_turn"}}
+            world.ui.menus.map.selectedIndex = 1
+            set_player_turn_state("map_menu", world)
+        end
     end
-
 end
 
 -- Handles input when the unit info menu is locked.
@@ -959,6 +953,13 @@ stateHandlers.party_select = function(key, world)
         end
     elseif world.ui.menus.unitInfo.active then
         world.ui.menus.unitInfo.active = false
+    end
+end
+
+-- Handles input on the game over screen.
+stateHandlers.game_over = function(key, world)
+    if key == "escape" then
+        love.event.quit()
     end
 end
 

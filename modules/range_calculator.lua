@@ -27,7 +27,8 @@ function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
  
     for _, attackName in ipairs(blueprint.attacks) do
         local attackData = AttackBlueprints[attackName]
-        if attackData then
+        -- Check if the unit has enough wisp to use this attack.
+        if attackData and unit.wisp >= (attackData.wispCost or 0) then
             local style = attackData.targeting_style
             local pattern = attackData.patternType and AttackPatterns[attackData.patternType]
  

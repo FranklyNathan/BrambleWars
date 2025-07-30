@@ -7,7 +7,8 @@ local Assets = {
     images = {},
     animations = {},
     sounds = {},
-    shaders = {}
+    shaders = {},
+    fonts = {}
 }
 
 -- This function should be called once in love.load()
@@ -183,6 +184,13 @@ function Assets.load()
     else
         Assets.shaders.greyscale = nil
     end
+
+    -- Load fonts required by the UI systems.
+    local fontPath = "assets/Px437_DOS-V_TWN16.ttf"
+    Assets.fonts.small = love.graphics.newFont(fontPath, 12)
+    Assets.fonts.medium = love.graphics.newFont(fontPath, 16)
+    Assets.fonts.large = love.graphics.newFont(fontPath, 20)
+    Assets.fonts.title = love.graphics.newFont(fontPath, 64) -- For large headers like "Game Over"
 
     Assets.status_effects = load_data_files("data/status_effects/")
     -- You can add more assets here as your game grows

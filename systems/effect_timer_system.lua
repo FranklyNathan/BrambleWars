@@ -1,6 +1,9 @@
 -- effect_timer_system.lua
 -- This system is responsible for updating simple countdown timers on entities for visual effects.
 
+local EffectFactory = require("modules.effect_factory")
+local Assets = require("modules.assets")
+
 -- A simple linear interpolation function.
 local function lerp(a, b, t)
     return a + (b - a) * t
@@ -192,6 +195,65 @@ function EffectTimerSystem.update(dt, world)
         end
     end
     -- Check for delays and add subsequent ripple effect when appropriate.
+    -- 5. Update EXP gain animation
+    if world.ui.expGainAnimation and world.ui.expGainAnimation.active then
+        local anim = world.ui.expGainAnimation
+        local unit = anim.unit
+
+        -- Failsafe in case the unit was somehow cleared but the animation is still active.
+        if not unit then
+            anim.active = false
+        else
+            if anim.state == "filling" then
+                anim.animationTimer = math.min(anim.animationTimer + dt, anim.animationDuration)
+                local progress = anim.animationTimer / anim.animationDuration
+
+                -- The target EXP for the animation is the starting EXP plus the total gained.
+                local targetExp = anim.expStart + anim.expGained
+                anim.expCurrentDisplay = lerp(anim.expStart, targetExp, progress)
+
+                -- Check if the bar has filled up to trigger a level-up "pop".
+                if anim.expCurrentDisplay >= unit.maxExp then
+                    -- Trigger the pop effect and sound.
+                    EffectFactory.createExpPopEffect(world, unit)
+
+                    -- Calculate remaining EXP to continue filling.
+                    local totalExpFromStart = anim.expStart + anim.expGained
+                    local remainingExp = totalExpFromStart - unit.maxExp
+
+                    -- Reset the animation state to start filling from zero.
+                    anim.expStart = 0
+                    anim.expGained = remainingExp
+                    anim.expCurrentDisplay = 0
+                    anim.animationTimer = 0
+                    -- Recalculate duration for the remaining amount.
+                    anim.animationDuration = 0.5 + (remainingExp / 100) * 0.5
+
+                    -- If there's no more EXP to gain after the pop, transition to lingering.
+                    if remainingExp <= 0 then
+                        anim.state = "lingering"
+                        anim.lingerTimer = 1.0
+                    end
+                -- If no pop, check if the regular fill animation is finished.
+                elseif progress >= 1 then
+                    -- Snap to final value to avoid float inaccuracies.
+                    anim.expCurrentDisplay = targetExp
+                    -- Transition to lingering state.
+                    anim.state = "lingering"
+                    anim.lingerTimer = 1.0 -- Linger for 1 second.
+                end
+            elseif anim.state == "lingering" then
+                anim.lingerTimer = math.max(0, anim.lingerTimer - dt)
+                if anim.lingerTimer == 0 then
+                    -- The linger is over. Reset the state.
+                    anim.active = false
+                    anim.unit = nil
+                    anim.state = "idle"
+                end
+            end
+        end
+    end
+
         -- Handle the next effect in queue, if any and it is time.
        
         

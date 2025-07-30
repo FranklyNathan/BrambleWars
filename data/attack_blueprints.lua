@@ -15,7 +15,7 @@
 local AttackBlueprints = {
     -- Basic Attacks
     froggy_rush = {
-        power = 20, -- Base power of the move, used in damage calculations
+        power = 5, -- Base power of the move, used in damage calculations
         wispCost = 0, -- Cost of the move is Wisp, a resource used for attacks
         originType = "marshborn", -- Similar to types in Pokemon. Currently marshborn, forestborn, cavernborn
         Accuracy = 100, -- Odds of hitting, used in accuracy calculations
@@ -27,7 +27,7 @@ local AttackBlueprints = {
     },
 
     quill_jab = {
-        power = 20,
+        power = 5,
         wispCost = 0,
         originType = "forestborn", 
         Accuracy = 100,
@@ -39,7 +39,7 @@ local AttackBlueprints = {
     },
 
     snap = {
-        power = 20,
+        power = 5,
         wispCost = 0,
         originType = "cavernborn", 
         Accuracy = 100,
@@ -51,7 +51,7 @@ local AttackBlueprints = {
     },
 
     walnut_toss = {
-        power = 20,
+        power = 5,
         wispCost = 0,
         originType = "cavernborn", 
         Accuracy = 100,
@@ -64,7 +64,7 @@ local AttackBlueprints = {
 
     -- Damaging Melee Attacks
     venom_stab = {
-        power = 30,
+        power = 6,
         wispCost = 1,
         originType = "marshborn", 
         Accuracy = 100,
@@ -76,7 +76,7 @@ local AttackBlueprints = {
         description = "A physical attack that poisons the target."
     },
     uppercut = {
-        power = 40,
+        power = 7,
         wispCost = 2,
         originType = "forestborn", 
         Accuracy = 90,
@@ -88,7 +88,7 @@ local AttackBlueprints = {
         description = "A powerful physical attack that sends the target airborne."
     },
     slash = {
-        power = 35,
+        power = 6,
         wispCost = 1,
         originType = "forestborn", 
         Accuracy = 100,
@@ -99,7 +99,7 @@ local AttackBlueprints = {
         description = "A physical attack with a high critical hit chance."
     },
     shunt = {
-        power = 15,
+        power = 6,
         wispCost = 1,
         originType = "caverborn", 
         Accuracy = 100,
@@ -110,7 +110,7 @@ local AttackBlueprints = {
         description = "A weak physical attack that pushes the target back."
     },
     shockstrike = {
-        power = 20,
+        power = 6,
         wispCost = 1,
         originType = "cavernborn", 
         Accuracy = 100,
@@ -121,7 +121,7 @@ local AttackBlueprints = {
         description = "A physical attack that may paralyze the target."
     },
     impale = {
-        power = 30,
+        power = 6,
         wispCost = 1,
         originType = "cavernborn", 
         Accuracy = 100,
@@ -134,7 +134,7 @@ local AttackBlueprints = {
 
     -- Damaging Ranged Attacks
     fireball = {
-        power = 45,
+        power = 3,
         wispCost = 2,
         originType = "cavernborn", 
         Accuracy = 95,
@@ -149,7 +149,7 @@ local AttackBlueprints = {
         description = "Launches a piercing fireball in a straight line."
     },
     longshot = {
-        power = 50,
+        power = 5,
         wispCost = 3,
         originType = "forestborn", 
         Accuracy = 85,
@@ -160,7 +160,7 @@ local AttackBlueprints = {
         description = "A powerful, long-range physical attack with a high critical hit chance."
     },
     eruption = {
-        power = 60,
+        power = 5,
         wispCost = 4,
         originType = "cavernborn", 
         Accuracy = 90,
@@ -175,7 +175,7 @@ local AttackBlueprints = {
 
     -- Damaging Special Attacks
     phantom_step = {
-        power = 15, -- A light utility attack.
+        power = 7, -- A light utility attack.
         wispCost = 2,
         originType = "marshborn", 
         Accuracy = 100,
@@ -201,7 +201,7 @@ local AttackBlueprints = {
         description = "Refreshes an ally's turn if they have already acted."
     },
     mend = {
-        power = 20,
+        power = 5,
         wispCost = 1,
         originType = "cavernborn", 
         Accuracy = 100,
@@ -252,7 +252,7 @@ local AttackBlueprints = {
 
     -- Shared Attacks
     hookshot = {
-        power = 30,
+        power = 5,
         wispCost = 2,
         originType = "forestborn", 
         useType = "physical",

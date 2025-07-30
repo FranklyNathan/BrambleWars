@@ -134,6 +134,17 @@ function TurnBasedMovementSystem.update(dt, world)
                         else
                             -- The enemy just finished a move-only action. Their turn is over.
                             entity.hasActed = true
+
+                            -- Check for win condition after the move is complete.
+                            if world.winTiles and #world.winTiles > 0 then
+                                for _, winTile in ipairs(world.winTiles) do
+                                    if entity.tileX == winTile.x and entity.tileY == winTile.y then
+                                        -- An enemy has reached a win tile!
+                                        world.gameState = "game_over"
+                                        return -- Stop processing further movement this frame.
+                                    end
+                                end
+                            end
                         end
                     end
                 end

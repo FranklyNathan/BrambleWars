@@ -36,3 +36,5 @@ end)
 EventBus:register("enemy_turn_ended", function(data)
     for _, enemy in ipairs(data.world.enemies) do process_turn_end(enemy, data.world) end
 end)
+
+return StatusSystem

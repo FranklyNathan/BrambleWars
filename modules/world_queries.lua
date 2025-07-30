@@ -3,6 +3,7 @@
 
 local Grid = require("modules.grid")
 local AttackPatterns = require("modules.attack_patterns")
+local LevelUpDisplaySystem = require("systems.level_up_display_system")
 local AttackBlueprints = require("data.attack_blueprints")
 
 local WorldQueries = {}
@@ -195,6 +196,85 @@ local function calculateDistanceToRect(pointX, pointY, rectStartX, rectStartY, r
     return dx + dy
 end
 
+-- Helper for findValidTargets_Cycle: Handles fixed-shape patterns (e.g., standard_melee)
+local function findTargetsInFixedPattern(attacker, attackData, potentialTargets, world)
+    local validTargets = {}
+    local pattern = AttackPatterns[attackData.patternType]
+    if not pattern then return {} end
+
+    for _, target in ipairs(potentialTargets) do
+        local isSelf = (target == attacker)
+        local canBeTargeted = not isSelf and not (target.hp and target.hp <= 0)
+
+        -- For healing moves, don't target units at full health.
+        if attackData.useType == "support" and (attackData.power or 0) > 0 and target.hp and target.maxHp and target.hp >= target.maxHp then
+            canBeTargeted = false
+        end
+
+        if canBeTargeted then
+            if target.isObstacle then
+                -- For obstacles, check if any of the attack tiles overlap with the obstacle's area.
+                local objStartTileX, objStartTileY = target.tileX, target.tileY
+                local objEndTileX, objEndTileY = Grid.toTile(target.x + target.width - 1, target.y + target.height - 1)
+                for _, patternCoord in ipairs(pattern) do
+                    local attackTileX, attackTileY = attacker.tileX + patternCoord.dx, attacker.tileY + patternCoord.dy
+                    if attackTileX >= objStartTileX and attackTileX <= objEndTileX and attackTileY >= objStartTileY and attackTileY <= objEndTileY then
+                        table.insert(validTargets, target)
+                        break -- Found a match, no need to check other coords for this obstacle.
+                    end
+                end
+            else
+                -- For units, check if their single tile matches a pattern coordinate.
+                local dx = target.tileX - attacker.tileX
+                local dy = target.tileY - attacker.tileY
+                for _, patternCoord in ipairs(pattern) do
+                    if patternCoord.dx == dx and patternCoord.dy == dy then
+                        table.insert(validTargets, target)
+                        break -- Found a match, no need to check other coords in this pattern.
+                    end
+                end
+            end
+        end
+    end
+    return validTargets
+end
+
+-- Helper for findValidTargets_Cycle: Handles line-of-sight checks
+local function findTargetsInLineOfSight(attacker, target, world)
+    local isStraightLine = (attacker.tileX == target.tileX or attacker.tileY == target.tileY)
+    if not isStraightLine then return false end
+
+    local dist = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
+    if attacker.tileX == target.tileX then -- Vertical line
+        local dirY = (target.tileY > attacker.tileY) and 1 or -1
+        for i = 1, dist - 1 do
+            local checkY = attacker.tileY + i * dirY
+            if WorldQueries.isTileOccupied(attacker.tileX, checkY, attacker, world) then
+                return false -- Path is blocked
+            end
+            if WorldQueries.isLedgeBlockingPath(attacker.tileX, checkY - dirY, attacker.tileX, checkY, world) then
+                return false -- Ledge is blocking
+            end
+        end
+    else -- Horizontal line
+        local dirX = (target.tileX > attacker.tileX) and 1 or -1
+        for i = 1, dist - 1 do
+            if WorldQueries.isTileOccupied(attacker.tileX + i * dirX, attacker.tileY, attacker, world) then
+                return false -- Path is blocked
+            end
+        end
+    end
+    return true
+end
+
+-- Helper for findValidTargets_Cycle: Handles special logic for Phantom Step
+local function findTargetsForPhantomStep(target, world)
+    local dx, dy = 0, 0
+    if target.lastDirection == "up" then dy = 1 elseif target.lastDirection == "down" then dy = -1 elseif target.lastDirection == "left" then dx = 1 elseif target.lastDirection == "right" then dx = -1 end
+    local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
+    return not WorldQueries.isTileOccupied(behindTileX, behindTileY, nil, world)
+end
+
 -- Helper function to find targets for "cycle_target" style attacks.
 local function findValidTargets_Cycle(attacker, attackData, world)
     local validTargets = {}
@@ -203,41 +283,7 @@ local function findValidTargets_Cycle(attacker, attackData, world)
 
     if pattern and type(pattern) == "table" then
         -- New logic for fixed-shape patterns (standard_melee, etc.)
-        local potentialTargets = getPotentialTargets(attacker, attackData, world)
-        for _, target in ipairs(potentialTargets) do
-            local isSelf = (target == attacker)
-            local canBeTargeted = not isSelf and not (target.hp and target.hp <= 0)
-
-            -- For healing moves, don't target units at full health.
-            if attackData.useType == "support" and (attackData.power or 0) > 0 and target.hp >= target.maxHp then
-                canBeTargeted = false
-            end
-
-            if canBeTargeted then
-                if target.isObstacle then
-                    -- For obstacles, check if any of the attack tiles overlap with the obstacle's area.
-                    local objStartTileX, objStartTileY = target.tileX, target.tileY
-                    local objEndTileX, objEndTileY = Grid.toTile(target.x + target.width - 1, target.y + target.height - 1)
-                    for _, patternCoord in ipairs(pattern) do
-                        local attackTileX, attackTileY = attacker.tileX + patternCoord.dx, attacker.tileY + patternCoord.dy
-                        if attackTileX >= objStartTileX and attackTileX <= objEndTileX and attackTileY >= objStartTileY and attackTileY <= objEndTileY then
-                            table.insert(validTargets, target)
-                            break -- Found a match, no need to check other coords for this obstacle.
-                        end
-                    end
-                else
-                    -- For units, check if their single tile matches a pattern coordinate.
-                    local dx = target.tileX - attacker.tileX
-                    local dy = target.tileY - attacker.tileY
-                    for _, patternCoord in ipairs(pattern) do
-                        if patternCoord.dx == dx and patternCoord.dy == dy then
-                            table.insert(validTargets, target)
-                            break -- Found a match, no need to check other coords in this pattern.
-                        end
-                    end
-                end
-            end
-        end
+        return findTargetsInFixedPattern(attacker, attackData, getPotentialTargets(attacker, attackData, world), world)
     else
         -- Fallback to legacy range-based logic for attacks without a fixed pattern table
         -- (e.g., fireball, phantom_step, hookshot, shockwave).
@@ -281,47 +327,17 @@ local function findValidTargets_Cycle(attacker, attackData, world)
 
                 if inRange then
                     if attackData.line_of_sight_only then
-                        local isStraightLine = (attacker.tileX == target.tileX or attacker.tileY == target.tileY)
-                        if isStraightLine then
-                            local dist = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
-                            local isBlocked = false
-                            if attacker.tileX == target.tileX then -- Vertical line
-                                local dirY = (target.tileY > attacker.tileY) and 1 or -1
-                                for i = 1, dist - 1 do
-                                    if WorldQueries.isTileOccupied(attacker.tileX, attacker.tileY + i * dirY, attacker, world) then
-                                        if attackName ~= "fireball" then
-                                            isBlocked = true
-                                            break
-                                        end
-                                    elseif WorldQueries.isLedgeBlockingPath(attacker.tileX, attacker.tileY + (i - 1) * dirY, attacker.tileX, attacker.tileY + i * dirY, world) then
-                                        if attackName ~= "fireball" then
-                                            isBlocked = true
-                                            break
-                                        end
-                                    end
-                                end
-                            else -- Horizontal line
-                                local dirX = (target.tileX > attacker.tileX) and 1 or -1
-                                for i = 1, dist - 1 do
-                                    if WorldQueries.isTileOccupied(attacker.tileX + i * dirX, attacker.tileY, attacker, world) then
-                                        if attackName ~= "fireball" then
-                                            isBlocked = true
-                                            break
-                                        end
-                                    end
-                                end
-                            end
-
-                            if not isBlocked then
+                        -- Fireball ignores blocking units/ledges for its LOS check.
+                        if attackName == "fireball" then
+                            if (attacker.tileX == target.tileX or attacker.tileY == target.tileY) then
                                 table.insert(validTargets, target)
                             end
+                        elseif findTargetsInLineOfSight(attacker, target, world) then
+                            table.insert(validTargets, target)
                         end
                     elseif attackName == "phantom_step" then
-                        local dx, dy = 0, 0
-                        if target.lastDirection == "up" then dy = 1 elseif target.lastDirection == "down" then dy = -1 elseif target.lastDirection == "left" then dx = 1 elseif target.lastDirection == "right" then dx = -1 end
-                        local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
-                        if not WorldQueries.isTileOccupied(behindTileX, behindTileY, nil, world) then
-                            table.insert(validTargets, target)
+                        if findTargetsForPhantomStep(target, world) then
+                                table.insert(validTargets, target)
                         end
                     else
                         table.insert(validTargets, target)
@@ -466,6 +482,9 @@ end
 -- This is used to lock UI elements and delay turn finalization.
 function WorldQueries.isActionOngoing(world)
     -- An action is considered ongoing if there are active global effects...
+    -- Check if the level up display sequence is active.
+    if LevelUpDisplaySystem.active then return true end
+
     -- An action is ongoing if a projectile is in flight, or a counter-attack is pending.
     -- We don't check attackEffects here, as those are purely visual and shouldn't block game state.
     if #world.projectiles > 0 or #world.pendingCounters > 0 then return true end
@@ -482,6 +501,35 @@ function WorldQueries.isActionOngoing(world)
     end
 
     return false -- No ongoing actions found.
+end
+
+-- Checks if a unit is currently involved in a combat display (for UI purposes like enlarging health bars).
+function WorldQueries.isUnitInCombat(unit, world)
+    -- A unit is "in combat" if its health bar is animating (draining or shrinking).
+    if unit.components.pending_damage or unit.components.shrinking_health_bar then
+        return true
+    end
+
+    -- We also need to check if the unit is an ATTACKER whose target has pending_damage.
+    -- This ensures the attacker's health bar also becomes large during the combat sequence.
+    for _, entity in ipairs(world.all_entities) do
+        if entity.components.pending_damage and entity.components.pending_damage.attacker == unit then
+            return true
+        end
+    end
+    return false
+end
+
+-- Calculates the current visual height of a unit's health bar, accounting for combat animations.
+function WorldQueries.getUnitHealthBarHeight(unit, world)
+    local inCombat = WorldQueries.isUnitInCombat(unit, world)
+    if unit.components.shrinking_health_bar then
+        local shrink = unit.components.shrinking_health_bar
+        local progress = shrink.timer / shrink.initialTimer
+        return math.floor(6 + (6 * progress)) -- Lerp from 12 down to 6
+    else
+        return inCombat and 12 or 6
+    end
 end
 
 return WorldQueries

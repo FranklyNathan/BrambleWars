@@ -12,8 +12,10 @@ local AnimationSystem = require("systems/animation_system")
 CharacterBlueprints = require("data.character_blueprints")
 EntityFactory = require("data.entities")
 local StatusSystem = require("systems.status_system")
+local LevelUpDisplaySystem = require("systems.level_up_display_system")
 local CareeningSystem = require("systems.careening_system")
 local StatSystem = require("systems.stat_system")
+local EnvironmentHazardSystem = require("systems/environment_hazard_system")
 local EffectTimerSystem = require("systems.effect_timer_system")
 local ProjectileSystem = require("systems.projectile_system")
 local MovementSystem = require("systems/movement_system")
@@ -50,6 +52,7 @@ local scale = 1
 local update_systems = {
     -- 1. State and timer updates
     EffectTimerSystem,
+    LevelUpDisplaySystem,
     -- 2. Movement and Animation (update physical state)
     TurnBasedMovementSystem,
     MovementSystem,
@@ -63,6 +66,7 @@ local update_systems = {
     CounterAttackSystem,
     CareeningSystem,
     AetherfallSystem,
+    EnvironmentHazardSystem,
     -- 5. Resolve the consequences of actions
     AttackResolutionSystem,
     -- 6. Finalize the turn state after all actions are resolved
@@ -176,7 +180,10 @@ end
 function love.draw()
     -- 1. Draw the entire game world to the off-screen canvas at its native resolution.
     love.graphics.setCanvas(canvas)
+
+    -- This draws the map, entities, health bars, etc.
     Renderer.draw(world)
+
     love.graphics.setCanvas()
 
     -- 2. Draw the canvas to the screen, scaled and centered to fit the window.

@@ -59,6 +59,17 @@ function UnitInfoMenu.draw(world)
         local menuX = Config.VIRTUAL_WIDTH - 160 -- Position from the right edge
         local menuY = 10 -- Position from the top
         local menuWidth = 150
+
+        -- Check if this menu is being used for a level-up display.
+        local levelUpAnim = world.ui.levelUpAnimation
+        local isLevelUpDisplay = levelUpAnim and levelUpAnim.active and levelUpAnim.unit == unit
+        local gainsMap = {}
+        if isLevelUpDisplay then
+            for stat, _ in pairs(levelUpAnim.statGains) do
+                gainsMap[stat] = true
+            end
+        end
+
         local menuHeight
 
         if unit.isObstacle then
@@ -93,10 +104,10 @@ function UnitInfoMenu.draw(world)
             local yOffset = menuY
             local currentSliceIndex = 0
 
-            -- Helper to draw a single full-width slice
-            local function drawFullSlice(text, value, isHeader)
+            -- Helper to draw a single full-width slice, now with level-up awareness.
+            local function drawFullSlice(text, value, key, isHeader)
                 currentSliceIndex = currentSliceIndex + 1
-                local isSelected = menu.isLocked and menu.selectedIndex == currentSliceIndex
+                local isSelected = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == currentSliceIndex
 
                 -- Draw slice background with selection highlight
                 if isSelected then
@@ -106,34 +117,75 @@ function UnitInfoMenu.draw(world)
                 end
                 love.graphics.rectangle("fill", menuX, yOffset, menuWidth, sliceHeight)
 
-                -- Draw text with selection highlight
-                if isSelected then
-                    love.graphics.setColor(0, 0, 0, 1) -- Black text for selected
-                else
-                    love.graphics.setColor(1, 1, 1, 1) -- White text
-                end
+                local displayValue = value
+                -- Only show "+1" during the reveal, hold, and fade phases.
+                local showPlusOne = isLevelUpDisplay and key and gainsMap[key] and levelUpAnim.statsShown[key] and (levelUpAnim.phase == 'revealing' or levelUpAnim.phase == 'holding' or levelUpAnim.phase == 'fading')
+                local isValueGreen = isLevelUpDisplay and key and gainsMap[key] and (levelUpAnim.phase == 'applying_stats' or levelUpAnim.phase == 'finished')
+
                 local textY = yOffset + (sliceHeight - font:getHeight()) / 2
                 if isHeader then
+                    if isSelected then love.graphics.setColor(0, 0, 0, 1) else love.graphics.setColor(1, 1, 1, 1) end
                     love.graphics.printf(text, menuX, textY, menuWidth, "center")
                 else
+                    -- Set color for the stat name (e.g., "HP")
+                    if showPlusOne then
+                        local alpha = 1.0
+                        if levelUpAnim.phase == "fading" then
+                            local fadeDuration = 0.4
+                            local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
+                            alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
+                        end
+                        love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
+                    elseif isSelected then love.graphics.setColor(0, 0, 0, 1)
+                    else love.graphics.setColor(1, 1, 1, 1) end
                     love.graphics.print(text, menuX + 10, textY)
-                    if value then
-                        local valueWidth = font:getWidth(tostring(value))
-                        love.graphics.print(value, menuX + menuWidth - valueWidth - 10, textY)
+
+                    -- Set color for the stat value (e.g., "25/25")
+                    if displayValue then
+                        local valueString = tostring(displayValue)
+                        local valueWidth = font:getWidth(valueString)
+                        local plusOneString = ""
+                        if showPlusOne then
+                            plusOneString = " +1"
+                        end
+                        local plusOneWidth = font:getWidth(plusOneString)
+                        local totalWidth = valueWidth + plusOneWidth
+                        local startX = menuX + menuWidth - totalWidth - 10
+
+                        -- Draw the value string
+                        if isValueGreen then
+                            love.graphics.setColor(0.5, 1, 0.5, 1) -- Green
+                        elseif isSelected then
+                            love.graphics.setColor(0, 0, 0, 1)
+                        else
+                            love.graphics.setColor(1, 1, 1, 1)
+                        end
+                        love.graphics.print(valueString, startX, textY)
+
+                        -- Draw the "+1" string if it exists
+                        if showPlusOne then
+                            local alpha = 1.0
+                            if levelUpAnim.phase == "fading" then
+                                local fadeDuration = 0.4
+                                local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
+                                alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
+                            end
+                            love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
+                            love.graphics.print(plusOneString, startX + valueWidth, textY)
+                        end
                     end
                 end
                 yOffset = yOffset + sliceHeight
             end
 
-            -- Helper to draw a pair of stat slices side-by-side
-            local function drawStatSlicePair(text1, value1, text2, value2)
+            local function drawStatSlicePair(text1, value1, key1, text2, value2, key2)
                 local sliceWidth = menuWidth / 2
                 local sliceX1 = menuX
                 local sliceX2 = menuX + sliceWidth
 
                 -- Draw left slice
                 currentSliceIndex = currentSliceIndex + 1
-                local isSelected1 = menu.isLocked and menu.selectedIndex == currentSliceIndex
+                local isSelected1 = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == currentSliceIndex
                 if isSelected1 then
                     love.graphics.setColor(0.95, 0.95, 0.7, 0.9)
                 else
@@ -141,20 +193,51 @@ function UnitInfoMenu.draw(world)
                 end
                 love.graphics.rectangle("fill", sliceX1, yOffset, sliceWidth, sliceHeight)
 
-                if isSelected1 then
+                local displayValue1 = value1
+                -- The unit's stats are not yet updated during the animation, so we can just show the value.
+                local showPlusOne1 = isLevelUpDisplay and key1 and gainsMap[key1] and levelUpAnim.statsShown[key1] and (levelUpAnim.phase == 'revealing' or levelUpAnim.phase == 'holding' or levelUpAnim.phase == 'fading')
+                local isValueGreen1 = isLevelUpDisplay and key1 and gainsMap[key1] and (levelUpAnim.phase == 'applying_stats' or levelUpAnim.phase == 'finished')
+
+                local textY = yOffset + (sliceHeight - font:getHeight()) / 2
+
+                -- Set color for the left stat name
+                if showPlusOne1 then
+                    local alpha = 1.0
+                    if levelUpAnim.phase == "fading" then
+                        local fadeDuration = 0.4
+                        local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
+                        alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
+                    end
+                    love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
+                elseif isSelected1 then love.graphics.setColor(0, 0, 0, 1)
+                else love.graphics.setColor(1, 1, 1, 1) end
+                love.graphics.print(text1, sliceX1 + 5, textY)
+
+                -- Set color for the left stat value
+                if isValueGreen1 then
+                    love.graphics.setColor(0.5, 1, 0.5, 1) -- Green
+                elseif isSelected1 then
                     love.graphics.setColor(0, 0, 0, 1)
                 else
                     love.graphics.setColor(1, 1, 1, 1)
                 end
-                local textY = yOffset + (sliceHeight - font:getHeight()) / 2
-                love.graphics.print(text1, sliceX1 + 10, textY)
                 if value1 then
-                    love.graphics.print(tostring(value1), sliceX1 + 45, textY)
+                    love.graphics.print(tostring(displayValue1), sliceX1 + 40, textY)
+                end
+                if showPlusOne1 then
+                    local alpha = 1.0
+                    if levelUpAnim.phase == "fading" then
+                        local fadeDuration = 0.4 -- From LevelUpDisplaySystem
+                        local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
+                        alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
+                    end
+                    love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
+                    love.graphics.print("+1", sliceX1 + 55, textY)
                 end
 
                 -- Draw right slice
                 currentSliceIndex = currentSliceIndex + 1
-                local isSelected2 = menu.isLocked and menu.selectedIndex == currentSliceIndex
+                local isSelected2 = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == currentSliceIndex
                 if isSelected2 then
                     love.graphics.setColor(0.95, 0.95, 0.7, 0.9)
                 else
@@ -162,31 +245,101 @@ function UnitInfoMenu.draw(world)
                 end
                 love.graphics.rectangle("fill", sliceX2, yOffset, sliceWidth, sliceHeight)
 
-                if isSelected2 then
+                local displayValue2 = value2
+                local showPlusOne2 = isLevelUpDisplay and key2 and gainsMap[key2] and levelUpAnim.statsShown[key2] and (levelUpAnim.phase == 'revealing' or levelUpAnim.phase == 'holding' or levelUpAnim.phase == 'fading')
+                local isValueGreen2 = isLevelUpDisplay and key2 and gainsMap[key2] and (levelUpAnim.phase == 'applying_stats' or levelUpAnim.phase == 'finished')
+
+                -- Set color for the right stat name
+                if showPlusOne2 then
+                    local alpha = 1.0
+                    if levelUpAnim.phase == "fading" then
+                        local fadeDuration = 0.4
+                        local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
+                        alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
+                    end
+                    love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
+                elseif isSelected2 then love.graphics.setColor(0, 0, 0, 1)
+                else love.graphics.setColor(1, 1, 1, 1) end
+                love.graphics.print(text2, sliceX2 + 10, textY)
+
+                -- Set color for the right stat value
+                if isValueGreen2 then
+                    love.graphics.setColor(0.5, 1, 0.5, 1) -- Green
+                elseif isSelected2 then
                     love.graphics.setColor(0, 0, 0, 1)
                 else
                     love.graphics.setColor(1, 1, 1, 1)
                 end
-                love.graphics.print(text2, sliceX2 + 10, textY)
                 if value2 then
-                    love.graphics.print(tostring(value2), sliceX2 + 45, textY)
+                    love.graphics.print(tostring(displayValue2), sliceX2 + 45, textY)
+                end
+
+                if showPlusOne2 then
+                    local alpha = 1.0
+                    if levelUpAnim.phase == "fading" then
+                        local fadeDuration = 0.4 -- From LevelUpDisplaySystem
+                        local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
+                        alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
+                    end
+                    love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
+                    love.graphics.print("+1", sliceX2 + 60, textY)
                 end
 
                 yOffset = yOffset + sliceHeight
             end
 
             -- 1. Draw Name Header
-            local unitName = unit.displayName or unit.enemyType or "Unit"
-            drawFullSlice(unitName, nil, true)
+            do
+                currentSliceIndex = currentSliceIndex + 1
+                local isSelected = menu.isLocked and menu.selectedIndex == currentSliceIndex
+
+                -- Draw slice background with selection highlight
+               if isSelected then
+                   love.graphics.setColor(0.95, 0.95, 0.7, 0.9)
+                else
+                    love.graphics.setColor(0.2, 0.2, 0.1, 0.9)
+                end
+                love.graphics.rectangle("fill", menuX, yOffset, menuWidth, sliceHeight)
+
+                -- Draw text with selection highlight
+                if isSelected then love.graphics.setColor(0, 0, 0, 1) else love.graphics.setColor(1, 1, 1, 1) end
+                local textY = yOffset + (sliceHeight - font:getHeight()) / 2
+
+                -- Draw Name on the left
+                local unitName = unit.displayName or unit.enemyType or "Unit"
+                love.graphics.print(unitName, menuX + 10, textY)
+
+                -- Draw Level on the right
+                local levelToDisplay = unit.level or 1
+                local isLevelGreen = false
+
+                if isLevelUpDisplay then
+                    -- During the animation, show the *next* level in green.
+                    if levelUpAnim.phase ~= "applying_stats" and levelUpAnim.phase ~= "finished" then
+                        levelToDisplay = levelToDisplay + 1
+                        isLevelGreen = true
+                    end
+                    -- After the animation, the unit's level is already updated, so we just draw it normally (white).
+                end
+
+                local levelText = "Lv " .. levelToDisplay
+                local levelWidth = font:getWidth(levelText)
+
+                if isLevelGreen then love.graphics.setColor(0.5, 1, 0.5, 1) -- Green
+                else if isSelected then love.graphics.setColor(0, 0, 0, 1) else love.graphics.setColor(1, 1, 1, 1) end end
+
+                love.graphics.print(levelText, menuX + menuWidth - levelWidth - 10, textY)
+                yOffset = yOffset + sliceHeight
+            end
 
             -- 2. Draw HP and Wisp
-            drawFullSlice("HP", math.floor(unit.hp) .. "/" .. unit.maxHp)
-            drawFullSlice("Wisp", math.floor(unit.wisp) .. "/" .. unit.maxWisp)
+            drawFullSlice("HP", math.floor(unit.hp) .. "/" .. unit.maxHp, "maxHp")
+            drawFullSlice("Wisp", math.floor(unit.wisp) .. "/" .. unit.maxWisp, "maxWisp")
 
             -- 3. Draw Stats Grid
-            drawStatSlicePair("Atk:", unit.attackStat, "Def:", unit.defenseStat)
-            drawStatSlicePair("Mag:", unit.magicStat, "Res:", unit.resistanceStat)
-            drawStatSlicePair("Wit:", unit.witStat, "Wgt:", unit.weight)
+            drawStatSlicePair("Atk:", unit.attackStat, "attackStat", "Def:", unit.defenseStat, "defenseStat")
+            drawStatSlicePair("Mag:", unit.magicStat, "magicStat", "Res:", unit.resistanceStat, "resistanceStat")
+            drawStatSlicePair("Wit:", unit.witStat, "witStat", "Wgt:", unit.weight, "weight")
 
             -- 4. Draw Moves Header and List
         love.graphics.setColor(0, 0, 0, 0.3)

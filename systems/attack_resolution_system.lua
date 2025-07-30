@@ -23,7 +23,7 @@ function AttackResolutionSystem.update(dt, world)
             local targets = {}
             -- Build a list of potential targets for this effect.
             if effect.targetType == "enemy" then
-                -- For effects targeting enemies, we also need to include destructible obstacles.
+                -- Player is attacking. Targets are enemies and obstacles.
                 for _, unit in ipairs(world.enemies) do table.insert(targets, unit) end
                 for _, obstacle in ipairs(world.obstacles) do
                     if obstacle.hp and obstacle.hp > 0 then
@@ -31,8 +31,13 @@ function AttackResolutionSystem.update(dt, world)
                     end
                 end
             elseif effect.targetType == "player" then
-                -- For effects targeting players, we just need the player list.
+                -- Enemy is attacking. Targets are players and obstacles.
                 for _, unit in ipairs(world.players) do table.insert(targets, unit) end
+                for _, obstacle in ipairs(world.obstacles) do
+                    if obstacle.hp and obstacle.hp > 0 then
+                        table.insert(targets, obstacle)
+                    end
+                end
             elseif effect.targetType == "all" then
                 -- For effects targeting everyone, use the master list.
                 for _, unit in ipairs(world.all_entities) do table.insert(targets, unit) end
@@ -69,11 +74,19 @@ function AttackResolutionSystem.update(dt, world)
 
                                     local critChance = CombatFormulas.calculateCritChance(effect.attacker.witStat, target.witStat, attackData.CritChance or 0)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
-                                    local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit)
+                                    local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit)                                    
                                     -- Apply damage multipliers from special properties (e.g., Impale).
                                     if effect.specialProperties and effect.specialProperties.damageMultiplier then
                                         damage = damage * effect.specialProperties.damageMultiplier
                                     end
+
+                                    -- Grant experience for the hit or kill.
+                                    if effect.attacker.type == "player" and target.type == "enemy" then
+                                        local isKill = (target.hp - damage <= 0)
+                                        local expGained = CombatFormulas.calculateExpGain(effect.attacker, target, isKill)
+                                        CombatActions.grantExp(effect.attacker, expGained, world)
+                                    end
+
                                     local isCounter = effect.specialProperties and effect.specialProperties.isCounterAttack
                                     CombatActions.applyDirectDamage(world, target, damage, isCrit, effect.attacker, { createPopup = not isCounter })
 

@@ -74,4 +74,49 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
     end
 end
 
+function CombatActions.grantExp(unit, amount, world)
+    -- Only players can gain EXP.
+    if unit.type ~= "player" or unit.exp == nil then
+        return
+    end
+    -- Don't grant exp if at max level (50).
+    if unit.level >= 50 then
+        unit.exp = 0 -- Keep exp at 0 if max level
+        return
+    end
+
+    -- Set up the animation data BEFORE changing the unit's actual EXP.
+    local anim = world.ui.expGainAnimation
+    if not anim.active then
+        anim.active = true
+        anim.state = "filling"
+        anim.unit = unit
+        anim.expStart = unit.exp
+        anim.expGained = amount
+        anim.expCurrentDisplay = unit.exp
+        anim.animationTimer = 0
+        -- A base duration, plus a little extra for larger gains.
+        anim.animationDuration = 0.5 + (amount / 100) * 0.5
+        anim.lingerTimer = 0 -- Reset linger timer
+    elseif anim.unit == unit then
+        -- If an animation is already active for the same unit, just add to the gain.
+        anim.expGained = anim.expGained + amount
+        -- If it was lingering, restart the fill animation from its current point.
+        if anim.state == "lingering" then
+            anim.state = "filling"
+            anim.animationTimer = 0
+            anim.expStart = anim.expCurrentDisplay
+            anim.animationDuration = 0.5 + (amount / 100) * 0.5 -- Recalculate duration for the new amount
+        end
+    end
+
+    unit.exp = unit.exp + amount
+    -- Track the amount gained this turn for the post-combat UI.
+    if not unit.expGainedThisTurn then
+        unit.expGainedThisTurn = 0
+    end
+    unit.expGainedThisTurn = unit.expGainedThisTurn + amount
+    -- The level up check and UI update will be handled by another system after combat resolves.
+end
+
 return CombatActions

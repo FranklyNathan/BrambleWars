@@ -8,20 +8,16 @@ local CharacterBlueprints = require("data.character_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
 local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
-local UnitInfoMenu = require("modules.unit_info_menu")
 local BattleInfoMenu = require("modules.battle_info_menu")
+local UnitInfoMenu = require("modules.unit_info_menu")
+local ExpBarRendererSystem = require("systems.exp_bar_renderer_system")
+
 local Renderer = {}
 
--- Local state for cursor animation
+-- State for animated UI elements
 local current_cursor_line_width = 2
-local target_cursor_line_width = 2
 
---------------------------------------------------------------------------------
--- LOCAL DRAWING HELPER FUNCTIONS
--- (Moved from systems.lua)
---------------------------------------------------------------------------------
-
--- Helper function for wrapping long strings of text.
+-- Helper function for wrapping long strings of text, used by the action menu.
 local function wrapText(text, limit, font)
     font = font or love.graphics.getFont()
     local lines = {}
@@ -49,25 +45,8 @@ local function wrapText(text, limit, font)
     return lines
 end
 
--- Helper to check if a unit is currently involved in a combat display.
-local function is_unit_in_combat(unit, world)
-    -- A unit is "in combat" if its health bar is animating (draining or shrinking).
-    if unit.components.pending_damage or unit.components.shrinking_health_bar then
-        return true
-    end
-
-    -- We also need to check if the unit is an ATTACKER whose target has pending_damage.
-    -- This ensures the attacker's health bar also becomes large during the combat sequence.
-    for _, entity in ipairs(world.all_entities) do
-        if entity.components.pending_damage and entity.components.pending_damage.attacker == unit then            
-            return true
-        end
-    end
-    return false
-end
-
 local function drawHealthBar(square, world)
-    local inCombat = is_unit_in_combat(square, world)
+    local inCombat = WorldQueries.isUnitInCombat(square, world)
     local barWidth = square.size
     local barHeight
     if square.components.shrinking_health_bar then
@@ -132,44 +111,56 @@ local function drawHealthBar(square, world)
     end
 end
 
-local function drawWispBar(square)
+local function drawWispBar(square, world)
     -- Only draw if the unit actually uses Wisp.
     if not square.wisp or not square.maxWisp then return end
-    -- The HP bar (when not in combat) is 6px tall and its offset is size-2.
-    -- So its bottom edge is at (y + size - 2) + 6 = y + size + 4.
-    -- We position the wisp bar just below that.
-    local barMaxWidth, barHeight = square.size, 3
-    local barYOffset = square.size + 5
-    -- Floor the base coordinates to ensure crisp rendering.
-    local baseX, baseY = math.floor(square.x), math.floor(square.y + barYOffset)
-    local maxNotches = 8 -- Character with max 8 wisp will have a bar as long as the health bar
-    local currentNotches = math.min(square.maxWisp, maxNotches) -- Cap notches at maxNotches
-    local barWidth = (currentNotches / maxNotches) * barMaxWidth -- Adjust bar length
-    local notchWidth = math.floor(barWidth / currentNotches) -- Width of each notch, floored for crispness
-    local wispRatio = square.wisp / square.maxWisp -- 0 to 1
 
-    -- Calculate the number of filled notches
-    local filledNotches = math.floor(wispRatio * currentNotches)
+    -- Determine vertical position, accounting for the HP and EXP bars.
+    local hpBarHeight = WorldQueries.getUnitHealthBarHeight(square, world)
+    local hpBarTopY = math.floor(square.y + square.size - 2)
+    local barYOffset = hpBarTopY + hpBarHeight -- Start at the bottom of the HP bar.
+
+    -- If an EXP bar animation is active for this unit, shift the Wisp bar down to make room.
+    local expAnim = world.ui.expGainAnimation
+    if expAnim and expAnim.active and expAnim.unit == square then
+        local expBarHeight = 6 -- The height of the EXP bar.
+        barYOffset = barYOffset + expBarHeight
+    end
+
+    -- Wisp bar properties
+    local barMaxWidth, barHeight = square.size, 4 -- A bit taller for clarity
+    local baseX, baseY = math.floor(square.x), barYOffset
+
+    local maxNotches = 8 -- Character with max 8 wisp will have a bar as long as the health bar
+    local currentNotches = math.min(square.maxWisp, maxNotches)
+    if currentNotches == 0 then return end -- Don't draw if there are no notches to show.
+
+    local barWidth = (currentNotches / maxNotches) * barMaxWidth
+    local notchWidth = math.floor(barWidth / currentNotches)
+    local filledNotches = math.floor(square.wisp) -- 1 wisp = 1 filled notch
 
     for i = 1, currentNotches do
         local notchX = baseX + (i - 1) * notchWidth
-        local notchColor = (i <= filledNotches) and {0.5, 0.5, 1, 1} or {0.1, 0.1, 0.3, 1} -- Light blue when full, dark blue when low
-        love.graphics.setColor(notchColor)
+
+        -- 1. Draw the outer black frame for the notch.
+        love.graphics.setColor(0, 0, 0, 1)
         love.graphics.rectangle("fill", notchX, baseY, notchWidth, barHeight)
 
-        -- Optionally, draw notch separators for better visibility (adjust color and width as needed).
-        if i < currentNotches then
-            love.graphics.setColor(0, 0, 0, 0.2)
-            love.graphics.rectangle("fill", notchX + notchWidth - 1, baseY, 1, barHeight)
-        end
+        -- 2. Define the inner area for the fill.
+        local innerX, innerY = notchX + 1, baseY + 1
+        local innerW, innerH = notchWidth - 2, barHeight - 2
+
+        -- 3. Determine the fill color and draw it.
+        love.graphics.setColor((i <= filledNotches) and {1, 1, 1, 1} or {0.1, 0.1, 0.1, 1}) -- White when full, dark grey when empty
+        love.graphics.rectangle("fill", innerX, innerY, innerW, innerH)
     end
 end
 
 local function drawAllBars(entity, world)
    drawHealthBar(entity, world)
-   -- Only draw the wisp bar if the unit is not in combat, to reduce clutter.
-   if not is_unit_in_combat(entity, world) then
-       drawWispBar(entity)
+   -- Only draw the wisp and exp bars if the unit is not in combat, to reduce clutter.
+   if not WorldQueries.isUnitInCombat(entity, world) then
+       drawWispBar(entity, world)
    end
 end
 
@@ -313,14 +304,39 @@ local function draw_entity(entity, world, is_active_player)
 
         -- Calculate the base alpha for the entity. This will be 1 unless the unit is fading out.
         local baseAlpha = 1
-        if entity.components.fade_out then
+        if entity.components.sinking then
+            local sinking = entity.components.sinking
+            local progress = 1 - (sinking.timer / sinking.initialTimer) -- 0 to 1
+            finalDrawY = finalDrawY + progress * entity.size -- Move down
+            baseAlpha = 1 - progress -- Fade out
+        elseif entity.components.fade_out then
             baseAlpha = entity.components.fade_out.timer / entity.components.fade_out.initialTimer
         end
+
+        -- Check if the unit is swimming to apply the submerged effect.
+        local onWater = entity.canSwim and WorldQueries.isTileWater(entity.tileX, entity.tileY, world)
 
         -- 3. Draw the base sprite at the final calculated position.
         love.graphics.setShader()
         love.graphics.setColor(1, 1, 1, baseAlpha)
-        currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
+
+        if onWater and not entity.components.sinking then
+            -- Unit is swimming, draw only the top portion of the sprite using a scissor.
+            local oldScissor = {love.graphics.getScissor()}
+            -- The sprite is drawn anchored at bottom-center. Its top-left corner in world space is at
+            -- (drawX - w / 2, finalDrawY - h).
+            -- We want to set a scissor for the top half of the sprite's area.
+            local scissorWorldX = drawX - w / 2
+            local scissorWorldY = finalDrawY - h
+            local scissorWorldW = w
+            local scissorWorldH = h * 0.7 -- Show the top 70% of the sprite, hiding the bottom 30%.
+            -- Convert world coordinates to screen coordinates for the scissor.
+            love.graphics.setScissor(scissorWorldX - Camera.x, scissorWorldY - Camera.y, scissorWorldW, scissorWorldH)
+            currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
+            love.graphics.setScissor(unpack(oldScissor))
+        else
+            currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
+        end
 
         -- Draw selection flash effect if present
         if entity.components.selection_flash then
@@ -370,7 +386,7 @@ local function draw_entity(entity, world, is_active_player)
     -- 7. Draw the health bar on top of everything, but only if the unit is not fading out.
     -- If the unit is in combat, its health bar is drawn in a separate pass to ensure it's on top of all other units.
     if not entity.components.fade_out then
-        if not is_unit_in_combat(entity, world) then
+        if not WorldQueries.isUnitInCombat(entity, world) then
             drawAllBars(entity, world)
         end
     end
@@ -469,7 +485,7 @@ local function draw_all_entities_and_effects(world)
 
     -- Draw health bars for combatting units on top of everything else.
     for _, entity in ipairs(drawOrder) do
-        if is_unit_in_combat(entity, world) then
+        if WorldQueries.isUnitInCombat(entity, world) then
             drawAllBars(entity, world)
         end
     end
@@ -575,6 +591,18 @@ local function draw_world_space_ui(world)
     -- Draw Turn-Based UI Elements (Ranges, Path, Cursor)
     local BORDER_WIDTH = 1
     local INSET_SIZE = Config.SQUARE_SIZE - (BORDER_WIDTH * 2)
+
+    -- New: Draw pulsating WinTiles. This is drawn first so other UI elements appear on top.
+    -- This should be visible during both player and enemy turns.
+    if world.winTiles and #world.winTiles > 0 then
+        local alpha = 0.3 + (math.sin(love.timer.getTime() * 3) + 1) / 2 * 0.3 -- Pulsates between 0.3 and 0.6 alpha
+        love.graphics.setColor(0.2, 1.0, 0.2, alpha) -- Pulsating green
+        for _, tile in ipairs(world.winTiles) do
+            local pixelX, pixelY = Grid.toPixels(tile.x, tile.y)
+            love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+        end
+        love.graphics.setColor(1, 1, 1, 1) -- Reset color
+    end
 
     -- Helper to draw the cursor's corner shapes.
     local function draw_cursor_corners(x, y, size, cornerLength, offset)
@@ -735,10 +763,9 @@ local function draw_world_space_ui(world)
            world.ui.playerTurnState == "shove_targeting" or world.ui.playerTurnState == "take_targeting"
            then
             -- Animate the cursor's line width for a "lock in" effect
+            local target_cursor_line_width = 2 -- Normal thickness
             if world.ui.playerTurnState == "unit_selected" or world.ui.playerTurnState == "enemy_range_display" then
                 target_cursor_line_width = 6 -- Thicker when a unit is selected
-            else
-                target_cursor_line_width = 2 -- Normal thickness
             end
             -- Lerp the current width towards the target width for a smooth animation
             current_cursor_line_width = current_cursor_line_width + (target_cursor_line_width - current_cursor_line_width) * 0.2
@@ -1046,6 +1073,27 @@ local function draw_party_select_ui(world)
     end
 end
 
+local function draw_game_over_screen(world)
+    -- Draw a dark, semi-transparent overlay
+    love.graphics.setColor(0, 0, 0, 0.75)
+    love.graphics.rectangle("fill", 0, 0, Config.VIRTUAL_WIDTH, Config.VIRTUAL_HEIGHT)
+
+    -- Draw "GAME OVER" text
+    love.graphics.setColor(1, 0.1, 0.1, 1) -- Red
+    local currentFont = love.graphics.getFont()
+    -- Temporarily use a larger font for dramatic effect
+    -- We create it here but don't store it, as it's only for this screen.
+    local largeFont = love.graphics.newFont("assets/Px437_DOS-V_TWN16.ttf", 64)
+    love.graphics.setFont(largeFont)
+    love.graphics.printf("GAME OVER", 0, Config.VIRTUAL_HEIGHT / 2 - 64, Config.VIRTUAL_WIDTH, "center")
+
+    -- Draw prompt to exit
+    love.graphics.setFont(currentFont) -- Revert to the normal font
+    love.graphics.setColor(1, 1, 1, 0.6 + (math.sin(love.timer.getTime() * 2) + 1) / 2 * 0.4) -- Pulsing alpha
+    love.graphics.printf("Press [Escape] to Exit", 0, Config.VIRTUAL_HEIGHT / 2 + 20, Config.VIRTUAL_WIDTH, "center")
+end
+
+
 local function draw_screen_space_ui(world)
     -- Draw Action Menu
     -- Only draw the menu if it's active AND the range fade effect is finished (or not active).
@@ -1229,11 +1277,16 @@ local function draw_screen_space_ui(world)
         end
     end
 
+    -- Draw Battle Info Menu
+    BattleInfoMenu.draw(world)
+
     -- Draw Unit Info Menu
     UnitInfoMenu.draw(world)
 
-    -- Draw Battle Info Menu
-    BattleInfoMenu.draw(world)
+    -- Draw Game Over Screen (this is a screen-space UI)
+    if world.gameState == "game_over" then
+        draw_game_over_screen(world)
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -1258,6 +1311,10 @@ function Renderer.draw(world)
     Camera.apply()
     draw_world_space_ui(world)
     draw_all_entities_and_effects(world)
+
+    -- Draw the EXP bar here, so it's in world-space and on top of entities.
+    ExpBarRendererSystem.draw(world)
+
     Camera.revert()
 
     -- 4. Draw screen-space UI based on the current game state
@@ -1265,6 +1322,9 @@ function Renderer.draw(world)
         draw_screen_space_ui(world)
     elseif world.gameState == "party_select" then
         draw_party_select_ui(world)
+    elseif world.gameState == "game_over" then
+        -- The game over screen is drawn on top of the final game state.
+        draw_screen_space_ui(world)
     end
 
     -- 5. Reset graphics state to be safe

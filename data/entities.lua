@@ -7,10 +7,12 @@ local Grid = require("modules.grid")
 local Config = require("config")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
+local LevelUpSystem = require("systems.level_up_system")
 
 local EntityFactory = {}
 
-function EntityFactory.createSquare(startTileX, startTileY, type, subType)
+-- The 'options' table can be used to pass in extra creation data, like a specific level for an enemy.
+function EntityFactory.createSquare(startTileX, startTileY, type, subType, options)
     local square = {}
     -- Core grid position (for game logic)
     square.tileX = startTileX
@@ -35,6 +37,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.baseAttackStat = blueprint.attackStat
         square.baseDefenseStat = blueprint.defenseStat
         square.isFlying = blueprint.isFlying or false -- Add the flying trait to the entity
+        square.canSwim = blueprint.canSwim or false -- Add the swimming trait to the entity
         square.weight = blueprint.weight or 1 -- Default to a light weight
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
         square.originType = blueprint.originType
@@ -47,7 +50,11 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.maxWisp = blueprint.wispStat
         square.attacks = blueprint.attacks
         square.displayName = blueprint.displayName -- Use display name from blueprint
-        square.portrait = blueprint.portrait or "Default_Portrait.png"
+        square.level = 1
+        square.exp = 0
+        square.maxExp = 100
+        square.growths = blueprint.growths
+        square.portrait = blueprint.portrait or "Default_Portrait"
 
         -- A mapping from the internal player type to the asset name for scalability.
         local playerSpriteMap = {
@@ -90,8 +97,17 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType)
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
         square.weight = blueprint.weight
         square.attacks = blueprint.attacks
-        square.displayName = subType -- Use enemy type as display name
-        square.portrait = blueprint.portrait or "Default_Portrait.png"
+        square.level = (options and options.level) or 1
+        square.growths = blueprint.growths
+        square.expReward = blueprint.expReward
+        square.portrait = blueprint.portrait or "Default_Portrait"
+
+        -- Apply level-up stat gains for enemies starting at > Lvl 1
+        if square.level > 1 then
+            for i = 2, square.level do
+                LevelUpSystem.applyInstantLevelUp(square)
+            end
+        end
 
         -- Add animation component for enemies
         local enemySpriteMap = {

@@ -58,9 +58,9 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
                             canPass = false
                             canLand = false
                         elseif isWater then
-                            -- Water tiles can only be passed over or landed on by flying units.
-                            canPass = startUnit.isFlying
-                            canLand = startUnit.isFlying and not occupyingUnit -- Can't land if a unit is there.
+                            -- Water tiles can be passed over or landed on by flying or swimming units.
+                            canPass = startUnit.isFlying or startUnit.canSwim
+                            canLand = (startUnit.isFlying or startUnit.canSwim) and not occupyingUnit -- Can't land if a unit is there.
                         elseif obstacle then
                             -- Regular obstacles (not impassable).
                             canPass = startUnit.isFlying

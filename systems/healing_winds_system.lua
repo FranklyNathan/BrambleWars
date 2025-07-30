@@ -36,3 +36,5 @@ end)
 EventBus:register("enemy_turn_ended", function(data)
     apply_healing_winds(data.world)
 end)
+
+return HealingWindsSystem

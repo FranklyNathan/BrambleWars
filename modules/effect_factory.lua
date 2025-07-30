@@ -3,6 +3,7 @@
 -- like damage popups, attack visuals, and particle effects.
 
 local AttackPatterns = require("modules.attack_patterns")
+local WorldQueries = require("modules.world_queries")
 
 local EffectFactory = {}
 
@@ -70,6 +71,40 @@ function EffectFactory.createShatterEffect(world, x, y, size, color)
             lifetime = math.random() * 0.5 + 0.2, -- 0.2 to 0.7 seconds
             initialLifetime = 0.5,
             color = color or {0.7, 0.7, 0.7, 1} -- Default to grey
+        })
+    end
+end
+
+function EffectFactory.createExpPopEffect(world, unit)
+    if not unit then return end
+    local anim = world.ui.expGainAnimation
+    if not anim or not anim.active then return end
+
+    -- Calculate the position of the EXP bar to center the effect.
+    local barW = unit.size
+    local hpBarHeight = WorldQueries.getUnitHealthBarHeight(unit, world)
+    local hpBarTopY = math.floor(unit.y + unit.size - 2)
+    local barY = hpBarTopY + hpBarHeight
+    local barCenterX = unit.x + barW / 2
+    local barCenterY = barY + 3 -- Center of the bar's height (6px)
+
+    local numParticles = 40
+    local colors = {
+        {1, 0.9, 0.2, 1}, -- Golden Yellow
+        {0, 1, 1, 1},     -- Cyan
+        {1, 1, 1, 1}      -- White
+    }
+
+    for i = 1, numParticles do
+        local angle = math.random() * 2 * math.pi
+        local speed = math.random(50, 150)
+        table.insert(world.particleEffects, {
+            x = barCenterX, y = barCenterY,
+            size = math.random(2, 4),
+            vx = math.cos(angle) * speed, vy = math.sin(angle) * speed,
+            lifetime = math.random() * 0.6 + 0.3, -- 0.3 to 0.9 seconds
+            initialLifetime = 0.6,
+            color = colors[math.random(1, #colors)]
         })
     end
 end
