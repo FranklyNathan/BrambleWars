@@ -15,7 +15,19 @@ local ObjectBlueprints = {
         sprite = Assets.images.Flag, -- The tree sprite
         attacks = {}, -- Empty attack list to prevent errors in systems that iterate over attacks.
     }
-    -- Other obstacles like 'boulder' or 'wall' could be added here.
+    ,
+    beartrap = {
+        displayName = "Bear Trap",
+        objectType = "beartrap",
+        maxHp = 10,
+        defenseStat = 0, resistanceStat = 0, witStat = 0,
+        weight = 500, -- Effectively immovable
+        sprite = Assets.images.BearTrap,
+        attacks = {},
+        isTrap = true,
+        trapDamage = 5,
+        trapStatus = {type = "stunned", duration = 1}
+    }
 }
 
 return ObjectBlueprints

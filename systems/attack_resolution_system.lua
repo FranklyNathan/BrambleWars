@@ -74,7 +74,7 @@ function AttackResolutionSystem.update(dt, world)
 
                                     local critChance = CombatFormulas.calculateCritChance(effect.attacker, target, attackData.CritChance or 0)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
-                                    local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit)                                    
+                                    local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit, effect.attackName)
                                     -- Apply damage multipliers from special properties (e.g., Impale).
                                     if effect.specialProperties and effect.specialProperties.damageMultiplier then
                                         damage = damage * effect.specialProperties.damageMultiplier

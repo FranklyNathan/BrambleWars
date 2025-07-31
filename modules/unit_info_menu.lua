@@ -412,7 +412,12 @@ function UnitInfoMenu.draw(world)
                 if attackData then
                     -- Draw the static "Power" slice, mimicking the action menu.
                     local powerSliceHeight = sliceHeight
-                    local powerValueText = (attackData.power and attackData.power > 0) and tostring(attackData.power) or "--"
+                    local powerValueText = "--"
+                    if attackData.displayPower then
+                        powerValueText = attackData.displayPower
+                    elseif attackData.power and attackData.power > 0 then
+                        powerValueText = tostring(attackData.power)
+                    end
 
                     -- Draw the slice background (always unselected style)
                     love.graphics.setColor(0.2, 0.2, 0.1, 0.9)

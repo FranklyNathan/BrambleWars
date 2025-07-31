@@ -134,6 +134,107 @@ UnitAttacks.venom_stab = generic_cycle_target_damage_attack
 UnitAttacks.uppercut = generic_cycle_target_damage_attack
 UnitAttacks.longshot = generic_cycle_target_damage_attack
 
+UnitAttacks.shockstrike = function(attacker, world, attackInstanceId)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+
+    local attackName = "shockstrike"
+    local attackData = AttackBlueprints[attackName]
+    if not attackData then return false end
+
+    local statusToApply = nil
+    -- Check for a chance-based status effect.
+    if attackData.statusEffect and attackData.statusChance then
+        if love.math.random() < attackData.statusChance then
+            statusToApply = {
+                type = attackData.statusEffect.type,
+                duration = attackData.statusEffect.duration
+            }
+        end
+    end
+
+    local targetType = (attacker.type == "player") and "enemy" or "player"
+    local specialProperties = { attackInstanceId = attackInstanceId }
+
+    EffectFactory.addAttackEffect(world, {
+        attacker = attacker, attackName = attackName, x = target.x, y = target.y,
+        width = target.size, height = target.size, color = {1, 0, 0, 1},
+        targetType = targetType, statusEffect = statusToApply, specialProperties = specialProperties
+    })
+    return true
+end
+
+UnitAttacks.shunt = function(attacker, world, attackInstanceId)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+
+    -- 1. Apply damage to the target.
+    local attackName = "shunt"
+    local targetType = (attacker.type == "player") and "enemy" or "player"
+    local specialProperties = { attackInstanceId = attackInstanceId }
+    EffectFactory.addAttackEffect(world, {
+        attacker = attacker,
+        attackName = attackName,
+        x = target.x, y = target.y,
+        width = target.size, height = target.size,
+        color = {1, 0, 0, 1},
+        targetType = targetType,
+        specialProperties = specialProperties
+    })
+
+    -- 2. Check if the tile behind the target is empty and push them.
+    local dx = target.tileX - attacker.tileX
+    local dy = target.tileY - attacker.tileY
+    local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
+
+    if not WorldQueries.isTileOccupied(behindTileX, behindTileY, nil, world) then
+        -- The tile is empty, so we can push the target.
+        local destPixelX, destPixelY = Grid.toPixels(behindTileX, behindTileY)
+        target.targetX, target.targetY = destPixelX, destPixelY
+        -- Update the logical tile position immediately.
+        target.tileX, target.tileY = behindTileX, behindTileY
+        -- Give it a speed boost for a quick slide.
+        target.speedMultiplier = 3
+    end
+
+    return true
+end
+
+UnitAttacks.slipstep = function(attacker, world, attackInstanceId)
+    -- Manually get the target without the lunge from the helper.
+    if not world.ui.targeting.cycle.active or not world.ui.targeting.cycle.targets[world.ui.targeting.cycle.selectedIndex] then
+        return false
+    end
+    local target = world.ui.targeting.cycle.targets[world.ui.targeting.cycle.selectedIndex]
+
+    -- Make the attacker face the target.
+    attacker.lastDirection = Grid.getDirection(attacker.tileX, attacker.tileY, target.tileX, target.tileY)
+
+    -- 1. Apply damage to the target.
+    local attackName = "slipstep"
+    local targetType = (attacker.type == "player") and "enemy" or "player"
+    local specialProperties = { attackInstanceId = attackInstanceId }
+    EffectFactory.addAttackEffect(world, {
+        attacker = attacker,
+        attackName = attackName,
+        x = target.x, y = target.y,
+        width = target.size, height = target.size,
+        color = {1, 0, 0, 1},
+        targetType = targetType,
+        specialProperties = specialProperties
+    })
+
+    -- 2. Store original positions and swap logical/target positions for the animation.
+    local attackerOldTileX, attackerOldTileY, attackerOldPixelX, attackerOldPixelY = attacker.tileX, attacker.tileY, attacker.x, attacker.y
+    local targetOldTileX, targetOldTileY, targetOldPixelX, targetOldPixelY = target.tileX, target.tileY, target.x, target.y
+    attacker.tileX, attacker.tileY, attacker.targetX, attacker.targetY = targetOldTileX, targetOldTileY, targetOldPixelX, targetOldPixelY
+    target.tileX, target.tileY, target.targetX, target.targetY = attackerOldTileX, attackerOldTileY, attackerOldPixelX, attackerOldPixelY
+
+    -- 3. Give them a speed boost for a quick animation.
+    attacker.speedMultiplier, target.speedMultiplier = 3, 3
+    return true
+end
+
 UnitAttacks.fireball = function(attacker, world, attackInstanceId)
     -- Fireball is a projectile attack.
     return executeCycleTargetProjectileAttack(attacker, "fireball", world, true, attackInstanceId)
@@ -230,6 +331,8 @@ UnitAttacks.phantom_step = function(square, world, attackInstanceId)
      square.tileX, square.tileY = teleportTileX, teleportTileY
  
      -- 4. Make the attacker face the target from the new position and add a lunge for visual feedback.
+     -- This must be done *after* teleporting.
+     square.lastDirection = Grid.getDirection(teleportTileX, teleportTileY, target.tileX, target.tileY)
      square.components.lunge = { timer = 0.2, initialTimer = 0.2, direction = square.lastDirection }
 
      -- 5. Apply damage to the target by creating an attack effect.
@@ -441,6 +544,71 @@ UnitAttacks.grovecall = function(square, world, attackInstanceId)
     })
 
     return true -- Attack succeeds, turn is consumed.
+end
+
+UnitAttacks.trap_set = function(square, world, attackInstanceId)
+    -- 1. Get the target tile from the ground aiming cursor.
+    local targetTileX, targetTileY = world.ui.mapCursorTile.x, world.ui.mapCursorTile.y
+
+    -- 2. Validate that the target tile is empty.
+    if not WorldQueries.isTileLandable(targetTileX, targetTileY, nil, world) then
+        return false -- Attack fails if the tile is occupied, water, etc.
+    end
+
+    -- 3. Create the new trap obstacle by cloning the blueprint.
+    local landX, landY = Grid.toPixels(targetTileX, targetTileY)
+    local blueprint = ObjectBlueprints.beartrap
+    if not blueprint then return false end -- Failsafe
+
+    local newObstacle = {}
+    -- Copy all properties from the blueprint
+    for k, v in pairs(blueprint) do newObstacle[k] = v end
+
+    -- Set position and state
+    newObstacle.x, newObstacle.y = landX, landY
+    newObstacle.tileX, newObstacle.tileY = targetTileX, targetTileY
+    newObstacle.width, newObstacle.height, newObstacle.size = Config.SQUARE_SIZE, Config.SQUARE_SIZE, Config.SQUARE_SIZE
+    newObstacle.isObstacle = true
+    newObstacle.hp = newObstacle.maxHp
+    newObstacle.statusEffects = {}
+    newObstacle.components = {}
+    newObstacle.sprite = Assets.images.BearTrap
+
+    world:queue_add_entity(newObstacle)
+
+    local specialProperties = { attackInstanceId = attackInstanceId }
+    -- 4. Create a visual effect on the target tile so the player sees the action.
+    EffectFactory.addAttackEffect(world, {
+        attacker = square, attackName = "trap_set", x = landX, y = landY,
+        width = Config.SQUARE_SIZE, height = Config.SQUARE_SIZE, color = {0.2, 0.8, 0.3, 0.7},
+        targetType = "none", specialProperties = specialProperties
+    })
+    return true
+end
+
+UnitAttacks.ascension = function(attacker, world, attackInstanceId)
+    -- 1. Get the target tile from the ground aiming cursor.
+    local targetTileX, targetTileY = world.ui.mapCursorTile.x, world.ui.mapCursorTile.y
+
+    -- 2. Add the 'ascended' component to the attacker.
+    -- This component makes the unit untargetable and invisible.
+    attacker.components.ascended = {
+        targetTileX = targetTileX,
+        targetTileY = targetTileY
+    }
+
+    -- 3. Add a shadow marker to the world for the renderer.
+    -- The shadow indicates where the unit will land.
+    table.insert(world.ascension_shadows, {
+        unit = attacker,
+        tileX = targetTileX,
+        tileY = targetTileY
+    })
+
+    -- 4. The move consumes the unit's turn.
+    -- The action_finalization_system will set hasActed = true.
+    attacker.components.action_in_progress = true
+    return true
 end
 
 UnitAttacks.hookshot = function(attacker, world, attackInstanceId)

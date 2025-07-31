@@ -8,6 +8,7 @@ local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
 local WeaponBlueprints = require("weapon_blueprints")
 local AttackPatterns = require("modules.attack_patterns")
+local WorldQueries = require("modules.world_queries")
 
 local BattleInfoSystem = {}
 
@@ -61,7 +62,7 @@ function BattleInfoSystem.refresh_forecast(world)
         else
             -- Damage forecast for physical, magical, and damaging utility
             menu.playerActionLabel = "Damage:"
-            local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false)
+            local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false, attackName)
             menu.playerDamage = tostring(playerDmg)
             if CombatFormulas.calculateTypeEffectiveness(attackData.originType, target.originType) > 1 then
                 menu.playerDamage = menu.playerDamage .. "!"
@@ -110,8 +111,29 @@ function BattleInfoSystem.refresh_forecast(world)
                 local inCounterRange = false
 
                 if pattern and type(pattern) == "table" then
-                    local dx = attacker.tileX - target.tileX
-                    local dy = attacker.tileY - target.tileY
+                    -- For counter-attack calculations, we need to know where the defender will be *after*
+                    -- the initial attack resolves, as some attacks move the defender.
+                    local attackerFutureTileX, attackerFutureTileY = attacker.tileX, attacker.tileY
+                    local defenderFutureTileX, defenderFutureTileY = target.tileX, target.tileY
+
+                    if attackName == "shunt" then
+                        -- Calculate where the shunt will push the defender.
+                        local push_dx = target.tileX - attacker.tileX
+                        local push_dy = target.tileY - attacker.tileY
+                        local behindTileX, behindTileY = target.tileX + push_dx, target.tileY + push_dy
+                        
+                        -- The push only happens if the destination is not occupied.
+                        if not WorldQueries.isTileOccupied(behindTileX, behindTileY, nil, world) then
+                            defenderFutureTileX, defenderFutureTileY = behindTileX, behindTileY
+                        end
+                    elseif attackName == "slipstep" then
+                        -- The attacker and defender swap positions.
+                        attackerFutureTileX, attackerFutureTileY = target.tileX, target.tileY
+                        defenderFutureTileX, defenderFutureTileY = attacker.tileX, attacker.tileY
+                    end
+
+                    local dx = attackerFutureTileX - defenderFutureTileX
+                    local dy = attackerFutureTileY - defenderFutureTileY
                     for _, p_coord in ipairs(pattern) do
                         if p_coord.dx == dx and p_coord.dy == dy then
                             inCounterRange = true
@@ -121,7 +143,7 @@ function BattleInfoSystem.refresh_forecast(world)
                 end
 
                 if inCounterRange then
-                    local enemyDmg = CombatFormulas.calculateFinalDamage(target, attacker, counterAttackData, false)
+                    local enemyDmg = CombatFormulas.calculateFinalDamage(target, attacker, counterAttackData, false, counterAttackName)
                     menu.enemyDamage = tostring(enemyDmg)
                     if CombatFormulas.calculateTypeEffectiveness(counterAttackData.originType, attacker.originType) > 1 then
                         menu.enemyDamage = menu.enemyDamage .. "!"

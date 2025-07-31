@@ -101,7 +101,7 @@ local AttackBlueprints = {
     shunt = {
         power = 6,
         wispCost = 1,
-        originType = "caverborn", 
+        originType = "cavernborn", 
         Accuracy = 100,
         CritChance = 0,
         useType = "physical",
@@ -118,6 +118,8 @@ local AttackBlueprints = {
         useType = "physical",
         targeting_style = "cycle_target",
         patternType = "standard_melee", -- The 4 adjacent tiles.
+        statusEffect = {type = "paralyzed", duration = 1},
+        statusChance = 0.9, -- 90% chance to apply the status effect.
         description = "A physical attack that may paralyze the target."
     },
     impale = {
@@ -158,6 +160,17 @@ local AttackBlueprints = {
         targeting_style = "cycle_target",
         patternType = "longshot_range", -- Can hit targets 2-3 tiles away.
         description = "A powerful, long-range physical attack with a high critical hit chance."
+    },
+    slipstep = {
+        power = 6,
+        wispCost = 2,
+        originType = "cavernborn",
+        Accuracy = 100,
+        CritChance = 0,
+        useType = "physical",
+        targeting_style = "cycle_target",
+        patternType = "standard_melee",
+        description = "A quick strike that causes the user and target to switch places."
     },
     eruption = {
         power = 5,
@@ -248,6 +261,37 @@ local AttackBlueprints = {
         range = 6,
         drawsTile = true,
         description = "Summons a tree obstacle on the battlefield."
+    },
+    trap_set = {
+        power = 0,
+        wispCost = 2,
+        originType = "forestborn",
+        useType = "utility",
+        targeting_style = "ground_aim",
+        range = 2,
+        drawsTile = true,
+        description = "Summons a bear trap on an empty tile."
+    },
+    ascension = {
+        power = 0,
+        wispCost = 5,
+        originType = "forestborn",
+        useType = "utility",
+        targeting_style = "ground_aim",
+        range = 5,
+        drawsTile = true,
+        displayPower = "KO", -- Special display text for the UI.
+        description = "Ascend, becoming untargetable. Descend at the end of the enemy turn, killing any unit on the chosen tile."
+    },
+    ascension_strike = {
+        power = 9999, -- Instant kill
+        wispCost = 0,
+        originType = "forestborn",
+        Accuracy = 100,
+        CritChance = 0,
+        useType = "physical",
+        targeting_style = "none", -- System-triggered, not player-targeted
+        description = "The killing blow from Ascension."
     },
 
     -- Shared Attacks

@@ -4,6 +4,7 @@
 local Pathfinding = require("modules.pathfinding")
 local WorldQueries = require("modules.world_queries")
 local AttackPatterns = require("modules.attack_patterns")
+local AscensionSystem = require("systems/ascension_system")
 local CombatFormulas = require("modules.combat_formulas")
 local EntityFactory = require("data.entities")
 local EnemyBlueprints = require("data.enemy_blueprints")
@@ -320,9 +321,17 @@ function EnemyTurnSystem.update(dt, world)
     -- Find the next enemy that has not yet acted.
     local actingEnemy = nil
     for _, enemy in ipairs(world.enemies) do
-        if not enemy.hasActed and enemy.hp > 0 then
-            actingEnemy = enemy
-            break
+        if enemy.hp > 0 and not enemy.hasActed then
+            -- Check if the unit is stunned at the start of its turn.
+            if enemy.statusEffects and enemy.statusEffects.stunned then
+                -- If stunned, their turn is skipped. Mark them as having acted.
+                -- The loop will then continue to the next available enemy.
+                enemy.hasActed = true
+            else
+                -- This is the enemy that will act.
+                actingEnemy = enemy
+                break
+            end
         end
     end
 
@@ -479,6 +488,9 @@ function EnemyTurnSystem.update(dt, world)
                 end
             end
         end
+        -- Before ending the turn, resolve any pending ascensions.
+        AscensionSystem.descend_units(world)
+
         -- No more enemies to act, which means the enemy turn is over.
         world.ui.turnShouldEnd = true
     end

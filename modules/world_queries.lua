@@ -28,7 +28,8 @@ end
 function WorldQueries.getUnitAt(tileX, tileY, excludeSquare, world)
     for _, s in ipairs(world.all_entities) do
         -- Only check against players and enemies, not projectiles etc.
-        if (s.type == "player" or s.type == "enemy") and s ~= excludeSquare and s.hp > 0 then
+        -- Also, ignore units that are currently ascended.
+        if (s.type == "player" or s.type == "enemy") and s ~= excludeSquare and s.hp > 0 and not (s.components and s.components.ascended) then
             if s.tileX == tileX and s.tileY == tileY then
                 return s
             end
@@ -109,34 +110,6 @@ function WorldQueries.isLedgeBlockingPath(fromTileX, fromTileY, toTileX, toTileY
     end
 
     return false
-end
-
-function WorldQueries.isTargetInPattern(attacker, patternFunc, targets, world)
-    if not patternFunc or not targets then return false end
-
-    local effects = patternFunc(attacker, world) -- Pass world to the pattern generator
-    for _, effectData in ipairs(effects) do
-        local s = effectData.shape
-
-        if s.type == "rect" then
-            -- Convert the pixel-based rectangle into tile boundaries.
-            local startTileX, startTileY = Grid.toTile(s.x, s.y)
-            -- Important: The end tile is the one containing the bottom-right corner pixel.
-            local endTileX, endTileY = Grid.toTile(s.x + s.w - 1, s.y + s.h - 1)
-
-            for _, target in ipairs(targets) do
-                -- We only care about living targets. The `target.hp == nil` check is for the flag.
-                if target and (target.hp == nil or target.hp > 0) then
-                    -- Check if the target's single tile falls within the pattern's tile-based AABB.
-                    if target.tileX >= startTileX and target.tileX <= endTileX and
-                       target.tileY >= startTileY and target.tileY <= endTileY then
-                        return true -- Found a target within one of the pattern's shapes
-                    end
-                end
-            end
-        end
-    end
-    return false -- No targets were found within the entire pattern
 end
 
 -- A helper function to get a unit's final movement range, accounting for status effects.
@@ -388,43 +361,10 @@ local function findValidTargets_AutoHitAll(attacker, attackData, world)
     return validTargets
 end
 
--- Helper function to find targets for "directional_aim" style attacks.
-local function findValidTargets_Directional(attacker, attackData, world)
-    local validTargets = {}
-    local patternFunc = AttackPatterns[attackData.name] -- Assuming attackData has a name field
-    if not patternFunc then return {} end
-
-    local potentialTargets = getPotentialTargets(attacker, attackData, world)
-
-    -- Check all 4 directions from the attacker's current position
-    local tempAttacker = { tileX = attacker.tileX, tileY = attacker.tileY, x = attacker.x, y = attacker.y, size = attacker.size }
-    local directions = {"up", "down", "left", "right"}
-    for _, dir in ipairs(directions) do
-        tempAttacker.lastDirection = dir
-        local effects = patternFunc(tempAttacker, world)
-        for _, effectData in ipairs(effects) do
-            local s = effectData.shape
-            local startTileX, startTileY = Grid.toTile(s.x, s.y)
-            local endTileX, endTileY = Grid.toTile(s.x + s.w - 1, s.y + s.h - 1)
-
-            for _, target in ipairs(potentialTargets) do
-                if target.hp > 0 and target ~= attacker and target.tileX >= startTileX and target.tileX <= endTileX and target.tileY >= startTileY and target.tileY <= endTileY then
-                    -- Found a valid target. Add it to the list if not already there.
-                    local found = false
-                    for _, vt in ipairs(validTargets) do if vt == target then found = true; break end end
-                    if not found then table.insert(validTargets, target) end
-                end
-            end
-        end
-    end
-    return validTargets
-end
-
 -- A dispatch table to call the correct targeting helper function.
 local targetFinders = {
     cycle_target    = findValidTargets_Cycle,
-    auto_hit_all    = findValidTargets_AutoHitAll,
-    directional_aim = findValidTargets_Directional,
+    auto_hit_all    = findValidTargets_AutoHitAll
 }
 
 -- Finds all valid targets for a given attack, based on its blueprint properties.
@@ -507,6 +447,9 @@ function WorldQueries.isActionOngoing(world)
     -- An action is considered ongoing if there are active global effects...
     -- Check if the level up display sequence is active.
     if LevelUpDisplaySystem.active then return true end
+
+    -- Check if the promotion menu is active, as this also pauses the game flow.
+    if world.ui.menus.promotion.active then return true end
 
     -- An action is ongoing if a projectile is in flight, or a counter-attack is pending.
     -- We don't check attackEffects here, as those are purely visual and shouldn't block game state.

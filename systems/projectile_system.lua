@@ -33,12 +33,19 @@ function ProjectileSystem.update(dt, world)
                 local targets = (targetType == "player") and world.players or world.enemies
                 for _, target in ipairs(targets) do
                     if target.hp > 0 and not comp.hitTargets[target] and target.tileX == p.tileX and target.tileY == p.tileY then
-                        local attackData = AttackBlueprints[comp.attackName]
-                        local damage = CombatFormulas.calculateBaseDamage(comp.attacker, target, attackData)
-                        CombatActions.applyDirectDamage(world, target, damage, false, comp.attacker)
-                        
-                        comp.hitTargets[target] = true -- Mark as hit to prevent multi-hits.
+                        -- When a projectile hits, create an attack effect at the target's location.
+                        -- This unifies the damage pipeline, allowing the AttackResolutionSystem to handle
+                        -- hit chance, crits, status effects, and counter-attacks for all attack types.
+                        EffectFactory.addAttackEffect(world, {
+                            attacker = comp.attacker,
+                            attackName = comp.attackName,
+                            x = target.x, y = target.y,
+                            width = target.size, height = target.size,
+                            targetType = targetType,
+                            specialProperties = { attackInstanceId = comp.attackInstanceId }
+                        })
 
+                        comp.hitTargets[target] = true -- Mark as hit to prevent multi-hits.
                         if not comp.isPiercing then
                             p.isMarkedForDeletion = true
                             break -- Stop checking other targets.
@@ -50,13 +57,17 @@ function ProjectileSystem.update(dt, world)
                 if not p.isMarkedForDeletion then
                     local hitObstacle = WorldQueries.getObstacleAt(p.tileX, p.tileY, world)
                     if hitObstacle and not comp.hitTargets[hitObstacle] then
-                        if hitObstacle.hp then -- It's a destructible obstacle (e.g., a tree).
-                            local attackData = AttackBlueprints[comp.attackName]
-                            local damage = CombatFormulas.calculateBaseDamage(comp.attacker, hitObstacle, attackData)
-                            CombatActions.applyDirectDamage(world, hitObstacle, damage, false, comp.attacker)
-                            
+                        if hitObstacle.hp then -- It's a destructible obstacle.
+                            -- Create an attack effect to damage it, just like with units.
+                            EffectFactory.addAttackEffect(world, {
+                                attacker = comp.attacker,
+                                attackName = comp.attackName,
+                                x = hitObstacle.x, y = hitObstacle.y,
+                                width = hitObstacle.width, height = hitObstacle.height,
+                                targetType = targetType, -- Obstacles are targeted by both teams
+                                specialProperties = { attackInstanceId = comp.attackInstanceId }
+                            })
                             comp.hitTargets[hitObstacle] = true -- Mark as hit.
-
                             if not comp.isPiercing then
                                 p.isMarkedForDeletion = true
                             end

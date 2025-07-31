@@ -44,36 +44,55 @@ function CombatFormulas.calculateHitChance(attacker, defender, moveAccuracy)
 end
 
 -- Helper to calculate base damage for physical and magical attacks
-function CombatFormulas.calculateBaseDamage(attacker, defender, attackData)
+function CombatFormulas.calculateBaseDamage(attacker, defender, attackData, attackName)
+    print("--- Damage Calculation: " .. (attackName or "Unknown") .. " ---")
+    print("Attacker: " .. (attacker.displayName or attacker.enemyType) .. ", Defender: " .. (defender.displayName or defender.enemyType or "Obstacle"))
+
     local statUsed = (attackData.useType == "physical") and attacker.finalAttackStat or attacker.finalMagicStat
     local power = attackData.power or 0
     local effectiveness = CombatFormulas.calculateTypeEffectiveness(attackData.originType, defender.originType)
 
+    print(string.format("  Move Power: %d, Attacker Stat: %d", power, statUsed))
+    print(string.format("  Type Effectiveness: x%.2f", effectiveness))
+
     -- Apply the type effectiveness to the attack power + attacker's stat.
     local adjustedPower = (power + (statUsed or 0)) * effectiveness
+    print(string.format("  Adjusted Power ( (Power + Stat) * Effectiveness ): %.2f", adjustedPower))
 
     local rawDamage = 0
     local defenseStatUsed = 0
+    local defenseStatName = ""
     -- Calculate damage dealt by a physical attack.
     if attackData.useType == "physical" then
         defenseStatUsed = defender.finalDefenseStat or 0
+        defenseStatName = "Defense"
         rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's defense.
     elseif attackData.useType == "magical" then
         defenseStatUsed = defender.finalResistanceStat or 0
+        defenseStatName = "Resistance"
         rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's resistance.
     elseif attackData.useType == "utility" and power > 0 then
         -- Utility moves with power use physical stats by default.
         defenseStatUsed = defender.finalDefenseStat or 0
+        defenseStatName = "Defense"
         rawDamage = math.max(0, adjustedPower - defenseStatUsed)
     end
 
+    if defenseStatName ~= "" then
+        print(string.format("  Defender %s: %d", defenseStatName, defenseStatUsed))
+        print(string.format("  Raw Damage ( Adjusted Power - Defender Stat ): %.2f", rawDamage))
+    end
+
+    local finalBaseDamage = math.floor(rawDamage)
+    print("Final Base Damage (floored): " .. finalBaseDamage)
+    print("--------------------------")
     -- Base damage should always be a whole number.
-    return math.floor(rawDamage)
+    return finalBaseDamage
 end
 
 -- Helper to calculate final damage including base damage and critical hit multiplier
-function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isCrit)
-    local damage = CombatFormulas.calculateBaseDamage(attacker, defender, attackData)
+function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isCrit, attackName)
+    local damage = CombatFormulas.calculateBaseDamage(attacker, defender, attackData, attackName)
     if isCrit then
         damage = damage * 2
     end

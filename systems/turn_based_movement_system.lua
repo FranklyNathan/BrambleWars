@@ -4,9 +4,11 @@
 local Grid = require("modules.grid")
 local WorldQueries = require("modules.world_queries")
 local CharacterBlueprints = require("data.character_blueprints")
-local RangeCalculator = require("modules.range_calculator")
 local WeaponBlueprints = require("weapon_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
+local CombatActions = require("modules.combat_actions")
+local StatusEffectManager = require("modules.status_effect_manager")
+local Assets = require("modules.assets")
 
 local TurnBasedMovementSystem = {}
 
@@ -43,7 +45,41 @@ function TurnBasedMovementSystem.update(dt, world)
                 -- Update the logical tile position to match.
                 entity.tileX, entity.tileY = Grid.toTile(entity.x, entity.y)
 
-                if #entity.components.movement_path > 0 then
+                -- Check for traps on the tile the unit just landed on.
+                if not entity.isFlying then -- Flying units are immune to ground traps.
+                    local obstacle = WorldQueries.getObstacleAt(entity.tileX, entity.tileY, world)
+                    if obstacle and obstacle.isTrap then
+                        -- Apply trap effects based on its blueprint
+                        if obstacle.trapDamage and obstacle.trapDamage > 0 then
+                            CombatActions.applyDirectDamage(world, entity, obstacle.trapDamage, false, nil)
+                        end
+                        if obstacle.trapStatus then
+                            local statusCopy = { type = obstacle.trapStatus.type, duration = obstacle.trapStatus.duration }
+                            StatusEffectManager.applyStatusEffect(entity, statusCopy, world)
+                        end
+                        -- Destroy the trap
+                        obstacle.isMarkedForDeletion = true
+                        if Assets.sounds.attack_hit then
+                            Assets.sounds.attack_hit:stop(); Assets.sounds.attack_hit:play()
+                        end
+
+                        -- If a unit triggers a trap, their turn ends immediately.
+                        entity.hasActed = true
+
+                        if entity.type == "player" then
+                            world.ui.pathing.moveDestinationEffect = nil
+                            -- The unit's turn is over. Return to the free roam state so the player
+                            -- can select another unit or end their turn. This prevents the game from
+                            -- getting stuck in the 'unit_moving' state.
+                            world.ui.playerTurnState = "free_roam"
+                        end
+                        -- Stop all further movement for this unit by removing the component.
+                        entity.components.movement_path = nil
+                    end
+                end
+
+                -- Check if the movement path still exists after potential trap interaction.
+                if entity.components.movement_path and #entity.components.movement_path > 0 then
                     -- It has arrived. Get the next step from the path.
                     local nextStep = table.remove(entity.components.movement_path, 1)
 
@@ -58,7 +94,7 @@ function TurnBasedMovementSystem.update(dt, world)
                     -- Set the next tile as the new target.
                     entity.targetX = nextStep.x
                     entity.targetY = nextStep.y
-                else
+                elseif entity.components.movement_path then -- Path exists but is now empty.
                     -- The path is now empty, which means movement is complete.
                     entity.components.movement_path = nil -- Clean up the component.
 
@@ -175,6 +211,24 @@ function TurnBasedMovementSystem.update(dt, world)
                         end
                     end
                 end
+            end
+        end
+    end
+
+    -- This system runs on both turns, making it a good place to check for pending level-ups
+    -- that might have been triggered during combat on the enemy's turn.
+    -- We check this separately from movement to ensure it can happen even if no one is moving.
+    for _, entity in ipairs(world.all_entities) do
+        if entity.components.pending_level_up then
+            -- We must wait for any other major actions (like the attack that granted the EXP) to finish.
+            -- isActionOngoing checks for things like damage animations, projectiles, etc.
+            -- The EXP bar animation itself does NOT block isActionOngoing.
+            if not WorldQueries.isActionOngoing(world) then
+                local LevelUpSystem = require("systems.level_up_system")
+                entity.components.pending_level_up = nil -- Consume the flag
+                LevelUpSystem.checkForLevelUp(entity, world)
+                -- Only process one level up per frame to prevent UI overlap issues.
+                return
             end
         end
     end

@@ -17,7 +17,13 @@ function ExpBarRendererSystem.draw(world)
         -- Positioning the bar below the unit.
         -- We use the unit's current pixel position (x, y) for smooth following.
         local barW = unit.size
-        local barH = 6 -- Matches the HP bar height
+        local barH = 6 -- Default height
+
+        -- If the bar is shrinking, calculate its current height.
+        if anim.state == "shrinking" then
+            local progress = anim.shrinkTimer / anim.shrinkDuration -- Progress from 1 down to 0
+            barH = math.ceil(6 * progress)
+        end
 
         -- Dynamically calculate the Y position to be directly below the HP bar.
         local hpBarHeight = WorldQueries.getUnitHealthBarHeight(unit, world)

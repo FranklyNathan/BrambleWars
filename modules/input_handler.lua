@@ -19,12 +19,6 @@ local PromotionSystem = require("systems.promotion_system")
 
 local InputHandler = {}
 
--- Helper function to find attack data by name from a unit's blueprint.
-local function getAttackDataByName(attackName)
-    if not attackName then return nil end
-    return AttackBlueprints[attackName]
-end
-
 --------------------------------------------------------------------------------
 -- TURN-BASED HELPER FUNCTIONS
 --------------------------------------------------------------------------------
@@ -39,11 +33,38 @@ local function set_player_turn_state(newState, world)
     end
 end
 
+-- Helper function for standard vertical menu navigation.
+-- Handles index wrapping, sound effects, and optional event dispatching.
+local function navigate_vertical_menu(key, menu, eventName, world)
+    if not menu or not menu.options or #menu.options == 0 then return end
+
+    local oldIndex = menu.selectedIndex
+    if key == "w" then
+        menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
+    elseif key == "s" then
+        menu.selectedIndex = menu.selectedIndex % #menu.options + 1
+    end
+
+    if oldIndex ~= menu.selectedIndex then
+        if Assets.sounds.menu_scroll then
+            Assets.sounds.menu_scroll:stop()
+            Assets.sounds.menu_scroll:play()
+        end
+        -- Dispatch an event if one is provided.
+        if eventName and world then
+            EventBus:dispatch(eventName, { world = world })
+        end
+    end
+end
+
 -- Checks if all living player units have taken their action for the turn.
 local function allPlayersHaveActed(world)
     for _, player in ipairs(world.players) do
         if player.hp > 0 and not player.hasActed then
-            return false -- Found a player who hasn't acted yet.
+            -- A player's turn is not over if they are not stunned.
+            if not (player.statusEffects and player.statusEffects.stunned) then
+                return false -- Found an available player who hasn't acted yet.
+            end
         end
     end
     return true -- All living players have acted.
@@ -133,7 +154,8 @@ local function handle_free_roam_input(key, world)
         local unit = WorldQueries.getUnitAt(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y, nil, world)
         if unit then
             -- A unit is on the tile
-            if unit.type == "player" and not unit.hasActed and not unit.isCarried then
+            local isStunned = unit.statusEffects and unit.statusEffects.stunned
+            if unit.type == "player" and not unit.hasActed and not unit.isCarried and not isStunned then
             -- If the cursor is on an available player unit, select it.
                 world.ui.selectedUnit = unit
                 set_player_turn_state("unit_selected", world)
@@ -187,13 +209,7 @@ local function handle_weapon_select_input(key, world)
     if not menu.active then return end
 
     if key == "w" or key == "s" then
-        if #menu.options == 0 then return end -- Do nothing if there are no options to scroll through.
-        if key == "w" then
-            menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
-        else -- key == "s"
-            menu.selectedIndex = menu.selectedIndex % #menu.options + 1
-        end
-        if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+        navigate_vertical_menu(key, menu, nil, world)
     elseif key == "k" then -- Cancel
         if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
         menu.active = false
@@ -241,6 +257,63 @@ local function handle_weapon_select_input(key, world)
     end
 end
 
+-- New helper function for unit info menu navigation, callable from both single-press and continuous handlers.
+local function move_unit_info_selection(key, world)
+    local menu = world.ui.menus.unitInfo
+    -- Add guard clauses to ensure we don't error if called in the wrong state
+    if not menu.isLocked or not menu.unit then
+        return
+    end
+
+    local oldIndex = menu.selectedIndex
+    local newIndex = oldIndex
+
+    -- Define menu sections and total number of slices
+    local NAME_INDEX = 1
+    local CLASS_INDEX = 2
+    local WEAPON_INDEX = 3
+    local HP_INDEX = 4
+    local WISP_INDEX = 5
+    local STATS_START = 6
+    local STATS_END = 11 -- 3 rows of 2 stats each
+    local MOVES_START = 12
+    local numAttacks = #menu.unit.attacks
+    local MOVES_END = MOVES_START + numAttacks - 1
+    
+    local hasCarriedUnit = menu.unit.carriedUnit and true or false
+    local CARRIED_UNIT_INDEX = hasCarriedUnit and (MOVES_END + 1) or nil
+    
+    local totalSlices = MOVES_END
+    if hasCarriedUnit then totalSlices = CARRIED_UNIT_INDEX end
+
+    -- Vertical Navigation (W/S)
+    if key == "w" then -- Up
+        if oldIndex > MOVES_START then newIndex = oldIndex - 1 -- In moves or carried unit
+        elseif oldIndex == MOVES_START then newIndex = STATS_END -- From first move to Wit/Wgt
+        elseif oldIndex > STATS_START + 1 then newIndex = oldIndex - 2 -- In stats grid (not top row)
+        elseif oldIndex > STATS_START - 1 then newIndex = WISP_INDEX -- From top row of stats to Wisp
+        elseif oldIndex > NAME_INDEX then newIndex = oldIndex - 1 -- In top section
+        else newIndex = totalSlices end -- Wrap from top to bottom
+    elseif key == "s" then -- Down
+        if oldIndex < WISP_INDEX then newIndex = oldIndex + 1 -- In top section
+        elseif oldIndex == WISP_INDEX then newIndex = STATS_START -- From Wisp to Atk
+        elseif oldIndex < STATS_END - 1 then newIndex = oldIndex + 2 -- In stats grid (not last row)
+        elseif oldIndex <= STATS_END then newIndex = MOVES_START -- From last row of stats to first move
+        elseif oldIndex < totalSlices then newIndex = oldIndex + 1 -- In moves/carried
+        else newIndex = 1 end -- Wrap from bottom to top
+    elseif key == "a" then -- Horizontal Navigation (A/D)
+        if oldIndex >= STATS_START and oldIndex <= STATS_END and oldIndex % 2 == 1 then newIndex = oldIndex - 1 end
+    elseif key == "d" then
+        if oldIndex >= STATS_START and oldIndex <= STATS_END and oldIndex % 2 == 0 then newIndex = oldIndex + 1 end
+    end
+
+    if newIndex ~= oldIndex then
+        menu.selectedIndex = newIndex
+        if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+        EventBus:dispatch("unit_info_menu_selection_changed", { world = world })
+    end
+end
+
 -- Handles input when the unit info menu is locked.
 local function handle_unit_info_locked_input(key, world)
     local menu = world.ui.menus.unitInfo
@@ -260,68 +333,7 @@ local function handle_unit_info_locked_input(key, world)
         set_player_turn_state(returnState, world)
         world.ui.previousPlayerTurnState = nil -- Clean up the stored state.
     elseif key == "w" or key == "s" or key == "a" or key == "d" then
-        local oldIndex = menu.selectedIndex
-        local newIndex = oldIndex
-
-        -- Define menu sections and total number of slices
-        local NAME_INDEX = 1
-        local CLASS_INDEX = 2
-        local WEAPON_INDEX = 3
-        local HP_INDEX = 4
-        local WISP_INDEX = 5
-        local STATS_START = 6
-        local STATS_END = 11 -- 3 rows of 2 stats each
-        local MOVES_START = 12
-        local numAttacks = #menu.unit.attacks
-        local MOVES_END = MOVES_START + numAttacks - 1
-        
-        local hasCarriedUnit = menu.unit.carriedUnit and true or false
-        local CARRIED_UNIT_INDEX = hasCarriedUnit and (MOVES_END + 1) or nil
-        
-        local totalSlices = MOVES_END
-        if hasCarriedUnit then totalSlices = CARRIED_UNIT_INDEX end
-
-        -- Vertical Navigation (W/S)
-        if key == "w" then -- Up
-            if oldIndex > MOVES_START then newIndex = oldIndex - 1 -- In moves or carried unit
-            elseif oldIndex == MOVES_START then newIndex = STATS_END -- From first move to Wit/Wgt
-            elseif oldIndex > STATS_START + 1 then newIndex = oldIndex - 2 -- In stats grid (not top row)
-            elseif oldIndex > STATS_START - 1 then newIndex = WISP_INDEX -- From top row of stats to Wisp
-            elseif oldIndex > NAME_INDEX then newIndex = oldIndex - 1 -- In top section
-            else newIndex = totalSlices end -- Wrap from top to bottom
-        elseif key == "s" then -- Down
-            if oldIndex < WISP_INDEX then newIndex = oldIndex + 1 -- In top section
-            elseif oldIndex == WISP_INDEX then newIndex = STATS_START -- From Wisp to Atk
-            elseif oldIndex < STATS_END - 1 then newIndex = oldIndex + 2 -- In stats grid (not last row)
-            elseif oldIndex <= STATS_END then newIndex = MOVES_START -- From last row of stats to first move
-            elseif oldIndex < totalSlices then newIndex = oldIndex + 1 -- In moves/carried
-            else newIndex = 1 end -- Wrap from bottom to top
-        end
-
-        -- Horizontal Navigation (A/D)
-        if key == "a" or key == "d" then
-            -- Horizontal navigation only applies within the stat grid
-            if oldIndex >= STATS_START and oldIndex <= STATS_END then
-                if key == "a" then -- Move left from a right-side stat
-                    -- Right-side stats (Def, Res, Wgt) have odd indices (7, 9, 11).
-                    if oldIndex % 2 == 1 then newIndex = oldIndex - 1 end
-                else -- Move right (key == "d") from a left-side stat
-                    -- Left-side stats (Atk, Mag, Wit) have even indices (6, 8, 10).
-                    if oldIndex % 2 == 0 then newIndex = oldIndex + 1 end
-                end
-            end
-        end
-
-        -- Update index and play sound if changed
-        if newIndex ~= oldIndex then
-            menu.selectedIndex = newIndex
-            if Assets.sounds.menu_scroll then
-                Assets.sounds.menu_scroll:stop()
-                Assets.sounds.menu_scroll:play()
-            end
-            -- Dispatch an event so the UI can react (e.g., show move description)
-            EventBus:dispatch("unit_info_menu_selection_changed", { world = world })
-        end
+        move_unit_info_selection(key, world)
     elseif key == "j" then -- Confirm/Select
         local WEAPON_INDEX = 3 -- The weapon slice is now the 3rd item in the menu.
         if menu.selectedIndex == WEAPON_INDEX then
@@ -521,22 +533,7 @@ local function handle_action_menu_input(key, world)
     if not menu.active then return end
 
     if key == "w" or key == "s" then
-        local oldIndex = menu.selectedIndex
-        if key == "w" then
-            -- Wrap around to the bottom when moving up from the top.
-            menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
-        else -- key == "s"
-            -- Wrap around to the top when moving down from the bottom.
-            menu.selectedIndex = menu.selectedIndex % #menu.options + 1
-        end
-
-        if oldIndex ~= menu.selectedIndex then
-            if Assets.sounds.menu_scroll then
-                Assets.sounds.menu_scroll:stop()
-                Assets.sounds.menu_scroll:play()
-            end
-            EventBus:dispatch("action_menu_selection_changed", { world = world })
-        end
+        navigate_vertical_menu(key, menu, "action_menu_selection_changed", world)
     elseif key == "k" then -- Cancel action menu
         if Assets.sounds.back_out then
             Assets.sounds.back_out:stop()
@@ -582,7 +579,7 @@ local function handle_action_menu_input(key, world)
         if not selectedOption then return end
 
         -- Check for wisp cost and target validity before proceeding.
-        local attackData = getAttackDataByName(selectedOption.key)
+        local attackData = selectedOption.key and AttackBlueprints[selectedOption.key]
         if attackData then
             if attackData.wispCost and menu.unit.wisp < attackData.wispCost then
                 return -- Not enough wisp, do nothing.
@@ -685,10 +682,8 @@ local function handle_map_menu_input(key, world)
     if not menu.active then return end
 
     -- Navigation (for future expansion)
-    if key == "w" then
-        menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
-    elseif key == "s" then
-        menu.selectedIndex = menu.selectedIndex % #menu.options + 1
+    if key == "w" or key == "s" then
+        navigate_vertical_menu(key, menu, nil, world)
     elseif key == "k" then -- Cancel
         menu.active = false
         set_player_turn_state("free_roam", world)
@@ -707,7 +702,7 @@ end
 -- Helper to move the cursor for ground aiming, clamping to map bounds.
 local function move_ground_aim_cursor(dx, dy, world)
     local attacker = world.ui.menus.action.unit
-    local attackData = getAttackDataByName(world.ui.targeting.selectedAttackName)
+    local attackData = world.ui.targeting.selectedAttackName and AttackBlueprints[world.ui.targeting.selectedAttackName]
     local newTileX = world.ui.mapCursorTile.x + dx
     local newTileY = world.ui.mapCursorTile.y + dy
 
@@ -1004,13 +999,7 @@ local function handle_promotion_select_input(key, world)
     if not menu.active then return end
 
     if key == "w" or key == "s" then
-        if #menu.options == 0 then return end
-        if key == "w" then
-            menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
-        else -- key == "s"
-            menu.selectedIndex = menu.selectedIndex % #menu.options + 1
-        end
-        if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+        navigate_vertical_menu(key, menu, nil, world)
     elseif key == "j" then -- Confirm
         local selectedOption = menu.options[menu.selectedIndex]
         PromotionSystem.apply(menu.unit, selectedOption, world)
@@ -1047,7 +1036,11 @@ local stateHandlers = {}
 
 -- Handles all input during active gameplay.
 stateHandlers.gameplay = function(key, world)
-    if world.turn ~= "player" then return end -- Only accept input on the player's turn
+    -- Only accept input on the player's turn, with an exception for promotion selection,
+    -- which can happen during the enemy's turn after a player unit levels up.
+    if world.turn ~= "player" and world.ui.playerTurnState ~= "promotion_select" then
+        return
+    end
 
     local state = world.ui.playerTurnState
 
@@ -1073,35 +1066,16 @@ stateHandlers.gameplay = function(key, world)
     end
 end
 
--- Handles all input for the party selection menu.
-stateHandlers.party_select = function(key, world)
-    if key == "w" then world.ui.partySelect.cursorPos.y = math.max(1, world.ui.partySelect.cursorPos.y - 1)
-    elseif key == "s" then world.ui.partySelect.cursorPos.y = math.min(3, world.ui.partySelect.cursorPos.y + 1)
-    elseif key == "a" then world.ui.partySelect.cursorPos.x = math.max(1, world.ui.partySelect.cursorPos.x - 1)
-    elseif key == "d" then world.ui.partySelect.cursorPos.x = math.min(3, world.ui.partySelect.cursorPos.x + 1)
-    elseif key == "j" then
-        if not world.ui.partySelect.selectedSquare then
-            if world.ui.partySelect.characterGrid[world.ui.partySelect.cursorPos.y] and world.ui.partySelect.characterGrid[world.ui.partySelect.cursorPos.y][world.ui.partySelect.cursorPos.x] then
-                world.ui.partySelect.selectedSquare = {x = world.ui.partySelect.cursorPos.x, y = world.ui.partySelect.cursorPos.y}
-            end
-        else
-            local secondSquareType = world.ui.partySelect.characterGrid[world.ui.partySelect.cursorPos.y] and world.ui.partySelect.characterGrid[world.ui.partySelect.cursorPos.y][world.ui.partySelect.cursorPos.x]
-            if secondSquareType then
-                local firstSquareType = world.ui.partySelect.characterGrid[world.ui.partySelect.selectedSquare.y][world.ui.partySelect.selectedSquare.x]
-                world.ui.partySelect.characterGrid[world.ui.partySelect.selectedSquare.y][world.ui.partySelect.selectedSquare.x] = secondSquareType
-                world.ui.partySelect.characterGrid[world.ui.partySelect.cursorPos.y][world.ui.partySelect.cursorPos.x] = firstSquareType
-            end
-        end
-    elseif world.ui.menus.unitInfo.active then
-        world.ui.menus.unitInfo.active = false
-    end
-end
-
 -- Handles input on the game over screen.
 stateHandlers.game_over = function(key, world)
     if key == "escape" then
         love.event.quit()
     end
+end
+
+-- Handles input when the game is paused.
+stateHandlers.paused = function(key, world)
+    -- Most input is blocked. The global 'escape' handler in handle_key_press will unpause.
 end
 
 --------------------------------------------------------------------------------
@@ -1118,57 +1092,10 @@ function InputHandler.handle_key_press(key, currentGameState, world)
 
     -- The Escape key is a global toggle that switches between states.
     if key == "escape" then
-        if currentGameState == "gameplay" then
-            return "party_select" -- Switch to the menu
-        elseif currentGameState == "party_select" then
-            -- This is where the logic for applying party changes when unpausing lives now.
-            local oldPlayerTypes = {}
-            for _, p in ipairs(world.players) do table.insert(oldPlayerTypes, p.playerType) end
-            local newPlayerTypes = {}
-            for i = 1, 3 do if world.ui.partySelect.characterGrid[1][i] then table.insert(newPlayerTypes, world.ui.partySelect.characterGrid[1][i]) end end
-
-            local partyChanged = #oldPlayerTypes ~= #newPlayerTypes
-            if not partyChanged then
-                for i = 1, #oldPlayerTypes do if oldPlayerTypes[i] ~= newPlayerTypes[i] then partyChanged = true; break end end
-            end
-
-            if partyChanged then
-                -- Store the positions of the current party members to assign to the new party
-                local oldPositions = {}
-                for _, p in ipairs(world.players) do
-                    table.insert(oldPositions, {x = p.x, y = p.y, targetX = p.targetX, targetY = p.targetY})
-                end
-
-                -- Mark all current players for deletion
-                for _, p in ipairs(world.players) do
-                    p.isMarkedForDeletion = true
-                end
-
-                -- Queue the new party members for addition
-                for i, playerType in ipairs(newPlayerTypes) do
-                    local playerObject = world.roster[playerType]
-                    -- We only add them if they are alive. The roster preserves their state (HP, etc.)
-                    if playerObject.hp > 0 then
-                        -- Assign the position of the player being replaced. This prevents new members from spawning off-screen.
-                        if oldPositions[i] then
-                            playerObject.x, playerObject.y, playerObject.targetX, playerObject.targetY = oldPositions[i].x, oldPositions[i].y, oldPositions[i].targetX, oldPositions[i].targetY
-                        else
-                            -- If there's no old position (e.g., adding a new member to a smaller party),
-                            -- give them a default starting position to avoid spawning at (0,0).
-                            local newX = 100 + (i - 1) * 50
-                            local newY = 100
-                            playerObject.x, playerObject.y, playerObject.targetX, playerObject.targetY = newX, newY, newX, newY
-                        end
-
-                        world:queue_add_entity(playerObject)
-                    end
-                end
-                -- Immediately process the additions and deletions to prevent visual glitches.
-                -- This is the key fix for units vanishing on unpause.
-                world:process_additions_and_deletions()
-            end
-            world.ui.partySelect.selectedSquare = nil -- Reset selection on unpause
+        if currentGameState == "paused" then
             return "gameplay" -- Switch back to gameplay
+        elseif currentGameState == "gameplay" then
+            return "paused" -- Switch to the paused state
         end
     end
 
@@ -1186,7 +1113,13 @@ end
 function InputHandler.handle_continuous_input(dt, world)
     -- This function should only run during the player's turn in specific states.
     local state = world.ui.playerTurnState
-    local movement_allowed = state == "free_roam" or state == "unit_selected" or state == "ground_aiming" or state == "enemy_range_display"
+    local movement_allowed = state == "free_roam" or
+                             state == "unit_selected" or
+                             state == "ground_aiming" or
+                             state == "enemy_range_display" or
+                             state == "unit_info_locked" or
+                             state == "action_menu" or state == "map_menu" or
+                             state == "weapon_select" or state == "promotion_select"
 
     if world.turn ~= "player" or not movement_allowed then
         world.ui.cursorInput.activeKey = nil -- Reset when not in a valid state
@@ -1218,8 +1151,39 @@ function InputHandler.handle_continuous_input(dt, world)
             -- The same key is being held. Wait for the timer.
             cursor.timer = cursor.timer - dt
             if cursor.timer <= 0 then
-                if world.ui.playerTurnState == "ground_aiming" then
+                if state == "unit_info_locked" then
+                    -- For the menu, we handle one direction at a time, prioritizing vertical.
+                    local keyToMove = nil
+                    if dy < 0 then keyToMove = "w"
+                    elseif dy > 0 then keyToMove = "s"
+                    elseif dx < 0 then keyToMove = "a"
+                    elseif dx > 0 then keyToMove = "d"
+                    end
+                    if keyToMove then
+                        move_unit_info_selection(keyToMove, world)
+                    end
+                elseif state == "ground_aiming" then
                     move_ground_aim_cursor(dx, dy, world)
+                elseif state == "action_menu" or state == "map_menu" or state == "weapon_select" or state == "promotion_select" then
+                    -- New logic for standard vertical menus
+                    local keyToMove = nil
+                    if dy < 0 then keyToMove = "w"
+                    elseif dy > 0 then keyToMove = "s"
+                    end
+
+                    if keyToMove then
+                        -- Get the correct menu object based on state
+                        local menu, eventName = nil, nil
+                        if state == "action_menu" then
+                            menu = world.ui.menus.action
+                            eventName = "action_menu_selection_changed"
+                        elseif state == "map_menu" then menu = world.ui.menus.map
+                        elseif state == "weapon_select" then menu = world.ui.menus.weaponSelect
+                        elseif state == "promotion_select" then menu = world.ui.menus.promotion
+                        end
+
+                        if menu then navigate_vertical_menu(keyToMove, menu, eventName, world) end
+                    end
                 else
                     move_cursor(dx, dy, world, true)
                 end

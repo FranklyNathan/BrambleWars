@@ -462,6 +462,17 @@ local function draw_all_entities_and_effects(world)
         end
     end
 
+    -- Draw ascension shadows on the ground.
+    for _, shadowData in ipairs(world.ascension_shadows) do
+        local pixelX, pixelY = Grid.toPixels(shadowData.tileX, shadowData.tileY)
+        local centerX = pixelX + Config.SQUARE_SIZE / 2
+        local centerY = pixelY + Config.SQUARE_SIZE / 2
+        -- Pulsating shadow effect
+        local alpha = 0.3 + (math.sin(love.timer.getTime() * 4) + 1) / 2 * 0.2 -- Pulsates between 0.3 and 0.5 alpha
+        love.graphics.setColor(0, 0, 0, alpha)
+        love.graphics.ellipse("fill", centerX, centerY, 14, 7)
+    end
+
     -- Create a single list of all units and obstacles to be drawn.
     local drawOrder = {}
     for _, p in ipairs(world.players) do
@@ -499,8 +510,11 @@ local function draw_all_entities_and_effects(world)
                 love.graphics.draw(entity.sprite, drawX, drawY, 0, 1, 1, w / 2, h)
             end
         else -- It's a character
-            local is_active = (entity.type == "player" and entity == world.ui.selectedUnit)
-            draw_entity(entity, world, is_active) -- Pass world to draw_entity
+            -- Do not draw ascended units, unless they are currently animating their ascent.
+            if not (entity.components and entity.components.ascended) or (entity.components and entity.components.ascending_animation) then
+                local is_active = (entity.type == "player" and entity == world.ui.selectedUnit)
+                draw_entity(entity, world, is_active) -- Pass world to draw_entity
+            end
         end
     end
 
@@ -1012,88 +1026,6 @@ local function draw_world_space_ui(world)
     end
 end
 
-local function draw_party_select_ui(world)
-    -- Draw a semi-transparent background overlay to dim the game world
-    love.graphics.setColor(0, 0, 0, 0.7)
-    love.graphics.rectangle("fill", 0, 0, Config.VIRTUAL_WIDTH, Config.VIRTUAL_HEIGHT)
-
-    -- Define grid properties
-    local gridCols, gridRows = 3, 3
-    local boxSize = 80
-    local spacing = 10
-    local totalWidth = gridCols * boxSize + (gridCols - 1) * spacing
-    local totalHeight = gridRows * boxSize + (gridRows - 1) * spacing
-    local startX = (Config.VIRTUAL_WIDTH - totalWidth) / 2
-    local startY = (Config.VIRTUAL_HEIGHT - totalHeight) / 2
-
-    -- A local mapping from player type to asset name, mirroring entities.lua
-    local playerSpriteMap = {
-        clementine = "Clementine",
-        biblo = "Biblo",
-        winthrop = "Winthrop",
-        mortimer = "Mortimer",
-        cedric = "Cedric",
-        ollo = "Ollo",
-        plop = "Plop",
-        dupe = "Dupe"
-    }
-
-    -- Draw the grid boxes and character sprites
-    for y = 1, gridRows do
-        for x = 1, gridCols do
-            local charType = world.ui.partySelect.characterGrid[y] and world.ui.partySelect.characterGrid[y][x]
-            local boxX = startX + (x - 1) * (boxSize + spacing)
-            local boxY = startY + (y - 1) * (boxSize + spacing)
-
-            -- Draw the box background
-            love.graphics.setColor(0.1, 0.1, 0.2, 0.8)
-            love.graphics.rectangle("fill", boxX, boxY, boxSize, boxSize)
-
-            -- Draw the character sprite if one exists in this slot
-            if charType then
-                local entity = world.roster[charType] -- Get the entity from the roster to check HP
-                local spriteName = playerSpriteMap[charType]
-                local spriteSheet = spriteName and Assets.images[spriteName]
-                local anim = spriteName and Assets.animations[spriteName].down -- Use 'down' as the default portrait
-
-                if entity and spriteSheet and anim then
-                    -- If the character is dead, draw them greyed out
-                    if entity.hp <= 0 then
-                        love.graphics.setColor(0.5, 0.5, 0.5, 1)
-                    else
-                        love.graphics.setColor(1, 1, 1, 1)
-                    end
-                    -- Draw the CURRENT frame of the animation, which is updated in main.lua.
-                    local w, h = anim:getDimensions()
-                    local scale = (boxSize - 10) / math.max(w, h) -- Scale to fit inside the box
-                    -- Use the animation's own draw method to handle animated frames correctly.
-                    anim:draw(spriteSheet, boxX + boxSize / 2, boxY + boxSize / 2, 0, scale, scale, w / 2, h / 2)
-                end
-            end
-
-            -- Draw selection highlight if a square is selected
-            if world.ui.partySelect.selectedSquare and world.ui.partySelect.selectedSquare.x == x and world.ui.partySelect.selectedSquare.y == y then
-                love.graphics.setColor(1, 1, 0, 1) -- Yellow for selected
-                love.graphics.setLineWidth(3)
-                love.graphics.rectangle("line", boxX, boxY, boxSize, boxSize)
-            else
-                -- Draw standard box outline
-                love.graphics.setColor(0.8, 0.8, 0.9, 1)
-                love.graphics.setLineWidth(2)
-                love.graphics.rectangle("line", boxX, boxY, boxSize, boxSize)
-            end
-
-            -- Draw cursor on top
-            if world.ui.partySelect.cursorPos.x == x and world.ui.partySelect.cursorPos.y == y then
-                local alpha = 0.6 + (math.sin(love.timer.getTime() * 5) + 1) / 2 * 0.4
-                love.graphics.setColor(1, 1, 1, alpha)
-                love.graphics.setLineWidth(3)
-                love.graphics.rectangle("line", boxX - 2, boxY - 2, boxSize + 4, boxSize + 4)
-            end
-        end
-    end
-end
-
 local function draw_game_over_screen(world)
     -- Draw a dark, semi-transparent overlay
     love.graphics.setColor(0, 0, 0, 0.75)
@@ -1112,6 +1044,25 @@ local function draw_game_over_screen(world)
     love.graphics.setFont(currentFont) -- Revert to the normal font
     love.graphics.setColor(1, 1, 1, 0.6 + (math.sin(love.timer.getTime() * 2) + 1) / 2 * 0.4) -- Pulsing alpha
     love.graphics.printf("Press [Escape] to Exit", 0, Config.VIRTUAL_HEIGHT / 2 + 20, Config.VIRTUAL_WIDTH, "center")
+end
+
+local function draw_pause_screen(world)
+    -- Draw a dark, semi-transparent overlay to dim the game world but keep it visible.
+    love.graphics.setColor(0, 0, 0, 0.75)
+    love.graphics.rectangle("fill", 0, 0, Config.VIRTUAL_WIDTH, Config.VIRTUAL_HEIGHT)
+
+    -- Draw "PAUSED" text using a large font.
+    love.graphics.setColor(1, 1, 1, 1) -- White
+    local currentFont = love.graphics.getFont()
+    -- Use the pre-loaded title font for consistency.
+    local largeFont = Assets.fonts.title or love.graphics.newFont("assets/Px437_DOS-V_TWN16.ttf", 64)
+    love.graphics.setFont(largeFont)
+    love.graphics.printf("PAUSED", 0, Config.VIRTUAL_HEIGHT / 2 - 64, Config.VIRTUAL_WIDTH, "center")
+
+    -- Draw a prompt to resume the game.
+    love.graphics.setFont(currentFont) -- Revert to the normal font
+    love.graphics.setColor(1, 1, 1, 0.6 + (math.sin(love.timer.getTime() * 2) + 1) / 2 * 0.4) -- Pulsing alpha
+    love.graphics.printf("Press [Escape] to Resume", 0, Config.VIRTUAL_HEIGHT / 2 + 20, Config.VIRTUAL_WIDTH, "center")
 end
 
 local function draw_weapon_select_menu(world)
@@ -1283,8 +1234,12 @@ local function draw_screen_space_ui(world)
         -- Draw the static "Power" slice.
         local powerSliceY = menuY + mainOptionsHeight
         local powerValueText = "--"
-        if selectedAttackData and selectedAttackData.power and selectedAttackData.power > 0 then
-            powerValueText = tostring(selectedAttackData.power)
+        if selectedAttackData then
+            if selectedAttackData.displayPower then
+                powerValueText = selectedAttackData.displayPower
+            elseif selectedAttackData.power and selectedAttackData.power > 0 then
+                powerValueText = tostring(selectedAttackData.power)
+            end
         end
 
         -- Draw the slice background (always unselected style)
@@ -1419,8 +1374,9 @@ function Renderer.draw(world)
     -- 4. Draw screen-space UI based on the current game state
     if world.gameState == "gameplay" then
         draw_screen_space_ui(world)
-    elseif world.gameState == "party_select" then
-        draw_party_select_ui(world)
+    elseif world.gameState == "paused" then
+        -- Draw the pause screen on top of the frozen game state.
+        draw_pause_screen(world)
     elseif world.gameState == "game_over" then
         -- The game over screen is drawn on top of the final game state.
         draw_screen_space_ui(world)

@@ -25,11 +25,11 @@ function World.new(gameMap)
     self.attackEffects = {}
     self.particleEffects = {}
     self.damagePopups = {}
-    self.liveCombatDisplays = {} -- For the new combat UI
     self.pendingCounters = {}
     self.new_entities = {}
     self.afterimageEffects = {}
     self.rippleEffectQueue = {}
+    self.ascension_shadows = {}
     self.enemyPathfindingCache = {} -- Cache for AI pathfinding data for the current turn.
 
     -- Player's global inventory
@@ -42,7 +42,7 @@ function World.new(gameMap)
     self.turnCount = 1 -- To track game progression for reinforcements
     self.reinforcementTiles = {} -- To store spawn locations
     self.winTiles = {} -- To store win condition locations
-    self.gameState = "gameplay" -- "gameplay", "party_select", "game_over"
+    self.gameState = "gameplay" -- "gameplay", "paused", "game_over"
 
     -- UI and player turn state are grouped into a 'ui' sub-table for better organization.
     -- This separates the transient state of the user interface from the persistent state of the game world.
@@ -130,25 +130,19 @@ function World.new(gameMap)
         -- For the animated EXP bar
         expGainAnimation = {
             active = false,
-            state = "idle", -- "filling", "lingering"
+            state = "idle", -- "filling", "shrinking"
             unit = nil,
             expStart = 0,
             expCurrentDisplay = 0,
             expGained = 0,
             animationTimer = 0,
             animationDuration = 1.0,
-            lingerTimer = 0,
-        },
-
-        -- Party selection screen state
-        partySelect = {
-            cursorPos = {x = 1, y = 1},
-            selectedSquare = nil,
+            shrinkTimer = 0,
+            shrinkDuration = 0.3
         }
     }
 
     self.roster = {}
-    self.characterGrid = {}
 
     -- Holds the state of active passives for each team, calculated once per frame.
     -- The boolean flags are set by the PassiveSystem and read by other systems.
@@ -371,20 +365,6 @@ function World.new(gameMap)
     if self.players[1] then
         self.ui.mapCursorTile.x = self.players[1].tileX
         self.ui.mapCursorTile.y = self.players[1].tileY
-    end
-
-    -- Populate the 3x3 character selection grid based on the fixed order.
-    local gridX, gridY = 1, 1
-    for _, playerType in ipairs(characterOrder) do
-        -- Ensure the row exists before trying to add to it.
-        if not self.characterGrid[gridY] then self.characterGrid[gridY] = {} end
-
-        self.characterGrid[gridY][gridX] = playerType
-        gridX = gridX + 1
-        if gridX > 3 then
-            gridX = 1
-            gridY = gridY + 1
-        end
     end
 
     -- Process all queued additions to ensure entities like walls and obstacles are fully loaded.

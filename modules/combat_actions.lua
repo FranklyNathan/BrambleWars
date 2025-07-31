@@ -111,6 +111,11 @@ function CombatActions.grantExp(unit, amount, world)
     end
 
     unit.exp = unit.exp + amount
+    -- If the unit now has enough EXP to level up, flag them for the check.
+    -- A generic system will pick this up after all combat animations are resolved.
+    if unit.exp >= unit.maxExp then
+        unit.components.pending_level_up = true
+    end
     -- The level up check and UI update will be handled by another system after combat resolves.
 end
 

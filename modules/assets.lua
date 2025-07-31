@@ -26,6 +26,7 @@ function Assets.load()
     Assets.images.Archer = love.graphics.newImage("assets/archer.png")
     Assets.images.Flag = love.graphics.newImage("assets/tree.png") -- For Sceptile's attack
     Assets.images.Punter = love.graphics.newImage("assets/punter.png")
+    Assets.images.BearTrap = love.graphics.newImage("assets/beartrap.png")
 
     -- Load portraits
     Assets.images.Default_Portrait = love.graphics.newImage("assets/Portraits/Default_Portrait.png")

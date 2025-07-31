@@ -2,6 +2,7 @@
 -- This system is responsible for updating simple countdown timers on entities for visual effects.
 
 local EffectFactory = require("modules.effect_factory")
+local CharacterBlueprints = require("data.character_blueprints")
 local Assets = require("modules.assets")
 
 -- A simple linear interpolation function.
@@ -53,6 +54,57 @@ function EffectTimerSystem.update(dt, world)
             s.components.selection_flash.timer = s.components.selection_flash.timer + dt
             if s.components.selection_flash.timer >= s.components.selection_flash.duration then
                 s.components.selection_flash = nil -- Remove the component to end the effect
+            end
+        end
+
+        -- Update ascending animation for Ascension ability
+        if s.components.ascending_animation then
+            local asc = s.components.ascending_animation
+            asc.timer = asc.timer - dt
+
+            -- Store old position for afterimage
+            local oldX, oldY = s.x, s.y
+
+            -- Move the unit's sprite rapidly upwards.
+            s.y = s.y - (asc.speed * dt)
+
+            -- Create afterimage for the ascent trail
+            if not s.components.afterimage then
+                s.components.afterimage = { timer = 0, interval = 0.03 } -- A smaller interval for a smoother trail
+            end
+            local afterimage = s.components.afterimage
+            afterimage.timer = afterimage.timer + dt
+            if afterimage.timer >= afterimage.interval then
+                afterimage.timer = afterimage.timer - afterimage.interval
+
+                -- Determine the color for the trail based on the unit's blueprint.
+                local streakColor = {1, 1, 1} -- Default to white
+                if s.type == "player" and CharacterBlueprints[s.playerType] then
+                    streakColor = CharacterBlueprints[s.playerType].dominantColor or streakColor
+                end
+
+                -- Get the current sprite frame for the afterimage.
+                local streakWidth, streakHeight = s.size, s.size
+                local currentFrame, spriteSheet = nil, nil
+                if s.components.animation then
+                    local animComponent = s.components.animation
+                    local currentAnim = animComponent.animations[animComponent.current]
+                    if currentAnim then
+                        streakWidth, streakHeight = currentAnim:getDimensions()
+                        currentFrame = currentAnim.frames[currentAnim.position]
+                        spriteSheet = animComponent.spriteSheet
+                    end
+                end
+
+                table.insert(world.afterimageEffects, { x = oldX, y = oldY, size = s.size, width = streakWidth, height = streakHeight, frame = currentFrame, spriteSheet = spriteSheet, color = streakColor, lifetime = 0.3, initialLifetime = 0.3, direction = s.lastDirection })
+            end
+
+            -- When the timer is up, the animation is over. The unit is now fully ascended and will be hidden by the renderer.
+            if asc.timer <= 0 then
+                s.components.ascending_animation = nil
+                s.components.afterimage = nil -- Clean up the afterimage component as well
+                -- Snap the target Y to the current Y to prevent the movement system from pulling it back down.
+                s.targetY = s.y
             end
         end
 
@@ -231,21 +283,23 @@ function EffectTimerSystem.update(dt, world)
 
                     -- If there's no more EXP to gain after the pop, transition to lingering.
                     if remainingExp <= 0 then
-                        anim.state = "lingering"
-                        anim.lingerTimer = 1.0
+                        anim.state = "shrinking"
+                        anim.shrinkDuration = 0.3
+                        anim.shrinkTimer = anim.shrinkDuration
                     end
                 -- If no pop, check if the regular fill animation is finished.
                 elseif progress >= 1 then
                     -- Snap to final value to avoid float inaccuracies.
                     anim.expCurrentDisplay = targetExp
-                    -- Transition to lingering state.
-                    anim.state = "lingering"
-                    anim.lingerTimer = 1.0 -- Linger for 1 second.
+                    -- Transition to shrinking state.
+                    anim.state = "shrinking"
+                    anim.shrinkDuration = 0.3 -- The duration of the shrink animation.
+                    anim.shrinkTimer = anim.shrinkDuration
                 end
-            elseif anim.state == "lingering" then
-                anim.lingerTimer = math.max(0, anim.lingerTimer - dt)
-                if anim.lingerTimer == 0 then
-                    -- The linger is over. Reset the state.
+            elseif anim.state == "shrinking" then
+                anim.shrinkTimer = math.max(0, anim.shrinkTimer - dt)
+                if anim.shrinkTimer == 0 then
+                    -- The shrink is over. Reset the state.
                     anim.active = false
                     anim.unit = nil
                     anim.state = "idle"

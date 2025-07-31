@@ -50,27 +50,29 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
                         local occupyingUnit = WorldQueries.getUnitAt(nextTileX, nextTileY, startUnit, world)
                         local isLedgeBlocked = WorldQueries.isLedgeBlockingPath(current.tileX, current.tileY, nextTileX, nextTileY, world)
 
-                        local canPass = false
-                        local canLand = false
+                        local canPass, canLand = false, false
 
-                        if obstacle and obstacle.isImpassable then
-                            -- Impassable obstacles (like Boxes) block everything, even flying units.
-                            canPass = false
-                            canLand = false
+                        if obstacle then
+                            if obstacle.isTrap then
+                                -- Can always land on traps. The trigger happens on landing.
+                                -- Flying units are immune to the trigger, but can still land.
+                                canPass = true
+                                canLand = not occupyingUnit
+                            elseif obstacle.isImpassable then
+                                -- Impassable obstacles (like Boxes) block everything, even flying units.
+                                canPass = false
+                                canLand = false
+                            else -- Regular obstacles (trees)
+                                canPass = startUnit.isFlying
+                                canLand = false -- Cannot land on any non-trap obstacle.
+                            end
                         elseif isWater then
-                            -- Water tiles can be passed over or landed on by flying or swimming units.
                             canPass = startUnit.isFlying or startUnit.canSwim
-                            canLand = (startUnit.isFlying or startUnit.canSwim) and not occupyingUnit -- Can't land if a unit is there.
-                        elseif obstacle then
-                            -- Regular obstacles (not impassable).
-                            canPass = startUnit.isFlying
-                            canLand = false -- Cannot land on any obstacle.
+                            canLand = (startUnit.isFlying or startUnit.canSwim) and not occupyingUnit
                         elseif occupyingUnit then
-                            -- Tile is occupied by another unit.
                             canPass = startUnit.isFlying or (startUnit.type == occupyingUnit.type) -- Can pass through teammates.
                             canLand = false
-                        else
-                            -- Tile is empty and not special terrain.
+                        else -- Tile is empty and not special terrain.
                             canPass = true
                             canLand = true
                         end

@@ -48,7 +48,7 @@ local CharacterBlueprints = {
         magicStat = 8,
         resistanceStat = 8,
         witStat = 6,
-        movement = 5,
+        movement = 20,
         weight = 3, -- Light
         equippedWeapon = "travelers_staff",
         isFlying = true,
@@ -63,7 +63,11 @@ local CharacterBlueprints = {
             witStat = 35,
         },
         attacks = {
-            "quill_jab", "mend", "invigoration"
+            "quill_jab", "mend", "invigoration", "froggy_rush", "snap",
+            "walnut_toss", "venom_stab", "uppercut", "slash", "shunt",
+            "shockstrike", "impale", "fireball", "longshot", "slipstep", "trap_set", "ascension",
+            "eruption", "phantom_step", "shockwave", "quick_step",
+            "grovecall", "hookshot"
         }
     },
     winthrop = {
@@ -236,7 +240,7 @@ local CharacterBlueprints = {
         equippedWeapon = "travelers_knife",
         isFlying = true,
         dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown
-        passives = {},
+        passives = {"Aetherfall"},
         growths = {
             maxHp = 80,
             attackStat = 45,
@@ -246,7 +250,7 @@ local CharacterBlueprints = {
             witStat = 60,
         },
         attacks = {
-            "snap", "slash"
+            "snap", "slash", "slipstep"
         }
     }
 }
