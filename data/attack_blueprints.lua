@@ -13,60 +13,82 @@
 ]]
 
 local AttackBlueprints = {
-    -- Basic Attacks
-    froggy_rush = {
+    -- New Weapon-Based Basic Attacks
+    slash = {
         power = 5, -- Base power of the move, used in damage calculations
         wispCost = 0, -- Cost of the move is Wisp, a resource used for attacks
-        originType = "marshborn", -- Similar to types in Pokemon. Currently marshborn, forestborn, cavernborn
         Accuracy = 100, -- Odds of hitting, used in accuracy calculations
         CritChance = 5, -- Odds of a critical hit (which does double damage), used in crit calculations
         useType = "physical", -- Physical uses Attack/Defense stat in calcs, Magical uses Magic/Resistance stat, other options don't do damage
         targeting_style = "cycle_target", --See above for targeting styles
         patternType = "standard_melee", -- The 4 adjacent tiles.
-        description = "A standard physical attack."
+        description = "A standard sword attack."
     },
-
-    quill_jab = {
+    thrust = {
         power = 5,
         wispCost = 0,
-        originType = "forestborn", 
         Accuracy = 100,
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "standard_all", -- Can hit adjacent and standard ranged tiles.
-        description = "A standard physical attack that can hit from a distance."
+        patternType = "standard_melee",
+        description = "A standard lance attack."
     },
-
-    snap = {
+    lash = {
         power = 5,
         wispCost = 0,
-        originType = "cavernborn", 
         Accuracy = 100,
         CritChance = 5,
         useType = "physical",
         targeting_style = "cycle_target",
-        patternType = "standard_melee", -- The 4 adjacent tiles.
-        description = "A standard physical attack."
+        patternType = "standard_all",
+        description = "A standard whip attack."
     },
-
-    walnut_toss = {
+    loose = {
         power = 5,
         wispCost = 0,
-        originType = "cavernborn", 
         Accuracy = 100,
         CritChance = 5,
         useType = "magical",
         targeting_style = "cycle_target",
         patternType = "standard_ranged", -- Can hit ranged tiles, but not adjacent ones.
-        description = "A standard magical attack from a distance."
+        description = "A standard bow attack."
+    },
+    bonk = {
+        power = 5,
+        wispCost = 0,
+        Accuracy = 100,
+        CritChance = 5,
+        useType = "physical",
+        targeting_style = "cycle_target",
+        patternType = "standard_melee",
+        description = "A standard staff attack."
+    },
+    harm = {
+        power = 5,
+        wispCost = 0,
+        Accuracy = 100,
+        CritChance = 5,
+        useType = "magical",
+        targeting_style = "cycle_target",
+        patternType = "standard_all", -- Can hit adjacent melee and ranged tiles.
+        description = "A standard tome attack."
+    },
+    stab = {
+        power = 5,
+        wispCost = 0,
+        Accuracy = 100,
+        CritChance = 5,
+        useType = "physical",
+        targeting_style = "cycle_target",
+        patternType = "standard_melee",
+        description = "A standard dagger attack."
     },
 
     -- Damaging Melee Attacks
     venom_stab = {
         power = 6,
         wispCost = 1,
-        originType = "marshborn", 
         Accuracy = 100,
         CritChance = 5,
         useType = "physical",
@@ -78,7 +100,6 @@ local AttackBlueprints = {
     uppercut = {
         power = 7,
         wispCost = 2,
-        originType = "forestborn", 
         Accuracy = 90,
         CritChance = 10,
         useType = "physical",
@@ -87,10 +108,9 @@ local AttackBlueprints = {
         statusEffect = {type = "airborne", duration = 1.2},
         description = "A powerful physical attack that sends the target airborne."
     },
-    slash = {
+    sever = {
         power = 6,
         wispCost = 1,
-        originType = "forestborn", 
         Accuracy = 100,
         CritChance = 15,
         useType = "physical",
@@ -101,7 +121,6 @@ local AttackBlueprints = {
     shunt = {
         power = 6,
         wispCost = 1,
-        originType = "cavernborn", 
         Accuracy = 100,
         CritChance = 0,
         useType = "physical",
@@ -112,7 +131,6 @@ local AttackBlueprints = {
     shockstrike = {
         power = 6,
         wispCost = 1,
-        originType = "cavernborn", 
         Accuracy = 100,
         CritChance = 5,
         useType = "physical",
@@ -123,9 +141,8 @@ local AttackBlueprints = {
         description = "A physical attack that may paralyze the target."
     },
     impale = {
-        power = 6,
+        power = 7,
         wispCost = 1,
-        originType = "cavernborn", 
         Accuracy = 100,
         CritChance = 5,
         useType = "physical",
@@ -134,11 +151,21 @@ local AttackBlueprints = {
         description = "A physical attack that deals extra damage if it pierces through to another enemy."
     },
 
+    disarm = {
+        power = 6,
+        wispCost = 2,
+        Accuracy = 100,
+        CritChance = 5,
+        useType = "physical",
+        targeting_style = "cycle_target",
+        patternType = "standard_melee",
+        description = "A swift strike that knocks the target's weapon from their grasp, preventing counter-attacks for one turn."
+    },
+
     -- Damaging Ranged Attacks
     fireball = {
         power = 3,
         wispCost = 2,
-        originType = "cavernborn", 
         Accuracy = 95,
         CritChance = 5,
         useType = "magical",
@@ -153,7 +180,6 @@ local AttackBlueprints = {
     longshot = {
         power = 5,
         wispCost = 3,
-        originType = "forestborn", 
         Accuracy = 85,
         CritChance = 20,
         useType = "physical",
@@ -164,7 +190,6 @@ local AttackBlueprints = {
     slipstep = {
         power = 6,
         wispCost = 2,
-        originType = "cavernborn",
         Accuracy = 100,
         CritChance = 0,
         useType = "physical",
@@ -175,7 +200,6 @@ local AttackBlueprints = {
     eruption = {
         power = 5,
         wispCost = 4,
-        originType = "cavernborn", 
         Accuracy = 90,
         CritChance = 0,
         useType = "magical",
@@ -190,7 +214,6 @@ local AttackBlueprints = {
     phantom_step = {
         power = 7, -- A light utility attack.
         wispCost = 2,
-        originType = "marshborn", 
         Accuracy = 100,
         CritChance = 0,
         useType = "utility",
@@ -204,7 +227,6 @@ local AttackBlueprints = {
     invigoration = {
         power = 0,
         wispCost = 1,
-        originType = "cavernborn", 
         Accuracy = 100,
         useType = "support",
         targeting_style = "cycle_target",
@@ -216,7 +238,6 @@ local AttackBlueprints = {
     mend = {
         power = 5,
         wispCost = 1,
-        originType = "cavernborn", 
         Accuracy = 100,
         useType = "support",
         targeting_style = "cycle_target",
@@ -229,8 +250,7 @@ local AttackBlueprints = {
     -- Status Attacks
     shockwave = {
         power = 0,
-        wispCost = 1,
-        originType = "cavernborn", 
+        wispCost = 3,
         useType = "utility",
         targeting_style = "auto_hit_all",
         range = 12, -- This is a large radius around the user
@@ -243,7 +263,6 @@ local AttackBlueprints = {
     quick_step = {
         power = 0,
         wispCost = 1,
-        originType = "cavernborn", 
         useType = "utility",
         targeting_style = "ground_aim",
         range = 3,
@@ -255,7 +274,6 @@ local AttackBlueprints = {
     grovecall = {
         power = 0,
         wispCost = 1,
-        originType = "cavernborn", 
         useType = "utility",
         targeting_style = "ground_aim",
         range = 6,
@@ -265,7 +283,6 @@ local AttackBlueprints = {
     trap_set = {
         power = 0,
         wispCost = 2,
-        originType = "forestborn",
         useType = "utility",
         targeting_style = "ground_aim",
         range = 2,
@@ -275,7 +292,6 @@ local AttackBlueprints = {
     ascension = {
         power = 0,
         wispCost = 5,
-        originType = "forestborn",
         useType = "utility",
         targeting_style = "ground_aim",
         range = 5,
@@ -286,7 +302,6 @@ local AttackBlueprints = {
     ascension_strike = {
         power = 9999, -- Instant kill
         wispCost = 0,
-        originType = "forestborn",
         Accuracy = 100,
         CritChance = 0,
         useType = "physical",
@@ -298,7 +313,6 @@ local AttackBlueprints = {
     hookshot = {
         power = 5,
         wispCost = 2,
-        originType = "forestborn", 
         useType = "physical",
         targeting_style = "cycle_target",
         range = 7,
@@ -306,7 +320,6 @@ local AttackBlueprints = {
         line_of_sight_only = true,
         description = "Fires a hook that pulls the user and target towards each other."
     },
-
 }
 
 return AttackBlueprints

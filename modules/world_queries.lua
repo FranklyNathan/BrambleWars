@@ -5,8 +5,18 @@ local Grid = require("modules.grid")
 local AttackPatterns = require("modules.attack_patterns")
 local LevelUpDisplaySystem = require("systems.level_up_display_system")
 local AttackBlueprints = require("data.attack_blueprints")
+local CharacterBlueprints = require("data.character_blueprints")
+local EnemyBlueprints = require("data.enemy_blueprints")
+local WeaponBlueprints = require("data.weapon_blueprints")
 
 local WorldQueries = {}
+
+-- A mapping from weapon type to the basic attack it grants.
+-- Defined once at the module level for efficiency.
+local WEAPON_TYPE_TO_BASIC_ATTACK = {
+    sword = "slash", lance = "thrust", whip = "lash",
+    bow = "loose", staff = "bonk", tome = "harm", dagger = "stab"
+}
 
 function WorldQueries.getObstacleAt(tileX, tileY, world)
     -- Check for object-based obstacles (like trees and walls).
@@ -496,6 +506,51 @@ function WorldQueries.getUnitHealthBarHeight(unit, world)
     else
         return inCombat and 12 or 6
     end
+end
+
+--- Builds a complete, ordered list of a unit's available attacks.
+-- This is the single source of truth for what moves a unit has.
+-- It prioritizes the weapon's basic attack, then granted moves, then innate moves.
+-- @param unit (table): The unit to get the move list for.
+-- @return (table): An ordered list of attack name strings.
+function WorldQueries.getUnitMoveList(unit)
+    if not unit then return {} end
+
+    -- If the unit is disarmed, they are considered "unarmed" and have no moves.
+    -- This prevents counter-attacks and AI from trying to use moves.
+    if unit.statusEffects and unit.statusEffects.disarmed then
+        return {}
+    end
+
+    local all_moves = {}
+    local move_exists = {} -- Use a set to track existing moves and prevent duplicates
+
+    -- 1. Add the basic attack and granted moves from the equipped weapon.
+    if unit.equippedWeapon and WeaponBlueprints[unit.equippedWeapon] then
+        local weapon = WeaponBlueprints[unit.equippedWeapon]
+        -- Add the weapon's basic attack first. This is crucial for counter-attack logic.
+        local basicAttackName = WEAPON_TYPE_TO_BASIC_ATTACK[weapon.type]
+        if basicAttackName and not move_exists[basicAttackName] then
+            table.insert(all_moves, basicAttackName)
+            move_exists[basicAttackName] = true
+        end
+        -- Add any special moves the weapon grants.
+        if weapon.grants_moves then
+            for _, attackName in ipairs(weapon.grants_moves) do
+                if not move_exists[attackName] then table.insert(all_moves, attackName); move_exists[attackName] = true end
+            end
+        end
+    end
+
+    -- 2. Add moves from the character's innate blueprint list.
+    local blueprint = (unit.type == "player") and CharacterBlueprints[unit.playerType] or EnemyBlueprints[unit.enemyType]
+    if blueprint and blueprint.attacks then
+        for _, attackName in ipairs(blueprint.attacks) do
+            if not move_exists[attackName] then table.insert(all_moves, attackName); move_exists[attackName] = true end
+        end
+    end
+
+    return all_moves
 end
 
 return WorldQueries

@@ -8,7 +8,7 @@ local Grid = require("modules.grid")
 local StatusEffectManager = require("modules.status_effect_manager")
 local EntityFactory = require("data.entities")
 local ObjectBlueprints = require("data.object_blueprints")
-local WeaponBlueprints = require("weapon_blueprints")
+local WeaponBlueprints = require("data.weapon_blueprints")
 
 local World = {}
 World.__index = World
@@ -34,7 +34,7 @@ function World.new(gameMap)
 
     -- Player's global inventory
     self.playerInventory = {
-        weapons = {} -- A list of weapon blueprint keys the player owns.
+        weapons = {} -- A table where keys are weapon blueprint keys and values are the quantity.
     }
 
     -- Core game state
@@ -372,7 +372,7 @@ function World.new(gameMap)
 
     -- The player's inventory of unequipped weapons starts empty.
     -- Weapons are added to it when they are found or unequipped.
-    self.playerInventory.weapons = { "durendal" }
+    self.playerInventory.weapons = { durendal = 1 }
 
     return self
 end

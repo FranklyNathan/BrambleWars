@@ -10,7 +10,9 @@ local StatusEffectManager = require("modules.status_effect_manager")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
 local AttackPatterns = require("modules.attack_patterns")
+local WorldQueries = require("modules.world_queries")
 local EffectFactory = require("modules.effect_factory")
+local Grid = require("modules.grid")
 local Assets = require("modules.assets")
 
 
@@ -72,6 +74,13 @@ function AttackResolutionSystem.update(dt, world)
                                         Assets.sounds.attack_hit:play()
                                     end
 
+                                    -- Make the target face the attacker, unless the attack stuns.
+                                    local willBeStunned = effect.statusEffect and effect.statusEffect.type == "stunned"
+                                    if not willBeStunned then
+                                        -- The Grid.getDirection function calculates the direction from the first point to the second.
+                                        target.lastDirection = Grid.getDirection(target.tileX, target.tileY, effect.attacker.tileX, effect.attacker.tileY)
+                                    end
+
                                     local critChance = CombatFormulas.calculateCritChance(effect.attacker, target, attackData.CritChance or 0)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
                                     local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit, effect.attackName)
@@ -110,9 +119,9 @@ function AttackResolutionSystem.update(dt, world)
                                     local isAetherfall = effect.specialProperties and effect.specialProperties.isAetherfallAttack
                                     -- A unit cannot counter-attack if it is stunned, already airborne, or if the incoming attack is the one that *causes* it to become airborne.
                                     if not isCounter and not isAetherfall and target.hp and target.hp > 0 and not target.statusEffects.stunned and not target.statusEffects.airborne and not (effect.statusEffect and effect.statusEffect.type == "airborne") then
-                                        local defenderBlueprint = (target.type == "player") and CharacterBlueprints[target.playerType] or EnemyBlueprints[target.enemyType]
-                                        if defenderBlueprint and defenderBlueprint.attacks and defenderBlueprint.attacks[1] then
-                                            local basicAttackName = defenderBlueprint.attacks[1]
+                                        local defender_moves = WorldQueries.getUnitMoveList(target)
+                                        if #defender_moves > 0 then
+                                            local basicAttackName = defender_moves[1] -- The first move is always the basic attack.
                                             local basicAttackData = AttackBlueprints[basicAttackName]
                                             if basicAttackData and basicAttackData.patternType then
                                                 local pattern = AttackPatterns[basicAttackData.patternType]
@@ -131,6 +140,7 @@ function AttackResolutionSystem.update(dt, world)
                                                         table.insert(world.pendingCounters, {
                                                             defender = target,
                                                             attacker = effect.attacker,
+                                                            attackName = basicAttackName,
                                                             delay = 0.25
                                                         })
                                                     end

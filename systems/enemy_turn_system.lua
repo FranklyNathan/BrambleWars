@@ -4,11 +4,11 @@
 local Pathfinding = require("modules.pathfinding")
 local WorldQueries = require("modules.world_queries")
 local AttackPatterns = require("modules.attack_patterns")
-local AscensionSystem = require("systems/ascension_system")
+local AscensionSystem = require("systems.ascension_system")
 local CombatFormulas = require("modules.combat_formulas")
 local EntityFactory = require("data.entities")
 local EnemyBlueprints = require("data.enemy_blueprints")
-local WeaponBlueprints = require("weapon_blueprints")
+local WeaponBlueprints = require("data.weapon_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
 local UnitAttacks = require("data.unit_attacks")
 local Grid = require("modules.grid")
@@ -173,33 +173,7 @@ local function findBestPlayerAttackAction(enemy, reachableTiles, world)
     local bestAction = nil
     local bestScore = -1 -- Kills will have a score > 1000
 
-    -- Combine innate moves and moves granted by the equipped weapon.
-    local all_moves = {}
-    local move_exists = {} -- Use a set to track existing moves and prevent duplicates
-
-    -- 1. Add moves from the enemy blueprint's innate list.
-    local blueprint = EnemyBlueprints[enemy.enemyType]
-    if blueprint and blueprint.attacks then
-        for _, attackName in ipairs(blueprint.attacks) do
-            if not move_exists[attackName] then
-                table.insert(all_moves, attackName)
-                move_exists[attackName] = true
-            end
-        end
-    end
-
-    -- 2. Add moves from the equipped weapon.
-    if enemy.equippedWeapon and WeaponBlueprints[enemy.equippedWeapon] then
-        local weapon = WeaponBlueprints[enemy.equippedWeapon]
-        if weapon.grants_moves then
-            for _, attackName in ipairs(weapon.grants_moves) do
-                if not move_exists[attackName] then
-                    table.insert(all_moves, attackName)
-                    move_exists[attackName] = true
-                end
-            end
-        end
-    end
+    local all_moves = WorldQueries.getUnitMoveList(enemy)
 
     -- Check every player unit to find the best possible target.
     for _, targetPlayer in ipairs(world.players) do
@@ -256,33 +230,7 @@ local function findBestObstacleAttackAction(enemy, moveTarget, reachableTiles, w
     local bestAction = nil
     local closestDistSq = math.huge
 
-    -- Combine innate moves and moves granted by the equipped weapon.
-    local all_moves = {}
-    local move_exists = {} -- Use a set to track existing moves and prevent duplicates
-
-    -- 1. Add moves from the enemy blueprint's innate list.
-    local blueprint = EnemyBlueprints[enemy.enemyType]
-    if blueprint and blueprint.attacks then
-        for _, attackName in ipairs(blueprint.attacks) do
-            if not move_exists[attackName] then
-                table.insert(all_moves, attackName)
-                move_exists[attackName] = true
-            end
-        end
-    end
-
-    -- 2. Add moves from the equipped weapon.
-    if enemy.equippedWeapon and WeaponBlueprints[enemy.equippedWeapon] then
-        local weapon = WeaponBlueprints[enemy.equippedWeapon]
-        if weapon.grants_moves then
-            for _, attackName in ipairs(weapon.grants_moves) do
-                if not move_exists[attackName] then
-                    table.insert(all_moves, attackName)
-                    move_exists[attackName] = true
-                end
-            end
-        end
-    end
+    local all_moves = WorldQueries.getUnitMoveList(enemy)
 
     -- Check every destructible obstacle on the map.
     for _, obstacle in ipairs(world.obstacles) do
@@ -336,6 +284,15 @@ function EnemyTurnSystem.update(dt, world)
     end
 
     if actingEnemy then
+        -- At the start of the turn, check if the enemy was disarmed.
+        if actingEnemy.statusEffects and actingEnemy.statusEffects.disarmed then
+            local effectData = actingEnemy.statusEffects.disarmed
+            if effectData.originalWeapon then
+                actingEnemy.equippedWeapon = effectData.originalWeapon
+            end
+            -- The status effect will be removed at the end of the turn by the status_system.
+        end
+
         -- This block handles post-move logic. If a unit has no movement path,
         -- it could be at the start of its turn, or it could have just finished moving.
         if not actingEnemy.components.movement_path then

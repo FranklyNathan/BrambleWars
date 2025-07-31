@@ -25,8 +25,9 @@ function UnitInfoSystem.refresh_display(world)
     -- If a major action is happening (animations, etc.), or a menu is open that should
     -- hide the info box, then we ensure it's hidden.
     local shouldHide = WorldQueries.isActionOngoing(world) or
-                       world.ui.menus.action.active or
-                       world.ui.menus.map.active
+                       world.ui.playerTurnState == "unit_moving" or -- Hide while a unit is moving.
+                       world.ui.menus.action.active or -- Hide when the action menu is open.
+                       world.ui.menus.map.active -- Hide when the map menu is open.
 
     if shouldHide then
         world.ui.menus.unitInfo.active = false

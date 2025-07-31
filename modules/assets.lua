@@ -13,35 +13,72 @@ local Assets = {
 
 -- This function should be called once in love.load()
 function Assets.load()
+    -- Helper function to safely load an image and print a detailed error if it fails.
+    -- This prevents a single missing asset from crashing the entire loading process.
+    local function loadImage(path)
+        local success, image_or_error = pcall(love.graphics.newImage, path)
+        if not success then
+            print(string.format("[ASSET ERROR] Failed to load image at path: '%s'", path))
+            print(string.format("              LÖVE Error: %s", tostring(image_or_error)))
+            return nil -- Return nil so the game doesn't crash if it tries to use the missing image.
+        end
+        return image_or_error
+    end
+
     -- Load images
-    Assets.images.Clementine = love.graphics.newImage("assets/PlayerUnits/Clementine.png")
-    Assets.images.Plop = love.graphics.newImage("assets/PlayerUnits/Plop.png")
-    Assets.images.Dupe = love.graphics.newImage("assets/PlayerUnits/Dupe.png")
-    Assets.images.Winthrop = love.graphics.newImage("assets/PlayerUnits/Winthrop.png")
-    Assets.images.Biblo = love.graphics.newImage("assets/PlayerUnits/Biblo.png")
-    Assets.images.Mortimer = love.graphics.newImage("assets/PlayerUnits/Mortimer.png")
-    Assets.images.Ollo = love.graphics.newImage("assets/PlayerUnits/Ollo.png")
-    Assets.images.Cedric = love.graphics.newImage("assets/PlayerUnits/Cedric.png")
-    Assets.images.Brawler = love.graphics.newImage("assets/brawler.png")
-    Assets.images.Archer = love.graphics.newImage("assets/archer.png")
-    Assets.images.Flag = love.graphics.newImage("assets/tree.png") -- For Sceptile's attack
-    Assets.images.Punter = love.graphics.newImage("assets/punter.png")
-    Assets.images.BearTrap = love.graphics.newImage("assets/beartrap.png")
+    Assets.images.Clementine = loadImage("assets/PlayerUnits/Clementine.png")
+    Assets.images.Plop = loadImage("assets/PlayerUnits/Plop.png")
+    Assets.images.Dupe = loadImage("assets/PlayerUnits/Dupe.png")
+    Assets.images.Winthrop = loadImage("assets/PlayerUnits/Winthrop.png")
+    Assets.images.Biblo = loadImage("assets/PlayerUnits/Biblo.png")
+    Assets.images.Mortimer = loadImage("assets/PlayerUnits/Mortimer.png")
+    Assets.images.Ollo = loadImage("assets/PlayerUnits/Ollo.png")
+    Assets.images.Cedric = loadImage("assets/PlayerUnits/Cedric.png")
+    Assets.images.Brawler = loadImage("assets/brawler.png")
+    Assets.images.Archer = loadImage("assets/archer.png")
+    Assets.images.Flag = loadImage("assets/tree.png") -- For Sceptile's attack
+    Assets.images.Punter = loadImage("assets/punter.png")
+    Assets.images.BearTrap = loadImage("assets/beartrap.png")
 
     -- Load portraits
-    Assets.images.Default_Portrait = love.graphics.newImage("assets/Portraits/Default_Portrait.png")
+    Assets.images.Default_Portrait = loadImage("assets/Portraits/Default_Portrait.png")
+
+    -- Load Weapon Icons
+    Assets.images.weaponIcons = {
+        sword = loadImage("assets/WeaponIcons/Sword.png"),
+        lance = loadImage("assets/WeaponIcons/Lance.png"),
+        whip = loadImage("assets/WeaponIcons/Whip.png"),
+        bow = loadImage("assets/WeaponIcons/Bow.png"),
+        staff = loadImage("assets/WeaponIcons/Staff.png"),
+        tome = loadImage("assets/WeaponIcons/Tome.png"),
+        dagger = loadImage("assets/WeaponIcons/Dagger.png")
+    }
+
+    -- Load Origin Icons
+    Assets.images.originIcons = {
+        forestborn = loadImage("assets/OriginIcons/Forest.png"),
+        cavernborn = loadImage("assets/OriginIcons/Cavern.png"),
+        marshborn  = loadImage("assets/OriginIcons/Marsh.png")
+    }
+
 
     -- Load sounds
-    Assets.sounds.cursor_move = love.audio.newSource("assets/sfx/cursor_move.wav", "static")
-    Assets.sounds.cursor_move:setVolume(0.4)
-    Assets.sounds.menu_scroll = love.audio.newSource("assets/sfx/menu_scroll.wav", "static")
-    Assets.sounds.menu_scroll:setVolume(0.7)
-    Assets.sounds.back_out = love.audio.newSource("assets/sfx/back_out.wav", "static")
-    Assets.sounds.menu_scroll:setVolume(0.7)
-    Assets.sounds.attack_hit = love.audio.newSource("assets/sfx/attack_hit.ogg", "static")
-    Assets.sounds.attack_hit:setVolume(0.6)    
-    Assets.sounds.attack_miss = love.audio.newSource("assets/sfx/attack_miss.ogg", "static")
-    Assets.sounds.attack_miss:setVolume(0.6)
+    local function loadSound(path, volume)
+        local success, sound_or_error = pcall(love.audio.newSource, path, "static")
+        if not success then
+            print(string.format("[ASSET ERROR] Failed to load sound at path: '%s'", path))
+            print(string.format("              LÖVE Error: %s", tostring(sound_or_error)))
+            return nil
+        end
+        sound_or_error:setVolume(volume or 1.0)
+        return sound_or_error
+    end
+
+    Assets.sounds.cursor_move = loadSound("assets/sfx/cursor_move.wav", 0.4)
+    Assets.sounds.menu_scroll = loadSound("assets/sfx/menu_scroll.wav", 0.7)
+    Assets.sounds.back_out = loadSound("assets/sfx/back_out.wav", 0.7)
+    Assets.sounds.attack_hit = loadSound("assets/sfx/attack_hit.ogg", 0.6)
+    Assets.sounds.attack_miss = loadSound("assets/sfx/attack_miss.ogg", 0.6)
 
     -- Define animation grids
     -- We assume each character sprite is 64x64 pixels per frame.
@@ -155,7 +192,7 @@ function Assets.load()
         for _, file in ipairs(love.filesystem.getDirectoryItems(path)) do
             if file:sub(-4) == ".lua" then
                 local name = file:sub(1, -5)
-            data[name] = require(path .. name)
+                data[name] = require(path .. name)
             end
         end
         return data
@@ -197,5 +234,24 @@ function Assets.load()
     -- Assets.images.enemy_goblin = love.graphics.newImage("assets/goblin.png")
     -- Assets.sounds.sword_swing = love.audio.newSource("assets/sword.wav", "static")
 end
+
+-- Helper function to safely retrieve a weapon icon by its type.
+-- This centralizes the logic and prevents nil errors.
+function Assets.getWeaponIcon(weaponType)
+    if not weaponType or not Assets.images.weaponIcons then
+        return nil
+    end
+    local icon = Assets.images.weaponIcons[weaponType]
+    return icon
+end
+
+-- Helper function to safely retrieve an origin icon by its type.
+function Assets.getOriginIcon(originType)
+    if not originType or not Assets.images.originIcons then
+        return nil
+    end
+    return Assets.images.originIcons[originType]
+end
+
 
 return Assets

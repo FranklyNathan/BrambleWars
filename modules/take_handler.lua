@@ -1,7 +1,7 @@
 -- modules/take_handler.lua
 -- Contains the logic for executing the Take command.
 
-local RescueHandler = require("modules/rescue_handler") -- We can reuse the penalty calculation
+local RescueHandler = require("modules.rescue_handler") -- We can reuse the penalty calculation
 
 local TakeHandler = {}
 

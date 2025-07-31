@@ -46,7 +46,7 @@ function AttackHandler.execute(square, attackName, world)
     -- If the attack was Ascension, add the visual animation component.
     -- This is done here to ensure it happens after the core logic in UnitAttacks.
     if attackName == "ascension" then
-        square.lastDirection = "up" -- Ensure the sprite faces up for the animation.
+        square.lastDirection = "down" -- Ensure the sprite faces down for the animation.
         square.components.ascending_animation = {
             timer = 0.4, -- Duration of the upward animation in seconds
             initialTimer = 0.4,

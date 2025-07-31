@@ -30,17 +30,14 @@ function CounterAttackSystem.update(dt, world)
             -- Add the lunge component for the visual effect.
             defender.components.lunge = { timer = 0.2, initialTimer = 0.2, direction = defender.lastDirection }
 
-            -- Get the defender's basic attack.
-            local defenderBlueprint = (defender.type == "player") and CharacterBlueprints[defender.playerType] or EnemyBlueprints[defender.enemyType]
-            local basicAttackName = defenderBlueprint and defenderBlueprint.attacks and defenderBlueprint.attacks[1]
-
-            if basicAttackName then
+            -- The attack name is now passed in the counter object.
+            if counter.attackName then
                 -- Create a visual effect for the counter-attack. This will handle damage resolution.
                 local targetType = (defender.type == "player") and "enemy" or "player"
                 -- Mark this effect as a counter-attack so it doesn't trigger another counter.
                 EffectFactory.addAttackEffect(world, {
                     attacker = defender,
-                    attackName = basicAttackName,
+                    attackName = counter.attackName,
                     x = attacker.x,
                     y = attacker.y,
                     width = attacker.size,

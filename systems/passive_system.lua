@@ -4,7 +4,7 @@
 local EventBus = require("modules.event_bus")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
-local WeaponBlueprints = require("weapon_blueprints")
+local WeaponBlueprints = require("data.weapon_blueprints")
 
 local PassiveSystem = {}
 

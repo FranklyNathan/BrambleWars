@@ -9,12 +9,12 @@ local Assets = require("modules.assets")
 local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local Grid = require("modules.grid")
-local ShoveHandler = require("modules/shove_handler")
+local ShoveHandler = require("modules.shove_handler")
 local RescueHandler = require("modules.rescue_handler")
 local EffectFactory = require("modules.effect_factory")
-local TakeHandler = require("modules/take_handler")
-local WeaponBlueprints = require("weapon_blueprints")
-local ClassBlueprints = require("data/class_blueprints")
+local TakeHandler = require("modules.take_handler")
+local WeaponBlueprints = require("data.weapon_blueprints")
+local ClassBlueprints = require("data.class_blueprints")
 local PromotionSystem = require("systems.promotion_system")
 
 local InputHandler = {}
@@ -220,32 +220,29 @@ local function handle_weapon_select_input(key, world)
         if selectedOption == "unequip" then
             local unit = menu.unit
             if unit.equippedWeapon then
-                table.insert(world.playerInventory.weapons, unit.equippedWeapon)
+                local weaponKey = unit.equippedWeapon
+                world.playerInventory.weapons[weaponKey] = (world.playerInventory.weapons[weaponKey] or 0) + 1
                 unit.equippedWeapon = nil
                 EventBus:dispatch("weapon_equipped", { unit = unit, world = world })
             end
             menu.active = false
             set_player_turn_state("unit_info_locked", world)
             if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
-        elseif not menu.equippedByOther[selectedOption] then
+        elseif selectedOption ~= "unequip" then
             local unit = menu.unit
             local oldWeaponKey = unit.equippedWeapon
+            local newWeaponKey = selectedOption
 
             -- 1. Add the old weapon back to the inventory if one was equipped.
             if oldWeaponKey then
-                table.insert(world.playerInventory.weapons, oldWeaponKey)
+                world.playerInventory.weapons[oldWeaponKey] = (world.playerInventory.weapons[oldWeaponKey] or 0) + 1
             end
 
             -- 2. Remove the new weapon from the inventory.
-            for i, weaponKey in ipairs(world.playerInventory.weapons) do
-                if weaponKey == selectedOption then
-                    table.remove(world.playerInventory.weapons, i)
-                    break
-                end
-            end
+            world.playerInventory.weapons[newWeaponKey] = world.playerInventory.weapons[newWeaponKey] - 1
 
             -- 3. Equip the new weapon and dispatch the event.
-            unit.equippedWeapon = selectedOption
+            unit.equippedWeapon = newWeaponKey
             EventBus:dispatch("weapon_equipped", { unit = unit, world = world })
             -- Close the menu
             menu.active = false
@@ -277,7 +274,8 @@ local function move_unit_info_selection(key, world)
     local STATS_START = 6
     local STATS_END = 11 -- 3 rows of 2 stats each
     local MOVES_START = 12
-    local numAttacks = #menu.unit.attacks
+    -- Use the new centralized function to get the correct move list.
+    local numAttacks = #WorldQueries.getUnitMoveList(menu.unit)
     local MOVES_END = MOVES_START + numAttacks - 1
     
     local hasCarriedUnit = menu.unit.carriedUnit and true or false
@@ -286,25 +284,34 @@ local function move_unit_info_selection(key, world)
     local totalSlices = MOVES_END
     if hasCarriedUnit then totalSlices = CARRIED_UNIT_INDEX end
 
-    -- Vertical Navigation (W/S)
-    if key == "w" then -- Up
-        if oldIndex > MOVES_START then newIndex = oldIndex - 1 -- In moves or carried unit
-        elseif oldIndex == MOVES_START then newIndex = STATS_END -- From first move to Wit/Wgt
-        elseif oldIndex > STATS_START + 1 then newIndex = oldIndex - 2 -- In stats grid (not top row)
-        elseif oldIndex > STATS_START - 1 then newIndex = WISP_INDEX -- From top row of stats to Wisp
-        elseif oldIndex > NAME_INDEX then newIndex = oldIndex - 1 -- In top section
-        else newIndex = totalSlices end -- Wrap from top to bottom
-    elseif key == "s" then -- Down
-        if oldIndex < WISP_INDEX then newIndex = oldIndex + 1 -- In top section
-        elseif oldIndex == WISP_INDEX then newIndex = STATS_START -- From Wisp to Atk
+    if key == "w" then
+        if oldIndex == NAME_INDEX then
+            newIndex = totalSlices -- Wrap from top to bottom
+        elseif oldIndex == CLASS_INDEX then
+            newIndex = NAME_INDEX
+        elseif oldIndex == WEAPON_INDEX then
+            newIndex = CLASS_INDEX
+        elseif oldIndex == HP_INDEX or oldIndex == WISP_INDEX then
+            newIndex = WEAPON_INDEX
+        elseif oldIndex >= STATS_START and oldIndex <= STATS_END then
+            newIndex = oldIndex - 2
+        elseif oldIndex > MOVES_START then
+            newIndex = oldIndex - 1
+        elseif oldIndex == MOVES_START then
+            newIndex = STATS_END
+        end
+    elseif key == "s" then
+        if oldIndex < HP_INDEX then newIndex = oldIndex + 1 -- In top section (Name -> Class -> Weapon -> HP)
+        elseif oldIndex == HP_INDEX then newIndex = STATS_START -- From HP to Atk
+        elseif oldIndex == WISP_INDEX then newIndex = STATS_START + 1 -- From Wisp to Def
         elseif oldIndex < STATS_END - 1 then newIndex = oldIndex + 2 -- In stats grid (not last row)
         elseif oldIndex <= STATS_END then newIndex = MOVES_START -- From last row of stats to first move
         elseif oldIndex < totalSlices then newIndex = oldIndex + 1 -- In moves/carried
         else newIndex = 1 end -- Wrap from bottom to top
-    elseif key == "a" then -- Horizontal Navigation (A/D)
-        if oldIndex >= STATS_START and oldIndex <= STATS_END and oldIndex % 2 == 1 then newIndex = oldIndex - 1 end
-    elseif key == "d" then
-        if oldIndex >= STATS_START and oldIndex <= STATS_END and oldIndex % 2 == 0 then newIndex = oldIndex + 1 end
+    elseif key == "a" then -- Horizontal Navigation (Left)
+        if (oldIndex >= STATS_START and oldIndex <= STATS_END and oldIndex % 2 == 1) or (oldIndex == WISP_INDEX) then newIndex = oldIndex - 1 end
+    elseif key == "d" then -- Horizontal Navigation (Right)
+        if (oldIndex >= STATS_START and oldIndex <= STATS_END and oldIndex % 2 == 0) or (oldIndex == HP_INDEX) then newIndex = oldIndex + 1 end
     end
 
     if newIndex ~= oldIndex then
@@ -320,7 +327,6 @@ local function handle_unit_info_locked_input(key, world)
     if not menu.isLocked or not menu.unit then
         return
     end
-    print("[DEBUG] handle_unit_info_locked_input called with key: " .. key)
 
     if key == "k" then -- Unlock menu
         if Assets.sounds.back_out then
@@ -342,7 +348,6 @@ local function handle_unit_info_locked_input(key, world)
             weaponMenu.active = true
             weaponMenu.unit = menu.unit
             weaponMenu.options = {}
-            weaponMenu.equippedByOther = {}
             weaponMenu.selectedIndex = 1
 
             -- Get the unit's allowed weapon types from its class
@@ -360,23 +365,18 @@ local function handle_unit_info_locked_input(key, world)
             end
 
             -- Populate the options from the player's global inventory, filtered by class
-            for _, weaponKey in ipairs(world.playerInventory.weapons) do
-                local weaponData = WeaponBlueprints[weaponKey]
-                if weaponData and table_contains(allowedWeaponTypes, weaponData.type) then
-                    table.insert(weaponMenu.options, weaponKey)
+            for weaponKey, quantity in pairs(world.playerInventory.weapons) do
+                if quantity > 0 then
+                    local weaponData = WeaponBlueprints[weaponKey]
+                    if weaponData and table_contains(allowedWeaponTypes, weaponData.type) then
+                        table.insert(weaponMenu.options, weaponKey)
+                    end
                 end
             end
 
             -- Add an "Unequip" option at the bottom if the unit has a weapon equipped.
             if weaponMenu.unit.equippedWeapon then
                 table.insert(weaponMenu.options, "unequip")
-            end
-
-            -- Find which weapons are equipped by other units
-            for _, p in ipairs(world.players) do
-                if p ~= weaponMenu.unit and p.equippedWeapon then
-                    weaponMenu.equippedByOther[p.equippedWeapon] = true
-                end
             end
 
             -- Set the initial selected index to the currently equipped weapon

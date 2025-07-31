@@ -17,7 +17,7 @@ local ClassBlueprints = {
     -- =============================================================================
     thief = {
         name = "Thief",
-        weaponTypes = {"knife"},
+        weaponTypes = {"dagger"},
         promotions = {
             rogue = {
                 name = "Rogue",
@@ -216,15 +216,15 @@ local ClassBlueprints = {
     -- =============================================================================
 
     -- Thief Promotions
-    rogue = { name = "Rogue", weaponTypes = {"knife", "sword"}, promotions = {} },
-    assassin = { name = "Assassin", weaponTypes = {"knife"}, promotions = {} },
+    rogue = { name = "Rogue", weaponTypes = {"dagger", "sword"}, promotions = {} },
+    assassin = { name = "Assassin", weaponTypes = {"dagger"}, promotions = {} },
 
     -- Warrior Promotions
     executioner = { name = "Executioner", weaponTypes = {"sword", "whip"}, promotions = {} },
     sentinel = { name = "Sentinel", weaponTypes = {"sword"}, promotions = {} },
 
     -- Scout Promotions
-    ranger = { name = "Ranger", weaponTypes = {"bow", "knife"}, promotions = {} },
+    ranger = { name = "Ranger", weaponTypes = {"bow", "dagger"}, promotions = {} },
     sniper = { name = "Sniper", weaponTypes = {"bow"}, promotions = {} },
 
     -- Mage Promotions

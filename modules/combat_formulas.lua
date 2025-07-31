@@ -48,9 +48,11 @@ function CombatFormulas.calculateBaseDamage(attacker, defender, attackData, atta
     print("--- Damage Calculation: " .. (attackName or "Unknown") .. " ---")
     print("Attacker: " .. (attacker.displayName or attacker.enemyType) .. ", Defender: " .. (defender.displayName or defender.enemyType or "Obstacle"))
 
+    -- Determine the origin type for the attack. Prioritize the attack's own type, fall back to the attacker's type.
+    local attackOriginType = attackData.originType or attacker.originType
     local statUsed = (attackData.useType == "physical") and attacker.finalAttackStat or attacker.finalMagicStat
     local power = attackData.power or 0
-    local effectiveness = CombatFormulas.calculateTypeEffectiveness(attackData.originType, defender.originType)
+    local effectiveness = CombatFormulas.calculateTypeEffectiveness(attackOriginType, defender.originType)
 
     print(string.format("  Move Power: %d, Attacker Stat: %d", power, statUsed))
     print(string.format("  Type Effectiveness: x%.2f", effectiveness))

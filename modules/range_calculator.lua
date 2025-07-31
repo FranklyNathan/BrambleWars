@@ -18,14 +18,14 @@ function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
  
     local attackableTiles = {} -- The final set of red "danger zone" tiles.
  
-    local blueprint = (unit.type == "player") and CharacterBlueprints[unit.playerType] or EnemyBlueprints[unit.enemyType]
-    if not blueprint or not blueprint.attacks then return {} end
+    local all_moves = WorldQueries.getUnitMoveList(unit)
+    if #all_moves == 0 then return {} end
  
     -- 1. Pre-computation: Build a unified footprint for all fixed-shape attacks.
     local fixedFootprint = {}
     local complexAttacks = {} -- For attacks that need per-tile calculation.
  
-    for _, attackName in ipairs(blueprint.attacks) do
+    for _, attackName in ipairs(all_moves) do
         local attackData = AttackBlueprints[attackName]
         -- Check if the unit has enough wisp to use this attack.
         if attackData and unit.wisp >= (attackData.wispCost or 0) then

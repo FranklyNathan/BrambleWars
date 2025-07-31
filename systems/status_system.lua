@@ -14,7 +14,7 @@ local function process_turn_end(entity, world)
     for effectType, effectData in pairs(entity.statusEffects) do
         local effectDef = Assets.status_effects[effectType]
         if effectDef and effectDef.tick then
-            effectDef.tick(entity, world) -- Execute the tick function defined in the status effect data.
+            effectDef.tick(entity, effectData, world) -- Execute the tick function defined in the status effect data.
         end
 
         -- Handle effect durations, but only for effects that *aren't* permanent (duration ~= math.huge)

@@ -32,8 +32,8 @@ local CharacterBlueprints = {
             witStat = 35,
         },
         attacks = {
-            "snap", "venom_stab", "slash", "phantom_step"
-        } --The first attack must always be a basic attack, the rest can be any attack(s) defined in attack_blueprints.lua
+            "venom_stab", "sever", "phantom_step"
+        }
     },
     biblo = {
         displayName = "Biblo",
@@ -63,11 +63,12 @@ local CharacterBlueprints = {
             witStat = 35,
         },
         attacks = {
-            "quill_jab", "mend", "invigoration", "froggy_rush", "snap",
-            "walnut_toss", "venom_stab", "uppercut", "slash", "shunt",
-            "shockstrike", "impale", "fireball", "longshot", "slipstep", "trap_set", "ascension",
-            "eruption", "phantom_step", "shockwave", "quick_step",
-            "grovecall", "hookshot"
+            -- Melee Attacks
+            "venom_stab", "uppercut", "sever", "shunt", "shockstrike", "impale", "disarm", "slipstep",
+            -- Ranged & Special Attacks
+            "fireball", "longshot", "eruption", "phantom_step", "shockwave", "quick_step", "grovecall", "trap_set", "ascension", "hookshot",
+            -- Support Attacks
+            "mend", "invigoration"
         }
     },
     winthrop = {
@@ -98,7 +99,7 @@ local CharacterBlueprints = {
             witStat = 30,
         },
         attacks = {
-            "quill_jab", "fireball", "eruption", "shockwave"
+            "fireball", "eruption", "shockwave"
         }
     },
     mortimer = {
@@ -128,7 +129,7 @@ local CharacterBlueprints = {
             witStat = 20,
         },
         attacks = {
-            "walnut_toss", "slash", "fireball", "hookshot"
+            "sever", "fireball", "hookshot"
         }
     },
     cedric = {
@@ -158,7 +159,7 @@ local CharacterBlueprints = {
             witStat = 45,
         },
         attacks = {
-            "snap", "uppercut", "quick_step", "hookshot"
+            "uppercut", "quick_step", "hookshot", "disarm"
         }
     },
     ollo = {
@@ -188,7 +189,7 @@ local CharacterBlueprints = {
             witStat = 20,
         },
         attacks = {
-            "quill_jab", "longshot", "hookshot"
+            "longshot", "hookshot"
         }
     },
     plop = {
@@ -219,13 +220,13 @@ local CharacterBlueprints = {
             witStat = 50,
         },
         attacks = {
-            "froggy_rush", "impale", "grovecall", "hookshot"
+            "impale", "grovecall", "hookshot"
         }
     },
     dupe = {
         displayName = "Dupe",
         species = "Bat",
-        originType = "caverborn",
+        originType = "cavernborn",
         class = "thief",
         maxHp = 21,
         wispStat = 4,
@@ -237,7 +238,7 @@ local CharacterBlueprints = {
         witStat = 8,
         movement = 8,
         weight = 5, -- Medium-Light
-        equippedWeapon = "travelers_knife",
+        equippedWeapon = "travelers_dagger",
         isFlying = true,
         dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown
         passives = {"Aetherfall"},
@@ -250,7 +251,7 @@ local CharacterBlueprints = {
             witStat = 60,
         },
         attacks = {
-            "snap", "slash", "slipstep"
+            "sever", "slipstep"
         }
     }
 }

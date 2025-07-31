@@ -25,7 +25,7 @@ local EnemyBlueprints = {
             resistanceStat = 20,
             witStat = 20,
         },
-        attacks = {"froggy_rush", "slash"}
+        attacks = {"sever"}
     },
     archer = {
         originType = "cavernborn",
@@ -50,7 +50,7 @@ local EnemyBlueprints = {
             resistanceStat = 25,
             witStat = 45,
         },
-        attacks = {"walnut_toss", "fireball", "longshot"}
+        attacks = {"fireball", "longshot"}
     },
     punter = {
         originType = "cavernborn",
@@ -75,7 +75,7 @@ local EnemyBlueprints = {
             resistanceStat = 30,
             witStat = 25,
         },
-        attacks = {"froggy_rush", "uppercut"}
+        attacks = {"uppercut"}
     }
 }
 

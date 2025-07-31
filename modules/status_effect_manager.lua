@@ -40,21 +40,6 @@ function StatusEffectManager.processTurnStart(target, world)
    --[[ The logic for ticking effect durations is now handled by status_system.lua
        at the end of each turn. This function is now only for effects that
        actively trigger at the start of a unit's turn. ]]--
-
-    -- Poison: Apply damage at turn start.
-    if target.statusEffects.poison then
-        -- Require CombatActions locally to avoid a circular dependency.
-        local CombatActions = require("modules.combat_actions")
-        local effect = target.statusEffects.poison
-        local damage = 5 -- Per your request, poison now deals a flat amount of damage.
-
-       -- Create an "invisible" damage event to apply poison damage
-       CombatActions.applyDirectDamage(world, target, damage, false, effect.attacker, {createPopup = false})
-
-       -- Create a "Poison!" popup to signal the damage
-       local popupText = "Poison! -" .. damage
-       EffectFactory.createDamagePopup(world, target, popupText, false, {0.5, 0.1, 0.8, 1}) -- Dark purple text
-   end
 end
 
 -- New function: Apply a status effect (moved from CombatActions)

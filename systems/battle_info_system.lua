@@ -6,7 +6,7 @@ local CombatFormulas = require("modules.combat_formulas")
 local AttackBlueprints = require("data.attack_blueprints")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
-local WeaponBlueprints = require("weapon_blueprints")
+local WeaponBlueprints = require("data.weapon_blueprints")
 local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 
@@ -64,7 +64,8 @@ function BattleInfoSystem.refresh_forecast(world)
             menu.playerActionLabel = "Damage:"
             local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false, attackName)
             menu.playerDamage = tostring(playerDmg)
-            if CombatFormulas.calculateTypeEffectiveness(attackData.originType, target.originType) > 1 then
+            local attackOriginType = attackData.originType or attacker.originType
+            if CombatFormulas.calculateTypeEffectiveness(attackOriginType, target.originType) > 1 then
                 menu.playerDamage = menu.playerDamage .. "!"
             end
             local playerHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(attacker, target, attackData.Accuracy or 100)))
@@ -73,33 +74,7 @@ function BattleInfoSystem.refresh_forecast(world)
             menu.playerCritChance = math.floor(playerCrit * 100)
 
             -- Enemy's counter-attack forecast
-            -- Combine innate moves and moves granted by the equipped weapon for the defender (target).
-            local all_defender_moves = {}
-            local move_exists = {} -- Use a set to track existing moves and prevent duplicates
-
-            -- 1. Add moves from the character/enemy blueprint's innate list.
-            local defenderBlueprint = (target.type == "player") and CharacterBlueprints[target.playerType] or EnemyBlueprints[target.enemyType]
-            if defenderBlueprint and defenderBlueprint.attacks then
-                for _, attackName in ipairs(defenderBlueprint.attacks) do
-                    if not move_exists[attackName] then
-                        table.insert(all_defender_moves, attackName)
-                        move_exists[attackName] = true
-                    end
-                end
-            end
-
-            -- 2. Add moves from the equipped weapon.
-            if target.equippedWeapon and WeaponBlueprints[target.equippedWeapon] then
-                local weapon = WeaponBlueprints[target.equippedWeapon]
-                if weapon.grants_moves then
-                    for _, attackName in ipairs(weapon.grants_moves) do
-                        if not move_exists[attackName] then
-                            table.insert(all_defender_moves, attackName)
-                            move_exists[attackName] = true
-                        end
-                    end
-                end
-            end
+            local all_defender_moves = WorldQueries.getUnitMoveList(target)
 
             local counterAttackName = all_defender_moves[1]
 
@@ -145,7 +120,8 @@ function BattleInfoSystem.refresh_forecast(world)
                 if inCounterRange then
                     local enemyDmg = CombatFormulas.calculateFinalDamage(target, attacker, counterAttackData, false, counterAttackName)
                     menu.enemyDamage = tostring(enemyDmg)
-                    if CombatFormulas.calculateTypeEffectiveness(counterAttackData.originType, attacker.originType) > 1 then
+                    local counterAttackOriginType = counterAttackData.originType or target.originType
+                    if CombatFormulas.calculateTypeEffectiveness(counterAttackOriginType, attacker.originType) > 1 then
                         menu.enemyDamage = menu.enemyDamage .. "!"
                     end
                     local enemyHit = math.max(0, math.min(1, CombatFormulas.calculateHitChance(target, attacker, counterAttackData.Accuracy or 100)))

@@ -123,14 +123,14 @@ function AetherfallSystem.update(dt, world)
                             -- Add the lunge component for the visual effect.
                             unit.components.lunge = { timer = 0.2, initialTimer = 0.2, direction = unit.lastDirection }
 
-                            -- Execute a "Slash" attack.
+                            -- Execute a "Sever" attack.
                             local targetType = (unit.type == "player") and "enemy" or "player"
                             local specialProperties = {
                                 isAetherfallAttack = true -- Flag to prevent counter-attacks.
                             }
                             EffectFactory.addAttackEffect(world, {
                                 attacker = unit,
-                                attackName = "slash",
+                                attackName = "sever",
                                 x = target.x,
                                 y = target.y,
                                 width = target.size,

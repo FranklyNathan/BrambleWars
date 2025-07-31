@@ -5,7 +5,7 @@
 -- base stats, equipment, and status effects.
 
 local EventBus = require("modules.event_bus")
-local WeaponBlueprints = require("weapon_blueprints")
+local WeaponBlueprints = require("data.weapon_blueprints")
 
 local StatSystem = {}
 

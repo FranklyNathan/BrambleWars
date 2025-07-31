@@ -1,8 +1,10 @@
 -- modules/unit_info_menu.lua
 -- Contains the drawing logic for the unit information menu.
 
-local WeaponBlueprints = require("weapon_blueprints")
-local ClassBlueprints = require("data/class_blueprints")
+local WorldQueries = require("modules.world_queries")
+local Assets = require("modules.assets")
+local WeaponBlueprints = require("data.weapon_blueprints")
+local ClassBlueprints = require("data.class_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
 
 -- Define colors for origin types
@@ -55,12 +57,13 @@ function UnitInfoMenu.draw(world)
     local menu = world.ui.menus.unitInfo
     if menu.active and menu.unit then
         local unit = menu.unit
+        local moveList = WorldQueries.getUnitMoveList(unit)
         local font = love.graphics.getFont()
 
         -- Menu dimensions
-        local menuX = Config.VIRTUAL_WIDTH - 160 -- Position from the right edge
+        local menuWidth = 180
+        local menuX = Config.VIRTUAL_WIDTH - menuWidth - 10 -- Position from the right edge with a 10px gap
         local menuY = 10 -- Position from the top
-        local menuWidth = 150
 
         -- Check if this menu is being used for a level-up display.
         local levelUpAnim = world.ui.levelUpAnimation
@@ -106,8 +109,8 @@ function UnitInfoMenu.draw(world)
             local yOffset = menuY
             local currentSliceIndex = 0
 
-            -- Helper to draw a single full-width slice, now with level-up awareness.
-            local function drawFullSlice(text, value, key, isHeader)
+            -- Helper to draw a single full-width slice, now with icon and level-up awareness.
+            local function drawFullSlice(text, value, key, isHeader, icon)
                 currentSliceIndex = currentSliceIndex + 1
                 local isSelected = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == currentSliceIndex
 
@@ -142,7 +145,9 @@ function UnitInfoMenu.draw(world)
                     end
                     love.graphics.printf(text, menuX, textY, menuWidth, "center")
                 else
-                    -- Set color for the stat name (e.g., "HP")
+                    local textX = menuX + 10
+                    -- Draw icon if it exists
+                    -- Set the color for the icon and text first.
                     if showPlusOne then
                         local alpha = 1.0
                         if levelUpAnim.phase == "fading" then
@@ -154,7 +159,15 @@ function UnitInfoMenu.draw(world)
                     elseif isSelected then love.graphics.setColor(0, 0, 0, 1)
                     elseif not canAfford then love.graphics.setColor(0.5, 0.5, 0.5, 1) -- Grey text
                     else love.graphics.setColor(1, 1, 1, 1) end
-                    love.graphics.print(text, menuX + 10, textY)
+
+                    -- Now draw the icon with the correct color.
+                    if icon then
+                        local iconY = yOffset + (sliceHeight - icon:getHeight()) / 2
+                        love.graphics.draw(icon, textX, iconY, 0, 1, 1)
+                        textX = textX + icon:getWidth() + 4
+                    end
+
+                    love.graphics.print(text, textX, textY)
 
                     -- Set color for the stat value (e.g., "25/25")
                     if displayValue then
@@ -229,28 +242,30 @@ function UnitInfoMenu.draw(world)
                     love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
                 elseif isSelected1 then love.graphics.setColor(0, 0, 0, 1)
                 else love.graphics.setColor(1, 1, 1, 1) end
-                love.graphics.print(text1, sliceX1 + 5, textY)
+                love.graphics.print(text1, sliceX1 + 10, textY)
 
-                -- Set color for the left stat value
-                if isValueGreen1 then
-                    love.graphics.setColor(0.5, 1, 0.5, 1) -- Green
-                elseif isSelected1 then
-                    love.graphics.setColor(0, 0, 0, 1)
-                else
-                    love.graphics.setColor(1, 1, 1, 1)
-                end
+                -- Draw the value next to the label, not right-aligned
                 if value1 then
-                    love.graphics.print(tostring(displayValue1), sliceX1 + 40, textY)
-                end
-                if showPlusOne1 then
-                    local alpha = 1.0
-                    if levelUpAnim.phase == "fading" then
-                        local fadeDuration = 0.4 -- From LevelUpDisplaySystem
-                        local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
-                        alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
+                    local text1Width = font:getWidth(text1)
+                    local valueX = sliceX1 + 10 + text1Width + font:getWidth(" ")
+
+                    -- Draw the value string
+                    if isValueGreen1 then love.graphics.setColor(0.5, 1, 0.5, 1) elseif isSelected1 then love.graphics.setColor(0, 0, 0, 1) else love.graphics.setColor(1, 1, 1, 1) end
+                    local valueString = tostring(displayValue1)
+                    love.graphics.print(valueString, valueX, textY)
+
+                    -- Draw the "+1" string if applicable
+                    if showPlusOne1 then
+                        local valueWidth = font:getWidth(valueString)
+                        local alpha = 1.0
+                        if levelUpAnim.phase == "fading" then
+                            local fadeDuration = 0.4
+                            local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
+                            alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
+                        end
+                        love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
+                        love.graphics.print(" +1", valueX + valueWidth, textY)
                     end
-                    love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
-                    love.graphics.print("+1", sliceX1 + 55, textY)
                 end
 
                 -- Draw right slice
@@ -278,18 +293,11 @@ function UnitInfoMenu.draw(world)
                     love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
                 elseif isSelected2 then love.graphics.setColor(0, 0, 0, 1)
                 else love.graphics.setColor(1, 1, 1, 1) end
-                love.graphics.print(text2, sliceX2 + 10, textY)
 
-                -- Set color for the right stat value
-                if isValueGreen2 then
-                    love.graphics.setColor(0.5, 1, 0.5, 1) -- Green
-                elseif isSelected2 then
-                    love.graphics.setColor(0, 0, 0, 1)
-                else
-                    love.graphics.setColor(1, 1, 1, 1)
-                end
-                if value2 then
-                    love.graphics.print(tostring(displayValue2), sliceX2 + 45, textY)
+            if value2 then
+                love.graphics.print(text2 .. " " .. tostring(displayValue2), sliceX2 + 10, textY)
+            else
+                love.graphics.print(text2, sliceX2 + 10, textY)
                 end
 
                 if showPlusOne2 then
@@ -361,22 +369,33 @@ function UnitInfoMenu.draw(world)
                 -- The key "class" is added for selection logic in the input handler later.
                 -- Set the last parameter to `false` to left-align the text like the name.
                 drawFullSlice(displayText, nil, "class", false)
+
+                -- Draw the origin icon on the right side of the slice.
+                local originIcon = Assets.getOriginIcon(unit.originType)
+                if originIcon then
+                    local iconY = (yOffset - sliceHeight) + (sliceHeight - originIcon:getHeight()) / 2
+                    local iconX = menuX + menuWidth - originIcon:getWidth() - 10
+                    love.graphics.setColor(1, 1, 1, 1) -- Ensure color is white
+                    love.graphics.draw(originIcon, iconX, iconY)
+                end
             end
 
             -- 3. Draw Equipped Weapon
             do
                 local weaponName = "Unarmed"
+                local weaponIcon = nil
                 if unit.equippedWeapon and WeaponBlueprints[unit.equippedWeapon] then
-                    weaponName = WeaponBlueprints[unit.equippedWeapon].name
+                    local weaponData = WeaponBlueprints[unit.equippedWeapon]
+                    weaponName = weaponData.name
+                    weaponIcon = Assets.getWeaponIcon(weaponData.type)
+                else
+                    print("[DEBUG] Unit Info Menu: No weapon equipped or blueprint not found.")
                 end
-                -- The key "weapon" is added for selection logic in the input handler later.
-                -- Set the last parameter to `false` to left-align the text for consistency.
-                drawFullSlice(weaponName, nil, "weapon", false)
+                drawFullSlice(weaponName, nil, "weapon", false, weaponIcon)
             end
 
-            -- 4. Draw HP and Wisp
-            drawFullSlice("HP", math.floor(unit.hp) .. "/" .. unit.finalMaxHp, "maxHp")
-            drawFullSlice("Wisp", math.floor(unit.wisp) .. "/" .. unit.finalMaxWisp, "maxWisp")
+            -- 4. Draw HP and Wisp on the same slice
+            drawStatSlicePair("HP:", math.floor(unit.hp) .. "/" .. unit.finalMaxHp, "maxHp", "Wisp:", math.floor(unit.wisp) .. "/" .. unit.finalMaxWisp, "maxWisp")
 
             -- 5. Draw Stats Grid
             drawStatSlicePair("Atk:", unit.finalAttackStat, "attackStat", "Def:", unit.finalDefenseStat, "defenseStat")
@@ -386,7 +405,7 @@ function UnitInfoMenu.draw(world)
             -- 6. Draw Moves Header and List
         love.graphics.setColor(0, 0, 0, 0.3)
         love.graphics.rectangle("fill", menuX, yOffset, menuWidth, 2)
-            for _, attackName in ipairs(unit.attacks) do
+            for _, attackName in ipairs(moveList) do
                 local attackData = AttackBlueprints[attackName]
                 if attackData then
                     local formattedName = formatAttackName(attackName)
@@ -405,8 +424,8 @@ function UnitInfoMenu.draw(world)
             -- 1(Name)+1(Class)+1(Weapon)+2(HP/Wisp)+6(Stats) = 11 slices before moves. So moves start at index 12.
             local movesStartIndex = 12
             local selectedAttackIndex = menu.selectedIndex - (movesStartIndex - 1)
-            if menu.isLocked and selectedAttackIndex > 0 and selectedAttackIndex <= #unit.attacks then
-                local attackName = unit.attacks[selectedAttackIndex]
+            if menu.isLocked and selectedAttackIndex > 0 and selectedAttackIndex <= #moveList then
+                local attackName = moveList[selectedAttackIndex]
                 local attackData = AttackBlueprints[attackName]
 
                 if attackData then

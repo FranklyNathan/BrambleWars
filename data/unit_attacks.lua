@@ -125,11 +125,15 @@ local function generic_cycle_target_damage_attack(attacker, world, attackInstanc
 end
 
 -- Shared attack functions, now using the new formulas and structure:
-UnitAttacks.froggy_rush = generic_cycle_target_damage_attack
-UnitAttacks.quill_jab = generic_cycle_target_damage_attack
-UnitAttacks.snap = generic_cycle_target_damage_attack
-UnitAttacks.walnut_toss = generic_cycle_target_damage_attack
 UnitAttacks.slash = generic_cycle_target_damage_attack
+UnitAttacks.thrust = generic_cycle_target_damage_attack
+UnitAttacks.lash = generic_cycle_target_damage_attack
+UnitAttacks.loose = generic_cycle_target_damage_attack
+UnitAttacks.bonk = generic_cycle_target_damage_attack
+UnitAttacks.harm = generic_cycle_target_damage_attack
+UnitAttacks.stab = generic_cycle_target_damage_attack
+
+UnitAttacks.sever = generic_cycle_target_damage_attack
 UnitAttacks.venom_stab = generic_cycle_target_damage_attack
 UnitAttacks.uppercut = generic_cycle_target_damage_attack
 UnitAttacks.longshot = generic_cycle_target_damage_attack
@@ -161,6 +165,32 @@ UnitAttacks.shockstrike = function(attacker, world, attackInstanceId)
         width = target.size, height = target.size, color = {1, 0, 0, 1},
         targetType = targetType, statusEffect = statusToApply, specialProperties = specialProperties
     })
+    return true
+end
+
+UnitAttacks.disarm = function(attacker, world, attackInstanceId)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+
+    local attackName = "disarm"
+    local attackData = AttackBlueprints[attackName]
+    if not attackData then return false end
+
+    -- Apply damage
+    local targetType = (attacker.type == "player") and "enemy" or "player"
+    EffectFactory.addAttackEffect(world, {
+        attacker = attacker, attackName = attackName, x = target.x, y = target.y,
+        width = target.size, height = target.size, color = {1, 0, 0, 1},
+        targetType = targetType,
+        specialProperties = { attackInstanceId = attackInstanceId }
+    })
+
+    -- Apply disarm status if they have a weapon
+    if target.equippedWeapon then
+        local statusToApply = { type = "disarmed", duration = 1, originalWeapon = target.equippedWeapon }
+        StatusEffectManager.applyStatusEffect(target, statusToApply, world)
+        target.equippedWeapon = nil -- Unequip the weapon
+    end
     return true
 end
 

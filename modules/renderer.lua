@@ -6,13 +6,13 @@ local Camera = require("modules.camera")
 local Assets = require("modules.assets")
 local CharacterBlueprints = require("data.character_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
-local WeaponBlueprints = require("weapon_blueprints")
+local WeaponBlueprints = require("data.weapon_blueprints")
 local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local BattleInfoMenu = require("modules.battle_info_menu")
 local UnitInfoMenu = require("modules.unit_info_menu")
 local ExpBarRendererSystem = require("systems.exp_bar_renderer_system")
-local PromotionMenu = require("modules/promotion_menu")
+local PromotionMenu = require("modules.promotion_menu")
 
 local Renderer = {}
 
@@ -1073,8 +1073,9 @@ local function draw_weapon_select_menu(world)
 
     -- Menu dimensions and positioning
     -- Position it to the left of the unit info menu.
-    local menuWidth = 160
-    local unitInfoMenuX = Config.VIRTUAL_WIDTH - 160
+    local menuWidth = 190 -- Increased width to prevent text overlap
+    -- The unit info menu is 200px wide with a 10px gap from the right edge.
+    local unitInfoMenuX = Config.VIRTUAL_WIDTH - 200 - 10
     local menuX = unitInfoMenuX - menuWidth - 10 -- Place it to the left with a 10px gap.
 
     -- Calculate height based on number of options.
@@ -1099,6 +1100,8 @@ local function draw_weapon_select_menu(world)
     local yOffset = menuY + headerHeight
     for i, optionKey in ipairs(menu.options) do
         local isSelected = (i == menu.selectedIndex)
+        local textY = yOffset + (sliceHeight - font:getHeight()) / 2
+        local textX = menuX + 10
 
         if optionKey == "unequip" then
             -- Special drawing for the "Unequip" option
@@ -1109,22 +1112,34 @@ local function draw_weapon_select_menu(world)
             else
                 love.graphics.setColor(1, 1, 1, 1) -- White text
             end
-            local textY = yOffset + (sliceHeight - font:getHeight()) / 2
-            love.graphics.print("Unequip", menuX + 10, textY)
+            love.graphics.print("Unequip", textX, textY)
         else
             -- Existing logic for drawing weapon names
             local weapon = WeaponBlueprints[optionKey]
             if weapon then
-                local isEquippedByOther = menu.equippedByOther[optionKey]
-
                 if isSelected then
                     love.graphics.setColor(0.95, 0.95, 0.7, 0.9) -- Cream/yellow for selected
                     love.graphics.rectangle("fill", menuX + 1, yOffset, menuWidth - 2, sliceHeight)
                 end
 
-                if isEquippedByOther then love.graphics.setColor(1, 0.4, 0.4, 1) else if isSelected then love.graphics.setColor(0, 0, 0, 1) else love.graphics.setColor(1, 1, 1, 1) end end
-                local textY = yOffset + (sliceHeight - font:getHeight()) / 2
-                love.graphics.print(weapon.name, menuX + 10, textY)
+                if isSelected then love.graphics.setColor(0, 0, 0, 1) else love.graphics.setColor(1, 1, 1, 1) end
+
+                -- Draw icon
+                local weaponIcon = Assets.getWeaponIcon(weapon.type)
+                if weaponIcon then
+                    local iconY = yOffset + (sliceHeight - weaponIcon:getHeight()) / 2
+                    love.graphics.draw(weaponIcon, textX, iconY, 0, 1, 1)
+                    textX = textX + weaponIcon:getWidth() + 4
+                end
+
+                love.graphics.print(weapon.name, textX, textY)
+
+                -- Draw the quantity of the weapon, right-aligned.
+                local quantity = world.playerInventory.weapons[optionKey] or 0
+                local quantityText = "x" .. quantity
+                local quantityWidth = font:getWidth(quantityText)
+                -- The color is already set correctly (white for normal, black for selected).
+                love.graphics.print(quantityText, menuX + menuWidth - quantityWidth - 10, textY)
             end
         end
         yOffset = yOffset + sliceHeight
