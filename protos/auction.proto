@@ -1,6 +1,6 @@
-syntax = "proto3"
+syntax = "proto3";
 
-package bramble
+package bramble;
 
 message EchoMessage {
   string message = 1;
