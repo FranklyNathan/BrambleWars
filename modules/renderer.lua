@@ -321,6 +321,21 @@ local function draw_entity(entity, world, is_active_player)
         drawX = drawX + lungeOffsetX
         baseDrawY = baseDrawY + lungeOffsetY
 
+        -- Apply knockback effect offset if present.
+        -- This is applied after the lunge, so they can stack if needed (though unlikely).
+        if entity.components.knockback_animation then
+            local knockback = entity.components.knockback_animation
+            local max_knockback_amount = knockback.distance or 8
+            -- Calculate progress (0 to 1) and use a sine wave for smooth out-and-back motion.
+            local progress = 1 - (knockback.timer / knockback.initialTimer)
+            local current_knockback_amount = max_knockback_amount * math.sin(progress * math.pi)
+
+            if knockback.direction == "up" then baseDrawY = baseDrawY - current_knockback_amount end
+            if knockback.direction == "down" then baseDrawY = baseDrawY + current_knockback_amount end
+            if knockback.direction == "left" then drawX = drawX - current_knockback_amount end
+            if knockback.direction == "right" then drawX = drawX + current_knockback_amount end
+        end
+
         local finalDrawY, rotation = calculate_visual_offsets(entity, currentAnim, drawX, baseDrawY)
 
         -- Calculate the base alpha for the entity. This will be 1 unless the unit is fading out.

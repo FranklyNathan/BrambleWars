@@ -85,11 +85,10 @@ function CombatFormulas.calculateBaseDamage(attacker, defender, attackData, atta
         print(string.format("  Raw Damage ( Adjusted Power - Defender Stat ): %.2f", rawDamage))
     end
 
-    local finalBaseDamage = math.floor(rawDamage)
-    print("Final Base Damage (floored): " .. finalBaseDamage)
+    print("  Final Base Damage (un-floored): " .. rawDamage)
     print("--------------------------")
-    -- Base damage should always be a whole number.
-    return finalBaseDamage
+    -- Return the raw, un-floored damage. The final flooring happens at the call site (e.g., in applyDirectDamage or the UI).
+    return rawDamage
 end
 
 -- Helper to calculate final damage including base damage and critical hit multiplier
@@ -98,7 +97,7 @@ function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isC
     if isCrit then
         damage = damage * 2
     end
-    return math.floor(damage)
+    return damage
 end
 
 -- Calculates the amount of HP restored by a healing move.

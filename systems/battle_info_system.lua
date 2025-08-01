@@ -71,8 +71,10 @@ function BattleInfoSystem.refresh_forecast(world)
                 local dx = target.tileX - attacker.tileX
                 local dy = target.tileY - attacker.tileY
                 local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
-                local secondaryTarget = WorldQueries.getUnitAt(behindTileX, behindTileY, target, world)
-                if secondaryTarget and secondaryTarget.type ~= attacker.type then
+                local secondaryUnit = WorldQueries.getUnitAt(behindTileX, behindTileY, target, world)
+                local behindObstacle = WorldQueries.getObstacleAt(behindTileX, behindTileY, world)
+
+                if (secondaryUnit and secondaryUnit.type ~= attacker.type) or (behindObstacle and not behindObstacle.isTrap) then
                     damageMultiplier = 1.5
                 end
             end
@@ -132,7 +134,7 @@ function BattleInfoSystem.refresh_forecast(world)
 
                 if inCounterRange then
                     local enemyDmg = CombatFormulas.calculateFinalDamage(target, attacker, counterAttackData, false, counterAttackName)
-                    menu.enemyDamage = tostring(enemyDmg)
+                    menu.enemyDamage = tostring(math.floor(enemyDmg))
                     local counterAttackOriginType = counterAttackData.originType or target.originType
                     if CombatFormulas.calculateTypeEffectiveness(counterAttackOriginType, attacker.originType) > 1 then
                         menu.enemyDamage = menu.enemyDamage .. "!"

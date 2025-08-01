@@ -47,9 +47,19 @@ local function on_action_finalized(data)
     end
 end
 
--- We need to reset the 'hustle_used_this_turn' flag at the start of each team's turn.
-local function on_turn_started(data)
-    local team_list = data.world.turn == "player" and data.world.players or data.world.enemies
+-- Resets the hustle flag for all player units at the start of their turn.
+local function on_player_turn_started(data)
+    local team_list = data.world.players
+    for _, unit in ipairs(team_list) do
+        if unit.components.hustle_used_this_turn then
+            unit.components.hustle_used_this_turn = nil
+        end
+    end
+end
+
+-- Resets the hustle flag for all enemy units at the start of their turn.
+local function on_enemy_turn_started(data)
+    local team_list = data.world.enemies
     for _, unit in ipairs(team_list) do
         if unit.components.hustle_used_this_turn then
             unit.components.hustle_used_this_turn = nil
@@ -58,7 +68,7 @@ local function on_turn_started(data)
 end
 
 EventBus:register("action_finalized", on_action_finalized)
-EventBus:register("player_turn_started", on_turn_started)
-EventBus:register("enemy_turn_started", on_turn_started)
+EventBus:register("enemy_turn_ended", on_player_turn_started) -- Player turn starts when enemy turn ends
+EventBus:register("player_turn_ended", on_enemy_turn_started) -- Enemy turn starts when player turn ends
 
 return HustleSystem

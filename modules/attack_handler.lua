@@ -30,9 +30,11 @@ function AttackHandler.execute(square, attackName, world)
         -- We do not pass a specific target.
     end
 
-    -- Check for and deduct the Wisp cost.
-    if not AttackHandler.deductWispCost(square, attackData) then
-        return false -- Not enough Wisp, attack fails.
+    -- Check for Wisp cost BEFORE executing, but do not deduct yet.
+    local cost = attackData.wispCost or 0
+    if square.wisp < cost then
+        -- TODO: Add a sound effect for "not enough mana"
+        return false
     end
 
     local attackInstanceId = nextAttackInstanceId
@@ -43,9 +45,14 @@ function AttackHandler.execute(square, attackName, world)
     -- Execute the attack. The attack function now only needs the attacker and the world state.
     local result = UnitAttacks[attackName](square, world, attackInstanceId)
 
+    -- If the attack was successful, NOW we deduct the wisp cost.
+    if result then
+        square.wisp = square.wisp - cost
+    end
+
     -- If the attack was Ascension, add the visual animation component.
     -- This is done here to ensure it happens after the core logic in UnitAttacks.
-    if attackName == "ascension" then
+    if attackName == "ascension" and result then
         square.lastDirection = "down" -- Ensure the sprite faces down for the animation.
         square.components.ascending_animation = {
             timer = 0.4, -- Duration of the upward animation in seconds
@@ -53,8 +60,6 @@ function AttackHandler.execute(square, attackName, world)
             speed = 900 -- Speed in pixels per second
         }
     end
-    -- Clean up the state.
-    world.ui.targeting.selectedAttackName = nil
     -- If the attack function returns a boolean, use it. Otherwise, assume it fired successfully.
     if type(result) == "boolean" then
         return result
@@ -63,15 +68,4 @@ function AttackHandler.execute(square, attackName, world)
     end
 end
 
-function AttackHandler.deductWispCost(attacker, attackData)
-    if not attacker or not attackData then return false end
-
-    local cost = attackData.wispCost or 0
-    if attacker.wisp >= cost then
-        attacker.wisp = attacker.wisp - cost
-        return true -- Enough wisp, deduct cost
-    else
-        return false -- Not enough wisp
-    end
-end
 return AttackHandler

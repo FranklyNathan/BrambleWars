@@ -426,11 +426,50 @@ end
 
 -- Finds all adjacent, lighter player units that can be rescued by the given unit.
 function WorldQueries.findRescuableUnits(rescuer, world)
-    if not rescuer or rescuer.carriedUnit then return {} end -- Can't rescue if already carrying.
-    local filter = function(actor, target, wrld)
-        return target.weight < actor.weight
+    if not rescuer or rescuer.carriedUnit then return {} end
+
+    local validTargets = {}
+    local potentialTargets = {}
+
+    -- 1. Add all adjacent allies to the potential list.
+    local allies = (rescuer.type == "player") and world.players or world.enemies
+    for _, unit in ipairs(allies) do
+        if unit ~= rescuer and unit.hp > 0 then
+            local distance = math.abs(rescuer.tileX - unit.tileX) + math.abs(rescuer.tileY - unit.tileY)
+            if distance == 1 then
+                table.insert(potentialTargets, unit)
+            end
+        end
     end
-    return findAdjacentAllies(rescuer, world, filter)
+
+    -- 2. If the rescuer has "Captor", add adjacent enemies to the potential list.
+    local rescuerHasCaptor = false
+    if world.teamPassives[rescuer.type].Captor then
+        for _, provider in ipairs(world.teamPassives[rescuer.type].Captor) do
+            if provider == rescuer then rescuerHasCaptor = true; break end
+        end
+    end
+
+    if rescuerHasCaptor then
+        local enemies = (rescuer.type == "player") and world.enemies or world.players
+        for _, unit in ipairs(enemies) do
+            if unit.hp > 0 then
+                local distance = math.abs(rescuer.tileX - unit.tileX) + math.abs(rescuer.tileY - unit.tileY)
+                if distance == 1 then
+                    table.insert(potentialTargets, unit)
+                end
+            end
+        end
+    end
+
+    -- 3. Filter all potential targets by weight.
+    for _, target in ipairs(potentialTargets) do
+        if target.weight < rescuer.weight then
+            table.insert(validTargets, target)
+        end
+    end
+
+    return validTargets
 end
 
 -- Finds all adjacent, lighter allied units that can be shoved by the given unit.
@@ -452,8 +491,26 @@ end
 -- Finds all adjacent player units who are carrying a unit that the 'taker' can take.
 function WorldQueries.findTakeTargets(taker, world)
     if not taker or taker.carriedUnit then return {} end -- A unit already carrying someone cannot take.
+
     local filter = function(actor, target, wrld)
-        return target.carriedUnit and actor.baseWeight > target.carriedUnit.baseWeight
+        if not target.carriedUnit then return false end
+
+        -- Standard check: Can the taker carry the unit?
+        if actor.baseWeight <= target.carriedUnit.baseWeight then
+            return false
+        end
+
+        -- New Captor check: If the carried unit is an enemy, the taker must have Captor.
+        if target.carriedUnit.type ~= actor.type then
+            local takerHasCaptor = false
+            if wrld.teamPassives[actor.type].Captor then
+                for _, provider in ipairs(wrld.teamPassives[actor.type].Captor) do
+                    if provider == actor then takerHasCaptor = true; break end
+                end
+            end
+            if not takerHasCaptor then return false end
+        end
+        return true
     end
     return findAdjacentAllies(taker, world, filter)
 end

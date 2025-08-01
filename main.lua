@@ -42,7 +42,6 @@ local WispRegenerationSystem = require("systems.wisp_regeneration_system")
 local InputHandler = require("modules.input_handler")
 
 world = nil -- Will be initialized in love.load after assets are loaded
-GameFont = nil -- Will hold our loaded font
 
 local canvas
 local scale = 1
@@ -77,7 +76,7 @@ local update_systems = {
 -- love.load() is called once when the game starts.
 -- It's used to initialize game variables and load assets.
 function love.load()
-    sti = require'libraries.sti' -- Load the Simple Tiled Implementation library for maps
+    local sti = require'libraries.sti' -- Load the Simple Tiled Implementation library for maps
     love.graphics.setDefaultFilter("nearest", "nearest") -- Ensures crisp scaling
 
     -- Load all game assets (images, animations, sounds)
@@ -110,9 +109,8 @@ function love.load()
 
     -- Load the custom font. Replace with your actual font file and its native size.
     -- For pixel fonts, using the intended size (e.g., 8, 16) is crucial for sharpness.
-    GameFont = love.graphics.newFont("assets/Px437_DOS-V_TWN16.ttf", 16)
-
-    love.graphics.setFont(GameFont)
+    local gameFont = love.graphics.newFont("assets/Px437_DOS-V_TWN16.ttf", 16)
+    love.graphics.setFont(gameFont)
 
     canvas = love.graphics.newCanvas(Config.VIRTUAL_WIDTH, Config.VIRTUAL_HEIGHT)
     canvas:setFilter("nearest", "nearest")
@@ -148,16 +146,6 @@ function love.update(dt)
         -- Process all entity additions and deletions that were queued by the systems.
         world:process_additions_and_deletions()
 
-    elseif world.gameState == "party_select" then
-        -- When paused, we want all character sprites on the select screen to animate.
-        -- We loop through the entire roster and update their 'down' animation specifically.
-        for _, entity in pairs(world.roster) do
-            if entity and entity.components.animation then
-                local downAnim = entity.components.animation.animations.down
-                downAnim:resume() -- Ensure the animation is playing before updating it.
-                downAnim:update(dt)
-            end
-        end
     end -- End of if world.gameState == "gameplay"
 end
 

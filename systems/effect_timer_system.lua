@@ -32,6 +32,14 @@ function EffectTimerSystem.update(dt, world)
             end
         end
 
+        -- Update knockback timer
+        if s.components.knockback_animation then
+            s.components.knockback_animation.timer = math.max(0, s.components.knockback_animation.timer - dt)
+            if s.components.knockback_animation.timer <= 0 then
+                s.components.knockback_animation = nil
+            end
+        end
+
         -- Update damage tint timer
         if s.components.damage_tint then
             s.components.damage_tint.timer = s.components.damage_tint.timer - dt

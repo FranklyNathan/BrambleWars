@@ -109,6 +109,39 @@ function UnitInfoMenu.draw(world)
             local yOffset = menuY
             local currentSliceIndex = 0
 
+            -- Helper to draw the animated "+1" text for level ups.
+            local function drawLevelUpBonus(key, x, y)
+                if not isLevelUpDisplay or not key or not gainsMap[key] or not levelUpAnim.statsShown[key] then
+                    return
+                end
+
+                local showPlusOne = (levelUpAnim.phase == 'revealing' or levelUpAnim.phase == 'holding' or levelUpAnim.phase == 'fading')
+                if not showPlusOne then return end
+
+                local alpha = 1.0
+                local scale = 1.0
+                local text = " +1"
+                local textWidth = font:getWidth(text)
+                local textHeight = font:getHeight()
+
+                if levelUpAnim.phase == "fading" then
+                    local fadeDuration = 0.4 -- from LevelUpDisplaySystem
+                    local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
+                    alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
+                elseif levelUpAnim.phase == "revealing" then
+                    local popInDuration = 0.15 -- from LevelUpDisplaySystem
+                    local timeSinceReveal = love.timer.getTime() - levelUpAnim.statsShown[key].startTime
+                    if timeSinceReveal < popInDuration then
+                        local progress = timeSinceReveal / popInDuration
+                        scale = 1.0 + (1.0 - progress) -- Start at 2.0 scale and shrink to 1.0
+                        alpha = progress -- Fade in
+                    end
+                end
+
+                love.graphics.setColor(0.5, 1, 0.5, alpha)
+                love.graphics.print(text, x + textWidth / 2, y + textHeight / 2, 0, scale, scale, textWidth / 2, textHeight / 2)
+            end
+
             -- Helper to draw a single full-width slice, now with icon and level-up awareness.
             local function drawFullSlice(text, value, key, isHeader, icon)
                 currentSliceIndex = currentSliceIndex + 1
@@ -194,16 +227,7 @@ function UnitInfoMenu.draw(world)
                         love.graphics.print(valueString, startX, textY)
 
                         -- Draw the "+1" string if it exists
-                        if showPlusOne then
-                            local alpha = 1.0
-                            if levelUpAnim.phase == "fading" then
-                                local fadeDuration = 0.4
-                                local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
-                                alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
-                            end
-                            love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
-                            love.graphics.print(plusOneString, startX + valueWidth, textY)
-                        end
+                        drawLevelUpBonus(key, startX + valueWidth, textY)
                     end
                 end
                 yOffset = yOffset + sliceHeight
@@ -255,17 +279,7 @@ function UnitInfoMenu.draw(world)
                     love.graphics.print(valueString, valueX, textY)
 
                     -- Draw the "+1" string if applicable
-                    if showPlusOne1 then
-                        local valueWidth = font:getWidth(valueString)
-                        local alpha = 1.0
-                        if levelUpAnim.phase == "fading" then
-                            local fadeDuration = 0.4
-                            local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
-                            alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
-                        end
-                        love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
-                        love.graphics.print(" +1", valueX + valueWidth, textY)
-                    end
+                    drawLevelUpBonus(key1, valueX + font:getWidth(valueString), textY)
                 end
 
                 -- Draw right slice
@@ -294,21 +308,19 @@ function UnitInfoMenu.draw(world)
                 elseif isSelected2 then love.graphics.setColor(0, 0, 0, 1)
                 else love.graphics.setColor(1, 1, 1, 1) end
 
-            if value2 then
-                love.graphics.print(text2 .. " " .. tostring(displayValue2), sliceX2 + 10, textY)
-            else
                 love.graphics.print(text2, sliceX2 + 10, textY)
-                end
 
-                if showPlusOne2 then
-                    local alpha = 1.0
-                    if levelUpAnim.phase == "fading" then
-                        local fadeDuration = 0.4 -- From LevelUpDisplaySystem
-                        local timeSinceFadeStart = love.timer.getTime() - (levelUpAnim.fadeStartTime or 0)
-                        alpha = 1.0 - math.min(1, timeSinceFadeStart / fadeDuration)
-                    end
-                    love.graphics.setColor(0.5, 1, 0.5, alpha) -- Green with fade
-                    love.graphics.print("+1", sliceX2 + 60, textY)
+                if value2 then
+                    local text2Width = font:getWidth(text2)
+                    local valueX2 = sliceX2 + 10 + text2Width + font:getWidth(" ")
+
+                    if isValueGreen2 then love.graphics.setColor(0.5, 1, 0.5, 1)
+                    elseif isSelected2 then love.graphics.setColor(0, 0, 0, 1)
+                    else love.graphics.setColor(1, 1, 1, 1) end
+
+                    local valueString2 = tostring(displayValue2)
+                    love.graphics.print(valueString2, valueX2, textY)
+                    drawLevelUpBonus(key2, valueX2 + font:getWidth(valueString2), textY)
                 end
 
                 yOffset = yOffset + sliceHeight

@@ -153,14 +153,16 @@ function World.new(gameMap)
             Bloodrush = {},
             HealingWinds = {},
             Whiplash = {},
-            Aetherfall = {}
+            Aetherfall = {},
+            Captor = {}
         },
         enemy = {
             -- Enemies can also have team-wide passives.
             Bloodrush = {},
             HealingWinds = {},
             Whiplash = {},
-            Aetherfall = {}
+            Aetherfall = {},
+            Captor = {}
         }
     }
 
