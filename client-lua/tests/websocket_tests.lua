@@ -4,6 +4,13 @@ local socket_path = "/ws"
 package.path = package.path .. ";../?.lua"
 local websocket = require("libraries.websocket")
 local socket = require("socket")
+local pb = require("pb")
+
+pb.loadfile("../../protos/auction.pb")
+
+-- for name, basename, type in pb.types() do
+--   print(name, basename, type)
+-- end
 
 local function run_test(name, func)
     io.write("Running test: " .. name .. " ... ")
@@ -18,17 +25,19 @@ end
 
 local function echo_test()
     local client = websocket.new(server, port, socket_path)
-    local exp_msg = "Hello, world!"
+    local msg_string = "Hello, world!"
+    local echo_message = {
+        message = msg_string
+    }
+
+    local encoded_msg = pb.encode("bramble.EchoMessage", echo_message)
 
     function client:onmessage(message)
         ECHO_MSG = message
         self:close()
     end
     function client:onopen()
-        self:send(exp_msg)
-    end
-    function client:onclose(code, reason)
-        print("closecode: "..code..", reason: "..reason)
+        self:send_binary(encoded_msg)
     end
 
     while client.status ~= websocket.STATUS.CLOSED do
@@ -36,7 +45,7 @@ local function echo_test()
         socket.sleep(0.0001)
     end
 
-    assert(ECHO_MSG == exp_msg, string.format("\nexp_msg: %s\nact_msg: %s", exp_msg, ECHO_MSG))
+    assert(ECHO_MSG == encoded_msg, string.format("\nexp_msg: %s\nact_msg: %s", encoded_msg, ECHO_MSG))
 
 end
 

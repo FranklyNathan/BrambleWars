@@ -20,19 +20,25 @@ async fn handle_socket(mut socket: WebSocket) {
         };
 
         match msg {
-           ws::Message::Text(ref msg) => {
-               println!("{}", msg);
+            ws::Message::Binary(ref msg) => {
+                match bramble::EchoMessage::decode(&msg[..]) {
+                    Ok(msg) => {
+                        println!("Received from client: {}", msg.message);
+                        let msg = bramble::EchoMessage {
+                            message: msg.message.to_string(),
+                        };
 
-               let msg = bramble::EchoMessage {
-                   message: msg.to_string(),
-               };
-               
-               let mut message_buf = Vec::new();
-               msg.encode(&mut message_buf).unwrap();
+                        let mut message_buf = Vec::new();
+                        msg.encode(&mut message_buf).unwrap();
 
-               if socket.send(ws::Message::binary(message_buf)).await.is_err() {
-                   return;
-               }
+                        if socket.send(ws::Message::binary(message_buf)).await.is_err() {
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to decode protobuf message: {:?}", e);
+                    }
+                }
            }
             ws::Message::Close(ref msg) => println!("Socket Closed: {:?}", msg),
             _ => println!("non text msg recieved"),

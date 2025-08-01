@@ -166,6 +166,12 @@ function _M:send(message)
     send(self.socket, OPCODE.TEXT, message)
 end
 
+---send a binary message
+---@param message string
+function _M:send_binary(message)
+    send(self.socket, OPCODE.BINARY, message)
+end
+
 ---send a ping message
 ---@param message string
 function _M:ping(message)
