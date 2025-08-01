@@ -346,6 +346,14 @@ local AttackBlueprints = {
         description = "The killing blow from Ascension."
     },
 
+    thunderguard_retaliation = {
+        power = 0,
+        useType = "utility",
+        targeting_style = "none",
+        drawsTile = true,
+        description = "A burst of retaliatory energy."
+    },
+
     -- Shared Attacks
     hookshot = {
         power = 5,

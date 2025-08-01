@@ -4,6 +4,7 @@
 local WorldQueries = require("modules.world_queries")
 local Assets = require("modules.assets")
 local WeaponBlueprints = require("data.weapon_blueprints")
+local PassiveBlueprints = require("data/passive_blueprints")
 local ClassBlueprints = require("data.class_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
 
@@ -58,6 +59,7 @@ function UnitInfoMenu.draw(world)
     if menu.active and menu.unit then
         local unit = menu.unit
         local moveList = WorldQueries.getUnitMoveList(unit)
+        local passiveList = WorldQueries.getUnitPassiveList(unit)
         local font = love.graphics.getFont()
 
         -- Menu dimensions
@@ -414,76 +416,119 @@ function UnitInfoMenu.draw(world)
             drawStatSlicePair("Mag:", unit.finalMagicStat, "magicStat", "Res:", unit.finalResistanceStat, "resistanceStat")
             drawStatSlicePair("Wit:", unit.finalWitStat, "witStat", "Wgt:", unit.finalWeight, "weight")
 
-            -- 6. Draw Moves Header and List
-        love.graphics.setColor(0, 0, 0, 0.3)
-        love.graphics.rectangle("fill", menuX, yOffset, menuWidth, 2)
+            -- 6. Draw Passives List
+            if #passiveList > 0 then
+                love.graphics.setColor(0, 0, 0, 0.3)
+                love.graphics.rectangle("fill", menuX, yOffset, menuWidth, 2)
+                yOffset = yOffset + 2
+
+                for _, passiveName in ipairs(passiveList) do
+                    currentSliceIndex = currentSliceIndex + 1
+                    local isSelected = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == currentSliceIndex
+                    local passiveData = PassiveBlueprints[passiveName]
+
+                    if passiveData then
+                        -- Draw slice background
+                        if isSelected then love.graphics.setColor(0.95, 0.95, 0.7, 0.9)
+                        else love.graphics.setColor(0.2, 0.2, 0.1, 0.9) end
+                        love.graphics.rectangle("fill", menuX, yOffset, menuWidth, sliceHeight)
+
+                        -- Draw text
+                        if isSelected then love.graphics.setColor(0, 0, 0, 1)
+                        else love.graphics.setColor(1, 1, 1, 1) end
+                        
+                        local textY = yOffset + (sliceHeight - font:getHeight()) / 2
+                        local text = passiveData.name
+                        local textWidth = font:getWidth(text)
+                        -- Right-align the text
+                        love.graphics.print(text, menuX + menuWidth - textWidth - 10, textY)
+                        
+                        yOffset = yOffset + sliceHeight
+                    end
+                end
+            end
+
+            -- 7. Draw Moves List
+            love.graphics.setColor(0, 0, 0, 0.3)
+            love.graphics.rectangle("fill", menuX, yOffset, menuWidth, 2)
+            yOffset = yOffset + 2
             for _, attackName in ipairs(moveList) do
                 local attackData = AttackBlueprints[attackName]
                 if attackData then
                     local formattedName = formatAttackName(attackName)
                     local wispString = (attackData.wispCost and attackData.wispCost > 0) and string.rep("♦", attackData.wispCost) or ""
-                    drawFullSlice(formattedName, wispString, attackName)
+                    drawFullSlice(formattedName, wispString, attackName, false)
                 end
             end
 
-            -- 7. Draw carried unit info if it exists
+            -- 8. Draw carried unit info if it exists
             if unit.carriedUnit then
                 local carried = unit.carriedUnit
                 drawFullSlice("Carrying: " .. (carried.displayName or carried.enemyType), nil, "carried", true)
             end
 
-            -- Draw the appended Power and Description slices if a move is selected
-            -- 1(Name)+1(Class)+1(Weapon)+2(HP/Wisp)+6(Stats) = 11 slices before moves. So moves start at index 12.
-            local movesStartIndex = 12
-            local selectedAttackIndex = menu.selectedIndex - (movesStartIndex - 1)
-            if menu.isLocked and selectedAttackIndex > 0 and selectedAttackIndex <= #moveList then
-                local attackName = moveList[selectedAttackIndex]
-                local attackData = AttackBlueprints[attackName]
+            -- 9. Draw Description Box for selected passive or move
+            if menu.isLocked and not isLevelUpDisplay then
+                local numPassives = #passiveList
+                local numMoves = #moveList
+                local STATS_END = 11
+                local PASSIVES_START = STATS_END + 1
+                local PASSIVES_END = PASSIVES_START + numPassives - 1
+                local MOVES_START = PASSIVES_END + 1
 
-                if attackData then
-                    -- Draw the static "Power" slice, mimicking the action menu.
-                    local powerSliceHeight = sliceHeight
-                    local powerValueText = "--"
-                    if attackData.displayPower then
-                        powerValueText = attackData.displayPower
-                    elseif attackData.power and attackData.power > 0 then
-                        powerValueText = tostring(attackData.power)
+                local selectedKey, selectedData, hasPowerSlice = nil, nil, false
+
+                if menu.selectedIndex >= PASSIVES_START and menu.selectedIndex <= PASSIVES_END then
+                    local passiveIndex = menu.selectedIndex - (PASSIVES_START - 1)
+                    selectedKey = passiveList[passiveIndex]
+                    selectedData = selectedKey and PassiveBlueprints[selectedKey]
+                    hasPowerSlice = false
+                elseif menu.selectedIndex >= MOVES_START then
+                    local moveIndex = menu.selectedIndex - (MOVES_START - 1)
+                    selectedKey = moveList[moveIndex]
+                    selectedData = selectedKey and AttackBlueprints[selectedKey]
+                    hasPowerSlice = true
+                end
+
+                if selectedData then
+                    local descriptionSliceY = yOffset
+
+                    if hasPowerSlice then
+                        -- Draw the static "Power" slice for moves.
+                        local powerSliceHeight = sliceHeight
+                        local powerValueText = "--"
+                        if selectedData.displayPower then
+                            powerValueText = selectedData.displayPower
+                        elseif selectedData.power and selectedData.power > 0 then
+                            powerValueText = tostring(selectedData.power)
+                        end
+
+                        love.graphics.setColor(0.2, 0.2, 0.1, 0.9)
+                        love.graphics.rectangle("fill", menuX, yOffset, menuWidth, powerSliceHeight)
+                        love.graphics.setColor(0, 0, 0, 0.3)
+                        love.graphics.rectangle("fill", menuX, yOffset, menuWidth, 2)
+                        love.graphics.setColor(1, 1, 1, 1)
+                        local textY = yOffset + (powerSliceHeight - font:getHeight()) / 2
+                        love.graphics.print("Power", menuX + 10, textY)
+                        local valueWidth = font:getWidth(powerValueText)
+                        love.graphics.print(powerValueText, menuX + menuWidth - valueWidth - 10, textY)
+                        descriptionSliceY = yOffset + powerSliceHeight
                     end
 
-                    -- Draw the slice background (always unselected style)
-                    love.graphics.setColor(0.2, 0.2, 0.1, 0.9)
-                    love.graphics.rectangle("fill", menuX, yOffset, menuWidth, powerSliceHeight)
-
-                    -- Draw separator line at the top of the slice
-                    love.graphics.setColor(0, 0, 0, 0.3)
-                    love.graphics.rectangle("fill", menuX, yOffset, menuWidth, 2)
-
-                    -- Draw the text
-                    love.graphics.setColor(1, 1, 1, 1) -- White text
-                    local textY = yOffset + (powerSliceHeight - font:getHeight()) / 2
-                    love.graphics.print("Power", menuX + 10, textY)
-
-                    -- Draw the right-aligned power value
-                    local valueWidth = font:getWidth(powerValueText)
-                    love.graphics.print(powerValueText, menuX + menuWidth - valueWidth - 10, textY)
-                    yOffset = yOffset + powerSliceHeight
-
-                    -- Draw the static "Description" slice.
-                    local descText = attackData.description or ""
+                    -- Draw the description panel.
+                    local descText = selectedData.description or ""
                     local wrappedLines = wrapText(descText, menuWidth - 20, font)
                     local descLineHeight = font:getHeight() * 1.2
-                    -- Use a fixed height for consistency, e.g., for 3 lines of text.
                     local descriptionSliceHeight = 10 + 5 * descLineHeight
 
-                    -- Draw panel background
                     love.graphics.setColor(0.2, 0.2, 0.1, 0.9)
-                    love.graphics.rectangle("fill", menuX, yOffset, menuWidth, descriptionSliceHeight)
+                    love.graphics.rectangle("fill", menuX, descriptionSliceY, menuWidth, descriptionSliceHeight)
                     love.graphics.setColor(0, 0, 0, 0.3)
-                    love.graphics.rectangle("fill", menuX, yOffset, menuWidth, 2)
+                    love.graphics.rectangle("fill", menuX, descriptionSliceY, menuWidth, 2)
                     love.graphics.setColor(1, 1, 1, 1)
                     for i, line in ipairs(wrappedLines) do
                         if i > 5 then break end -- Only draw up to 5 lines
-                        local lineY = yOffset + 5 + (i - 1) * descLineHeight
+                        local lineY = descriptionSliceY + 5 + (i - 1) * descLineHeight
                         love.graphics.print(line, menuX + 10, lineY)
                     end
                 end

@@ -5,6 +5,7 @@
 
 local CombatActions = require("modules.combat_actions")
 local AttackBlueprints = require("data.attack_blueprints")
+local StatSystem = require("systems.stat_system")
 local CombatFormulas = require("modules.combat_formulas")
 local StatusEffectManager = require("modules.status_effect_manager")
 local CharacterBlueprints = require("data.character_blueprints")
@@ -25,20 +26,28 @@ function AttackResolutionSystem.update(dt, world)
             local targets = {}
             -- Build a list of potential targets for this effect.
             if effect.targetType == "enemy" then
-                -- Player is attacking. Targets are enemies and obstacles.
+                -- Player is attacking. Default targets are enemies and obstacles.
                 for _, unit in ipairs(world.enemies) do table.insert(targets, unit) end
                 for _, obstacle in ipairs(world.obstacles) do
                     if obstacle.hp and obstacle.hp > 0 then
                         table.insert(targets, obstacle)
                     end
                 end
+                -- If the attacker is treacherous, they can also target their allies.
+                if WorldQueries.hasTreacherous(effect.attacker, world) then
+                    for _, unit in ipairs(world.players) do table.insert(targets, unit) end
+                end
             elseif effect.targetType == "player" then
-                -- Enemy is attacking. Targets are players and obstacles.
+                -- Enemy is attacking. Default targets are players and obstacles.
                 for _, unit in ipairs(world.players) do table.insert(targets, unit) end
                 for _, obstacle in ipairs(world.obstacles) do
                     if obstacle.hp and obstacle.hp > 0 then
                         table.insert(targets, obstacle)
                     end
+                end
+                -- If the attacker is treacherous, they can also target their allies.
+                if WorldQueries.hasTreacherous(effect.attacker, world) then
+                    for _, unit in ipairs(world.enemies) do table.insert(targets, unit) end
                 end
             elseif effect.targetType == "all" then
                 -- For effects targeting everyone, use the master list.
@@ -83,10 +92,43 @@ function AttackResolutionSystem.update(dt, world)
 
                                     local critChance = CombatFormulas.calculateCritChance(effect.attacker, target, attackData.CritChance or 0)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
-                                    local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit, effect.attackName)
+                                    local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit, effect.attackName, world)
                                     -- Apply damage multipliers from special properties (e.g., Impale).
                                     if effect.specialProperties and effect.specialProperties.damageMultiplier then
                                         damage = damage * effect.specialProperties.damageMultiplier
+                                    end
+
+                                    -- Check for Treacherous passive on the attacker.
+                                    if WorldQueries.hasTreacherous(effect.attacker, world) then
+                                        -- If the attacker has the passive and the target is an ALLY.
+                                        if target.type == effect.attacker.type then
+                                            -- Apply permanent stat boosts
+                                            effect.attacker.attackStat = effect.attacker.attackStat + 1
+                                            effect.attacker.witStat = effect.attacker.witStat + 1
+                                            StatSystem.recalculate_for_unit(effect.attacker)
+                                            EffectFactory.createDamagePopup(world, effect.attacker, "+1 Atk/Wit", false, {1, 0.5, 0.2, 1}) -- Orange text
+                                            -- Stun the ally
+                                            StatusEffectManager.applyStatusEffect(target, {type = "stunned", duration = 1}, world)
+                                        end
+                                    end
+
+                                    -- Check for Soulsnatcher passive on the attacker.
+                                    local soulsnatcher_providers = world.teamPassives[effect.attacker.type].Soulsnatcher
+                                    if soulsnatcher_providers and #soulsnatcher_providers > 0 then
+                                        local attackerHasSoulsnatcher = false
+                                        for _, provider in ipairs(soulsnatcher_providers) do
+                                            if provider == effect.attacker then
+                                                attackerHasSoulsnatcher = true
+                                                break
+                                            end
+                                        end
+
+                                        -- If the attacker has the passive and the target is an enemy with Wisp.
+                                        if attackerHasSoulsnatcher and target.type ~= effect.attacker.type and target.wisp and target.wisp > 0 then
+                                            target.wisp = target.wisp - 1
+                                            effect.attacker.wisp = math.min(effect.attacker.finalMaxWisp, effect.attacker.wisp + 1)
+                                            EffectFactory.createDamagePopup(world, target, "-1 Wisp", false, {0.7, 0.2, 0.9, 1}) -- Purple text
+                                        end
                                     end
 
                                     -- Grant experience for the hit or kill.

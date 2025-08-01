@@ -4,6 +4,7 @@
 local StatusEffectManager = require("modules.status_effect_manager")
 local EventBus = require("modules.event_bus")
 local EffectFactory = require("modules.effect_factory")
+local Grid = require("modules.grid")
 local Assets = require("modules.assets")
 
 local CombatActions = {}
@@ -69,6 +70,43 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
             else
                 -- A unit died. Announce the death to any interested systems (quests, passives, etc.)
                 EventBus:dispatch("unit_died", { victim = target, killer = attacker, world = world })
+            end
+        end
+
+        -- Check for Thunderguard passive on the target.
+        if target.type and world.teamPassives[target.type] and world.teamPassives[target.type].Thunderguard then
+            local targetHasThunderguard = false
+            for _, provider in ipairs(world.teamPassives[target.type].Thunderguard) do
+                if provider == target then
+                    targetHasThunderguard = true
+                    break
+                end
+            end
+
+            if targetHasThunderguard then
+                local range = 4
+                -- Apply paralysis to all units in range (except self).
+                for _, unit in ipairs(world.all_entities) do
+                    if unit ~= target and unit.hp and unit.hp > 0 and unit.type and unit.type ~= target.type then
+                        local distance = math.abs(unit.tileX - target.tileX) + math.abs(unit.tileY - target.tileY)
+                        if distance <= range then
+                            StatusEffectManager.applyStatusEffect(unit, {type = "paralyzed", duration = 1}, world)
+                        end
+                    end
+                end
+
+                -- Create a visual effect for the tiles in range.
+                for dx = -range, range do
+                    for dy = -range, range do
+                        if math.abs(dx) + math.abs(dy) <= range then
+                            local tileX, tileY = target.tileX + dx, target.tileY + dy
+                            if tileX >= 0 and tileX < world.map.width and tileY >= 0 and tileY < world.map.height then
+                                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+                                EffectFactory.addAttackEffect(world, { attacker = target, attackName = "thunderguard_retaliation", x = pixelX, y = pixelY, width = Config.SQUARE_SIZE, height = Config.SQUARE_SIZE, color = {1, 1, 0.2, 0.7}, targetType = "none" })
+                            end
+                        end
+                    end
+                end
             end
         end
     end

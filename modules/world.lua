@@ -154,7 +154,12 @@ function World.new(gameMap)
             HealingWinds = {},
             Whiplash = {},
             Aetherfall = {},
-            Captor = {}
+            Captor = {},
+            Soulsnatcher = {},
+            Desperate = {},
+            Elusive = {},
+            Treacherous = {},
+            Thunderguard = {}
         },
         enemy = {
             -- Enemies can also have team-wide passives.
@@ -162,7 +167,12 @@ function World.new(gameMap)
             HealingWinds = {},
             Whiplash = {},
             Aetherfall = {},
-            Captor = {}
+            Captor = {},
+            Soulsnatcher = {},
+            Desperate = {},
+            Elusive = {},
+            Treacherous = {},
+            Thunderguard = {}
         }
     }
 

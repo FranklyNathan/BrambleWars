@@ -115,7 +115,6 @@ function love.load()
     canvas = love.graphics.newCanvas(Config.VIRTUAL_WIDTH, Config.VIRTUAL_HEIGHT)
     canvas:setFilter("nearest", "nearest")
 
-    -- Set the background color
     love.graphics.setBackgroundColor(0.1, 0.1, 0.1, 1) -- Dark grey
 
 end

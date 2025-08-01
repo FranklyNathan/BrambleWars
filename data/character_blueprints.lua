@@ -21,8 +21,8 @@ local CharacterBlueprints = {
         weight = 8, -- Heavy
         equippedWeapon = "travelers_sword",
         canSwim = true,
-        dominantColor = {0.5, 0.2, 0.8}, -- Clementine: Purple
-        passives = {}, -- Characters can have multiple
+        dominantColor = {0.5, 0.2, 0.8}, -- Clementine: Purple,
+        passives = {"Desperate", "Treacherous"}, -- Characters can have multiple
         growths = {
             maxHp = 90,
             attackStat = 50,
@@ -66,7 +66,7 @@ local CharacterBlueprints = {
             -- Melee Attacks
             "venom_stab", "uppercut", "sever", "shunt", "shockstrike", "impale", "disarm", "slipstep",
             -- Ranged & Special Attacks
-            "fireball", "longshot", "eruption", "phantom_step", "shockwave", "quick_step", "grovecall", "trap_set", "ascension", "hookshot", "homecoming", "kindle",
+            "phantom_step", "shockwave", "quick_step", "grovecall", "trap_set", "ascension", "hookshot", "homecoming", "kindle",
             -- Support Attacks
             "mend", "invigoration"
         }
@@ -89,7 +89,7 @@ local CharacterBlueprints = {
         equippedWeapon = "travelers_tome",
         canSwim = true,
         dominantColor = {0.6, 0.9, 0.6}, -- Winthrop: Pale Green
-        passives = {},
+        passives = {"Thunderguard"},
         growths = {
             maxHp = 80,
             attackStat = 40,
@@ -115,11 +115,11 @@ local CharacterBlueprints = {
         magicStat = 7,
         resistanceStat = 6,
         witStat = 3,
-        movement = 4,
+        movement = 14,
         weight = 10, -- Heaviest
         equippedWeapon = "travelers_tome",
-        dominantColor = {0.6, 0.6, 0.7}, -- Mortimer: Steel Grey
-        passives = {},
+        dominantColor = {0.6, 0.6, 0.7}, -- Mortimer: Steel Grey,
+        passives = {"Soulsnatcher", "Elusive"},
         growths = {
             maxHp = 75,
             attackStat = 20,
@@ -159,7 +159,7 @@ local CharacterBlueprints = {
             witStat = 45,
         },
         attacks = {
-            "uppercut", "quick_step", "hookshot", "disarm"
+            "uppercut", "quick_step", "disarm"
         }
     },
     ollo = {
@@ -241,7 +241,7 @@ local CharacterBlueprints = {
         equippedWeapon = "travelers_dagger",
         isFlying = true,
         dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown,
-        passives = {"Aetherfall", "Hustle"},
+        passives = {"Aetherfall", "Hustle", "Elusive"},
         growths = {
             maxHp = 80,
             attackStat = 45,

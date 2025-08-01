@@ -146,11 +146,20 @@ function WorldQueries.getUnitMovement(unit)
     return math.max(0, finalMovement - (unit.rescuePenalty or 0))
 end
 
+-- Helper to check for Treacherous passive
+function WorldQueries.hasTreacherous(unit, world)
+    if not unit or not world or not world.teamPassives[unit.type] or not world.teamPassives[unit.type].Treacherous then return false end
+    for _, provider in ipairs(world.teamPassives[unit.type].Treacherous) do
+        if provider == unit then return true end
+    end
+    return false
+end
+
 -- Helper to get a list of potential targets based on an attack's 'affects' property.
 local function getPotentialTargets(attacker, attackData, world)
     local potentialTargets = {}
-    -- Default to affecting allies for support, enemies for damage.
-    local affects = attackData.affects or (attackData.type == "support" and "allies" or "enemies")
+    -- Default to affecting allies for support, enemies for damage. Use 'useType' for consistency.
+    local affects = attackData.affects or (attackData.useType == "support" and "allies" or "enemies")
 
     -- Correctly determine the target list based on the attacker's perspective.
     local targetEnemies = (attacker.type == "player") and world.enemies or world.players
@@ -169,6 +178,14 @@ local function getPotentialTargets(attacker, attackData, world)
     if affects == "enemies" then
         for _, unit in ipairs(targetEnemies) do table.insert(potentialTargets, unit) end
         addDestructibleObstacles(potentialTargets)
+        -- If treacherous, also add allies to the list of potential targets for damaging moves.
+        if WorldQueries.hasTreacherous(attacker, world) then
+            for _, unit in ipairs(targetAllies) do
+                if unit ~= attacker then -- Can't target self
+                    table.insert(potentialTargets, unit)
+                end
+            end
+        end
     elseif affects == "allies" then
         for _, unit in ipairs(targetAllies) do table.insert(potentialTargets, unit) end
     elseif affects == "all" then
@@ -618,6 +635,36 @@ function WorldQueries.getUnitMoveList(unit)
     end
 
     return all_moves
+end
+
+--- Builds a complete, ordered list of a unit's available passives.
+-- @param unit (table): The unit to get the passive list for.
+-- @return (table): An ordered list of passive name strings.
+function WorldQueries.getUnitPassiveList(unit)
+    if not unit then return {} end
+
+    local all_passives = {}
+    local passive_exists = {} -- Use a set to track existing passives and prevent duplicates
+
+    -- 1. Get passives from the character/enemy blueprint.
+    local blueprint = (unit.type == "player") and CharacterBlueprints[unit.playerType] or EnemyBlueprints[unit.enemyType]
+    if blueprint and blueprint.passives then
+        for _, passiveName in ipairs(blueprint.passives) do
+            if not passive_exists[passiveName] then table.insert(all_passives, passiveName); passive_exists[passiveName] = true end
+        end
+    end
+
+    -- 2. Get passives from the equipped weapon.
+    if unit.equippedWeapon and WeaponBlueprints[unit.equippedWeapon] then
+        local weapon = WeaponBlueprints[unit.equippedWeapon]
+        if weapon.grants_passives then
+            for _, passiveName in ipairs(weapon.grants_passives) do
+                if not passive_exists[passiveName] then table.insert(all_passives, passiveName); passive_exists[passiveName] = true end
+            end
+        end
+    end
+
+    return all_passives
 end
 
 return WorldQueries

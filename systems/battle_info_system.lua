@@ -62,7 +62,7 @@ function BattleInfoSystem.refresh_forecast(world)
         else
             -- Damage forecast for physical, magical, and damaging utility
             menu.playerActionLabel = "Damage:"
-            local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false, attackName)
+            local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false, attackName, world)
 
             -- Check for special, conditional damage multipliers to ensure the forecast is accurate.
             local damageMultiplier = 1.0 -- Default multiplier
@@ -133,7 +133,7 @@ function BattleInfoSystem.refresh_forecast(world)
                 end
 
                 if inCounterRange then
-                    local enemyDmg = CombatFormulas.calculateFinalDamage(target, attacker, counterAttackData, false, counterAttackName)
+                    local enemyDmg = CombatFormulas.calculateFinalDamage(target, attacker, counterAttackData, false, counterAttackName, world)
                     menu.enemyDamage = tostring(math.floor(enemyDmg))
                     local counterAttackOriginType = counterAttackData.originType or target.originType
                     if CombatFormulas.calculateTypeEffectiveness(counterAttackOriginType, attacker.originType) > 1 then

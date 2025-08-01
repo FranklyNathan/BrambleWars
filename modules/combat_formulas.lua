@@ -92,11 +92,30 @@ function CombatFormulas.calculateBaseDamage(attacker, defender, attackData, atta
 end
 
 -- Helper to calculate final damage including base damage and critical hit multiplier
-function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isCrit, attackName)
+function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isCrit, attackName, world)
     local damage = CombatFormulas.calculateBaseDamage(attacker, defender, attackData, attackName)
     if isCrit then
         damage = damage * 2
     end
+
+    -- Check for Desperate passive on the attacker.
+    if world and world.teamPassives[attacker.type] and world.teamPassives[attacker.type].Desperate then
+        local desperate_providers = world.teamPassives[attacker.type].Desperate
+        local attackerHasDesperate = false
+        for _, provider in ipairs(desperate_providers) do
+            if provider == attacker then
+                attackerHasDesperate = true
+                break
+            end
+        end
+
+        if attackerHasDesperate then
+            local hp_ratio = attacker.hp / attacker.finalMaxHp
+            local multiplier = 1 + (1 - hp_ratio)
+            damage = damage * multiplier
+        end
+    end
+
     return damage
 end
 

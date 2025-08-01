@@ -271,18 +271,23 @@ local function move_unit_info_selection(key, world)
     local oldIndex = menu.selectedIndex
     local newIndex = oldIndex
 
-    -- Define menu sections and total number of slices
+    -- Define menu sections and get dynamic list lengths
+    local passiveList = WorldQueries.getUnitPassiveList(menu.unit)
+    local numPassives = #passiveList
+    local moveList = WorldQueries.getUnitMoveList(menu.unit)
+    local numMoves = #moveList
+
     local NAME_INDEX = 1
     local CLASS_INDEX = 2
     local WEAPON_INDEX = 3
     local HP_INDEX = 4
     local WISP_INDEX = 5
     local STATS_START = 6
-    local STATS_END = 11 -- 3 rows of 2 stats each
-    local MOVES_START = 12
-    -- Use the new centralized function to get the correct move list.
-    local numAttacks = #WorldQueries.getUnitMoveList(menu.unit)
-    local MOVES_END = MOVES_START + numAttacks - 1
+    local STATS_END = 11 -- 3 rows of 2 stats each = 6 items. 6 to 11.
+    local PASSIVES_START = STATS_END + 1
+    local PASSIVES_END = PASSIVES_START + numPassives - 1
+    local MOVES_START = PASSIVES_END + 1
+    local MOVES_END = MOVES_START + numMoves - 1
     
     local hasCarriedUnit = menu.unit.carriedUnit and true or false
     local CARRIED_UNIT_INDEX = hasCarriedUnit and (MOVES_END + 1) or nil
@@ -291,29 +296,34 @@ local function move_unit_info_selection(key, world)
     if hasCarriedUnit then totalSlices = CARRIED_UNIT_INDEX end
 
     if key == "w" then
-        if oldIndex == NAME_INDEX then
-            newIndex = totalSlices -- Wrap from top to bottom
-        elseif oldIndex == CLASS_INDEX then
-            newIndex = NAME_INDEX
-        elseif oldIndex == WEAPON_INDEX then
-            newIndex = CLASS_INDEX
-        elseif oldIndex == HP_INDEX or oldIndex == WISP_INDEX then
-            newIndex = WEAPON_INDEX
-        elseif oldIndex >= STATS_START and oldIndex <= STATS_END then
-            newIndex = oldIndex - 2
-        elseif oldIndex > MOVES_START then
-            newIndex = oldIndex - 1
+        if oldIndex == NAME_INDEX then newIndex = totalSlices
+        elseif oldIndex > NAME_INDEX and oldIndex <= WEAPON_INDEX then newIndex = oldIndex - 1
+        elseif oldIndex == HP_INDEX or oldIndex == WISP_INDEX then newIndex = WEAPON_INDEX
+        elseif oldIndex >= STATS_START and oldIndex <= STATS_END then newIndex = oldIndex - 2
+        elseif oldIndex > PASSIVES_START and oldIndex <= PASSIVES_END then newIndex = oldIndex - 1
+        elseif oldIndex == PASSIVES_START then newIndex = STATS_END
+        elseif oldIndex > MOVES_START and oldIndex <= MOVES_END then newIndex = oldIndex - 1
         elseif oldIndex == MOVES_START then
-            newIndex = STATS_END
+            if numPassives > 0 then newIndex = PASSIVES_END else newIndex = STATS_END end
+        elseif CARRIED_UNIT_INDEX and oldIndex == CARRIED_UNIT_INDEX then newIndex = MOVES_END
         end
     elseif key == "s" then
-        if oldIndex < HP_INDEX then newIndex = oldIndex + 1 -- In top section (Name -> Class -> Weapon -> HP)
-        elseif oldIndex == HP_INDEX then newIndex = STATS_START -- From HP to Atk
-        elseif oldIndex == WISP_INDEX then newIndex = STATS_START + 1 -- From Wisp to Def
-        elseif oldIndex < STATS_END - 1 then newIndex = oldIndex + 2 -- In stats grid (not last row)
-        elseif oldIndex <= STATS_END then newIndex = MOVES_START -- From last row of stats to first move
-        elseif oldIndex < totalSlices then newIndex = oldIndex + 1 -- In moves/carried
-        else newIndex = 1 end -- Wrap from bottom to top
+        if oldIndex < HP_INDEX then newIndex = oldIndex + 1
+        elseif oldIndex == HP_INDEX then newIndex = STATS_START
+        elseif oldIndex == WISP_INDEX then newIndex = STATS_START + 1
+        elseif oldIndex < STATS_END - 1 then newIndex = oldIndex + 2
+        elseif oldIndex <= STATS_END then -- From last row of stats
+            if numPassives > 0 then newIndex = PASSIVES_START
+            elseif numMoves > 0 then newIndex = MOVES_START
+            elseif hasCarriedUnit then newIndex = CARRIED_UNIT_INDEX
+            else newIndex = 1 end -- Wrap if nothing below
+        elseif oldIndex < PASSIVES_END then newIndex = oldIndex + 1
+        elseif oldIndex == PASSIVES_END then
+            if numMoves > 0 then newIndex = MOVES_START
+            elseif hasCarriedUnit then newIndex = CARRIED_UNIT_INDEX
+            else newIndex = 1 end
+        elseif oldIndex < totalSlices then newIndex = oldIndex + 1
+        else newIndex = 1 end
     elseif key == "a" then -- Horizontal Navigation (Left)
         if (oldIndex >= STATS_START and oldIndex <= STATS_END and oldIndex % 2 == 1) or (oldIndex == WISP_INDEX) then newIndex = oldIndex - 1 end
     elseif key == "d" then -- Horizontal Navigation (Right)

@@ -66,11 +66,23 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
                                 canPass = startUnit.isFlying
                                 canLand = false -- Cannot land on any non-trap obstacle.
                             end
-                        elseif isWater then
+                    elseif isWater then 
                             canPass = startUnit.isFlying or startUnit.canSwim
                             canLand = (startUnit.isFlying or startUnit.canSwim) and not occupyingUnit
                         elseif occupyingUnit then
-                            canPass = startUnit.isFlying or (startUnit.type == occupyingUnit.type) -- Can pass through teammates.
+                        if occupyingUnit.type == startUnit.type then
+                            -- Can always pass through allies.
+                            canPass = true
+                        else
+                            -- It's an enemy. Check for Elusive.
+                            local hasElusive = false
+                            if world.teamPassives[startUnit.type].Elusive then
+                                for _, provider in ipairs(world.teamPassives[startUnit.type].Elusive) do
+                                    if provider == startUnit then hasElusive = true; break end
+                                end
+                            end
+                            canPass = startUnit.isFlying or hasElusive
+                        end
                             canLand = false
                         else -- Tile is empty and not special terrain.
                             canPass = true
