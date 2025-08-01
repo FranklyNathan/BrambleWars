@@ -2,6 +2,7 @@
 -- Contains the logic for executing Rescue and Drop commands.
 
 local Grid = require("modules.grid")
+local EventBus = require("modules.event_bus")
 local WorldQueries = require("modules.world_queries")
 
 local RescueHandler = {}
@@ -69,6 +70,7 @@ function RescueHandler.drop(rescuer, tileX, tileY, world)
     local destPixelX, destPixelY = Grid.toPixels(tileX, tileY)
     carriedUnit.tileX, carriedUnit.tileY = tileX, tileY
     carriedUnit.targetX, carriedUnit.targetY = destPixelX, destPixelY
+    EventBus:dispatch("unit_tile_changed", { unit = carriedUnit, world = world })
 
     -- Give it a speed boost for the lunge effect.
     carriedUnit.speedMultiplier = 4

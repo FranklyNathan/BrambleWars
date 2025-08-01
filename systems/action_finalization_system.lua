@@ -17,7 +17,8 @@ function ActionFinalizationSystem.update(dt, world)
             -- Find units that have an action in progress and are not currently moving.
             if entity.components.action_in_progress and not entity.components.movement_path then
                 local leveledUp = false
-                if entity.type == "player" then
+                -- A unit can only level up if it is still alive after its action.
+                if entity.type == "player" and entity.hp > 0 then
                     -- The check now takes the world as an argument and returns a boolean.
                     -- It will trigger the LevelUpDisplaySystem if a level up occurs.
                     leveledUp = LevelUpSystem.checkForLevelUp(entity, world)

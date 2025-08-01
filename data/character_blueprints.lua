@@ -19,10 +19,10 @@ local CharacterBlueprints = {
         witStat = 5, -- Used when calculating if a move hits/misses and if a move is a critical hit
         movement = 6, -- How many tiles a character can move in a turn
         weight = 8, -- Heavy
-        equippedWeapon = "travelers_sword",
+        equippedWeapon = "blightblade",
         canSwim = true,
-        dominantColor = {0.5, 0.2, 0.8}, -- Clementine: Purple,
-        passives = {"Desperate", "Treacherous"}, -- Characters can have multiple
+        dominantColor = {0.5, 0.2, 0.8}, -- Clementine: Purple
+        passives = {"Desperate", "Treacherous", "Unbound"}, -- Characters can have multiple
         growths = {
             maxHp = 90,
             attackStat = 50,
@@ -99,7 +99,7 @@ local CharacterBlueprints = {
             witStat = 30,
         },
         attacks = {
-            "fireball", "eruption", "shockwave"
+            "fireball", "eruption", "shockwave", "ice_beam"
         }
     },
     mortimer = {
@@ -177,7 +177,7 @@ local CharacterBlueprints = {
         witStat = 3,
         movement = 4,
         weight = 9, -- Very Heavy
-        equippedWeapon = "travelers_bow",
+        equippedWeapon = "blightbow",
         dominantColor = {0.1, 0.3, 0.8}, -- Ollo: Dark Blue
         passives = {},
         growths = {
@@ -241,7 +241,7 @@ local CharacterBlueprints = {
         equippedWeapon = "travelers_dagger",
         isFlying = true,
         dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown,
-        passives = {"Aetherfall", "Hustle", "Elusive"},
+        passives = {"Aetherfall", "Elusive"},
         growths = {
             maxHp = 80,
             attackStat = 45,

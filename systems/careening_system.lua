@@ -4,6 +4,7 @@
 local Grid = require("modules.grid")
 local WorldQueries = require("modules.world_queries")
 local EffectFactory = require("modules.effect_factory")
+local EventBus = require("modules.event_bus")
 
 local CareeningSystem = {}
 
@@ -51,6 +52,7 @@ function CareeningSystem.update(dt, world)
                         s.x, s.targetX, s.y, s.targetY = nextX, nextX, nextY, nextY
                         -- Also update the logical tile position to stay in sync.
                         s.tileX, s.tileY = Grid.toTile(s.x, s.y)
+                        EventBus:dispatch("unit_tile_changed", { unit = s, world = world })
                         effect.force = effect.force - 1
                         if effect.force <= 0 then s.statusEffects.careening = nil; break; end
                     end

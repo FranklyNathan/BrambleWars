@@ -45,6 +45,14 @@ local PassiveBlueprints = {
     Thunderguard = {
         name = "Thunderguard",
         description = "When damaged, retaliates with a burst of energy that paralyzes all nearby enemy units."
+    },
+    Unbound = {
+        name = "Unbound",
+        description = "Deals 1.5x damage while at 0 Wisp."
+    },
+    Combustive = {
+        name = "Combustive",
+        description = "Explodes upon death, dealing 10 damage to all units within 1 range."
     }
 }
 

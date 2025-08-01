@@ -53,28 +53,9 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
             attacker = attacker
         }
 
-        -- If the unit was alive and is now at 0 HP, it just died.
-        if wasAlive and target.hp <= 0 then
-            if target.isObstacle then
-                -- The obstacle was destroyed.
-                -- Don't delete immediately. Start a fade-out so the HP bar animation can play.
-                -- The effect_timer_system will mark it for deletion when the timer is up.
-                target.components.fade_out = { timer = 0.8, initialTimer = 0.8 }
-                -- Create a shatter effect for visual feedback.
-                local shatterColor = {0.4, 0.3, 0.2, 1} -- Brownish wood color
-                EffectFactory.createShatterEffect(world, target.x, target.y, target.size, shatterColor)
-                -- Play a sound effect.
-                if Assets.sounds.tree_break then
-                    Assets.sounds.tree_break:play()
-                end
-            else
-                -- A unit died. Announce the death to any interested systems (quests, passives, etc.)
-                EventBus:dispatch("unit_died", { victim = target, killer = attacker, world = world })
-            end
-        end
-
-        -- Check for Thunderguard passive on the target.
-        if target.type and world.teamPassives[target.type] and world.teamPassives[target.type].Thunderguard then
+        -- Check for Thunderguard passive on the target. This is the original implementation.
+        -- It triggers here so it has access to the world state after damage is applied but before death is resolved.
+        if wasAlive and target.type and world.teamPassives[target.type] and world.teamPassives[target.type].Thunderguard then
             local targetHasThunderguard = false
             for _, provider in ipairs(world.teamPassives[target.type].Thunderguard) do
                 if provider == target then
@@ -85,7 +66,7 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
 
             if targetHasThunderguard then
                 local range = 4
-                -- Apply paralysis to all units in range (except self).
+                -- Apply paralysis to all enemy units in range.
                 for _, unit in ipairs(world.all_entities) do
                     if unit ~= target and unit.hp and unit.hp > 0 and unit.type and unit.type ~= target.type then
                         local distance = math.abs(unit.tileX - target.tileX) + math.abs(unit.tileY - target.tileY)
@@ -107,6 +88,26 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
                         end
                     end
                 end
+            end
+        end
+
+        -- If the unit was alive and is now at 0 HP, it just died.
+        if wasAlive and target.hp <= 0 then
+            if target.isObstacle then
+                -- The obstacle was destroyed.
+                -- Don't delete immediately. Start a fade-out so the HP bar animation can play.
+                -- The effect_timer_system will mark it for deletion when the timer is up.
+                target.components.fade_out = { timer = 0.8, initialTimer = 0.8 }
+                -- Create a shatter effect for visual feedback.
+                local shatterColor = {0.4, 0.3, 0.2, 1} -- Brownish wood color
+                EffectFactory.createShatterEffect(world, target.x, target.y, target.size, shatterColor)
+                -- Play a sound effect.
+                if Assets.sounds.tree_break then
+                    Assets.sounds.tree_break:play()
+                end
+            else
+                -- A unit died. Announce the death to any interested systems (quests, passives, etc.)
+                EventBus:dispatch("unit_died", { victim = target, killer = attacker, world = world, reason = {type = "combat"} })
             end
         end
     end

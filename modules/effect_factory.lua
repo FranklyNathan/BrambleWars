@@ -25,8 +25,8 @@ function EffectFactory.addAttackEffect(world, options)
         height = options.height or 0,
         color = options.color or {1, 1, 1, 1},
         initialDelay = options.delay or 0,
-        currentFlashTimer = Config.FLASH_DURATION,
-        flashDuration = Config.FLASH_DURATION,
+        currentFlashTimer = options.duration or Config.FLASH_DURATION,
+        flashDuration = options.duration or Config.FLASH_DURATION,
         attacker = options.attacker,
         attackName = options.attackName,
         critOverride = options.critOverride,
@@ -110,8 +110,18 @@ function EffectFactory.createExpPopEffect(world, unit)
 end
 
 function EffectFactory.createRippleEffect(world, attacker, attackName, centerX, centerY, rippleCenterSize, targetType, statusEffect, specialProperties)
-    -- Generate the full ripple pattern
-    local fullPattern = AttackPatterns.eruption_aoe(centerX, centerY, rippleCenterSize)
+    -- Look up the attack's data to find its pattern.
+    local attackData = AttackBlueprints[attackName]
+    local patternFunc = attackData and attackData.patternType and AttackPatterns[attackData.patternType]
+
+    -- Ensure the pattern is a function before calling it.
+    if type(patternFunc) ~= "function" then
+        print("Warning: createRippleEffect called for attack '" .. tostring(attackName) .. "' which has no valid pattern function.")
+        return
+    end
+
+    -- Generate the full ripple pattern using the dynamically found function.
+    local fullPattern = patternFunc(centerX, centerY, rippleCenterSize)
 
     -- Add all effects from the pattern to the queue
     -- The rippleEffectQueue should be initialized in the world object itself.

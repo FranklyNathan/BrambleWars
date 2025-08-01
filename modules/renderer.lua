@@ -600,34 +600,63 @@ local function draw_all_entities_and_effects(world)
     end
 end
 
+-- New helper to pre-calculate ripple brightness for all relevant tiles around a source.
+-- This is an optimization to avoid recalculating the ripple for every single tile in every range set.
+local function calculate_ripple_brightness_map(world)
+    local ripple_center_unit = world.ui.menus.unitInfo.rippleSourceUnit
+
+    -- To prevent lag, the expensive ripple calculation is only activated in specific UI states.
+    local ripple_active = world.ui.playerTurnState == "free_roam" or
+                          world.ui.playerTurnState == "unit_selected" or
+                          world.ui.playerTurnState == "enemy_range_display"
+
+    if not ripple_center_unit or not ripple_active then
+        return nil -- No ripple to calculate
+    end
+
+    local brightness_map = {}
+    local elapsedTime = love.timer.getTime() - (world.ui.menus.unitInfo.rippleStartTime or love.timer.getTime())
+    local rippleRadius = (elapsedTime * 10) % (15 + 3) -- (speed) % (maxRadius + width)
+    local RIPPLE_WIDTH = 3
+    local MAX_BRIGHTNESS = 0.2
+    
+    -- To optimize, we only need to calculate for tiles that could possibly be affected.
+    -- This is a box around the ripple source, extending out by the max ripple radius.
+    local search_radius = 15 + RIPPLE_WIDTH
+    local startX = math.max(0, ripple_center_unit.tileX - search_radius)
+    local endX = math.min(world.map.width - 1, ripple_center_unit.tileX + search_radius)
+    local startY = math.max(0, ripple_center_unit.tileY - search_radius)
+    local endY = math.min(world.map.height - 1, ripple_center_unit.tileY + search_radius)
+
+    for tileY = startY, endY do
+        brightness_map[tileY] = {}
+        for tileX = startX, endX do
+            local baseDist = math.abs(tileX - ripple_center_unit.tileX) + math.abs(tileY - ripple_center_unit.tileY)
+            local deltaDist = math.abs(baseDist - rippleRadius)
+            if deltaDist < RIPPLE_WIDTH then
+                local brightness = (1 - (deltaDist / RIPPLE_WIDTH)) * MAX_BRIGHTNESS
+                brightness_map[tileY][tileX] = brightness
+            end
+        end
+    end
+
+    return brightness_map
+end
+
 -- Helper to draw a set of tiles with a specific color and transparency.
-local function draw_tile_set(tileSet, r, g, b, a, world)
+local function draw_tile_set(tileSet, r, g, b, a, world, brightness_map)
     if not tileSet then return end
     local BORDER_WIDTH = 1
     local INSET_SIZE = Config.SQUARE_SIZE - (BORDER_WIDTH * 2)
-
-    -- Determine the center of the ripple effect based on the current game state.
-    -- The ripple should be centered on the unit whose range is being displayed.
-    -- The unit_info_system is the single source of truth for which unit is the ripple's source.
-    local ripple_center_unit = world.ui.menus.unitInfo.rippleSourceUnit
 
     for posKey, _ in pairs(tileSet) do
         local tileX = tonumber(string.match(posKey, "(-?%d+)"))
         local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
         if tileX and tileY then
             local finalAlpha = a -- Start with the base alpha for the tile set.
-
-            -- If a ripple source is active, calculate and apply the ripple brightness.
-            if ripple_center_unit then
-                -- Calculate elapsed time since the ripple started for this unit.
-                local elapsedTime = love.timer.getTime() - (world.ui.menus.unitInfo.rippleStartTime or love.timer.getTime())
-                local rippleRadius = (elapsedTime * 10) % (15 + 3) -- (speed) % (maxRadius + width)
-                local baseDist = math.abs(tileX - ripple_center_unit.tileX) + math.abs(tileY - ripple_center_unit.tileY)
-                local deltaDist = math.abs(baseDist - rippleRadius)
-                if deltaDist < 3 then -- width
-                    local brightness = (1 - (deltaDist / 3)) * 0.2 -- maxBrightness
-                    finalAlpha = finalAlpha + brightness
-                end
+            -- New optimized ripple logic: Look up brightness from the pre-calculated map.
+            if brightness_map and brightness_map[tileY] and brightness_map[tileY][tileX] then
+                finalAlpha = finalAlpha + brightness_map[tileY][tileX]
             end
 
             love.graphics.setColor(r, g, b, math.min(1, finalAlpha))
@@ -638,9 +667,34 @@ local function draw_tile_set(tileSet, r, g, b, a, world)
 end
 
 local function draw_world_space_ui(world)
+    -- New: Calculate the ripple brightness map once per frame.
+    local brightness_map = calculate_ripple_brightness_map(world)
+
     -- Draw Turn-Based UI Elements (Ranges, Path, Cursor)
     local BORDER_WIDTH = 1
     local INSET_SIZE = Config.SQUARE_SIZE - (BORDER_WIDTH * 2)
+
+    -- Draw Tile Status Effects (like Aflame)
+    if world.tileStatuses then
+        for posKey, status in pairs(world.tileStatuses) do
+            if status.type == "aflame" and Assets.images.Aflame then
+                local tileX = tonumber(string.match(posKey, "(-?%d+)"))
+                local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+                -- Add a subtle pulsating alpha to make the fire feel more alive.
+                local alpha = 0.7 + (math.sin(love.timer.getTime() * 5) + 1) / 2 * 0.2 -- Pulsates between 0.7 and 0.9
+                love.graphics.setColor(1, 1, 1, alpha)
+                love.graphics.draw(Assets.images.Aflame, pixelX, pixelY, 0, 1, 1)
+            elseif status.type == "frozen" and Assets.images.Frozen then
+                local tileX = tonumber(string.match(posKey, "(-?%d+)"))
+                local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+                -- Draw the frozen tile opaquely, as requested.
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.draw(Assets.images.Frozen, pixelX, pixelY, 0, 1, 1)
+            end
+        end
+    end
 
     -- New: Draw pulsating WinTiles. This is drawn first so other UI elements appear on top.
     -- This should be visible during both player and enemy turns.
@@ -669,7 +723,7 @@ local function draw_world_space_ui(world)
     if world.gameState == "gameplay" and world.turn == "player" then
         -- Draw the action menu's attack preview
         if world.ui.menus.action.active and world.ui.menus.action.previewAttackableTiles then
-            draw_tile_set(world.ui.menus.action.previewAttackableTiles, 1, 0.2, 0.2, 0.5, world) -- Brighter red
+            draw_tile_set(world.ui.menus.action.previewAttackableTiles, 1, 0.2, 0.2, 0.5, world, brightness_map) -- Brighter red
         end
 
         -- Draw the action menu's AoE preview for ground-targeted attacks
@@ -691,40 +745,40 @@ local function draw_world_space_ui(world)
 
             -- Draw fading attackable tiles (danger zone)
             if effect.attackableTiles then
-                draw_tile_set(effect.attackableTiles, 1, 0.2, 0.2, 0.3 * progress, world)
+                draw_tile_set(effect.attackableTiles, 1, 0.2, 0.2, 0.3 * progress, world, brightness_map)
             end
 
             -- Draw fading reachable tiles (movement range)
             if effect.reachableTiles then
-                draw_tile_set(effect.reachableTiles, 0.2, 0.4, 1, 0.6 * progress, world)
+                draw_tile_set(effect.reachableTiles, 0.2, 0.4, 1, 0.6 * progress, world, brightness_map)
             end
         end
 
         -- 1. Draw the full attack range for the selected unit (the "danger zone").
         local showDangerZone = world.ui.playerTurnState == "unit_selected" or world.ui.playerTurnState == "ground_aiming" or world.ui.playerTurnState == "cycle_targeting"
         if showDangerZone and world.ui.pathing.attackableTiles then
-            draw_tile_set(world.ui.pathing.attackableTiles, 1, 0.2, 0.2, 0.3, world)
+            draw_tile_set(world.ui.pathing.attackableTiles, 1, 0.2, 0.2, 0.3, world, brightness_map)
         end
 
         -- Draw hovered unit's danger zone (fainter)
         if world.ui.menus.unitInfo.active and world.ui.pathing.hoverAttackableTiles then
-            draw_tile_set(world.ui.pathing.hoverAttackableTiles, 1, 0.2, 0.2, 0.2, world)
+            draw_tile_set(world.ui.pathing.hoverAttackableTiles, 1, 0.2, 0.2, 0.2, world, brightness_map)
         end
 
         -- Draw hovered unit's movement range
         if world.ui.menus.unitInfo.active and world.ui.pathing.hoverReachableTiles then
-            draw_tile_set(world.ui.pathing.hoverReachableTiles, 0.2, 0.4, 1, 0.2, world)
+            draw_tile_set(world.ui.pathing.hoverReachableTiles, 0.2, 0.4, 1, 0.2, world, brightness_map)
         end
 
         -- 2. Draw the movement range for the selected unit. This is drawn on top of the attack range.
         if world.ui.playerTurnState == "unit_selected" and world.ui.pathing.reachableTiles then 
-            draw_tile_set(world.ui.pathing.reachableTiles, 0.2, 0.4, 1, 0.6, world)
+            draw_tile_set(world.ui.pathing.reachableTiles, 0.2, 0.4, 1, 0.6, world, brightness_map)
         end
 
         -- Draw enemy range display if active
         if world.ui.menus.enemyRangeDisplay.active then
-            draw_tile_set(world.ui.menus.enemyRangeDisplay.attackableTiles, 1, 0.2, 0.2, 0.4, world) -- Red for attack
-            draw_tile_set(world.ui.menus.enemyRangeDisplay.reachableTiles, 0.2, 0.4, 1, 0.4, world) -- Blue for movement
+            draw_tile_set(world.ui.menus.enemyRangeDisplay.attackableTiles, 1, 0.2, 0.2, 0.4, world, brightness_map) -- Red for attack
+            draw_tile_set(world.ui.menus.enemyRangeDisplay.reachableTiles, 0.2, 0.4, 1, 0.4, world, brightness_map) -- Blue for movement
         end
 
         -- 3. Draw the movement path.
@@ -734,7 +788,7 @@ local function draw_world_space_ui(world)
                 local tileX, tileY = Grid.toTile(node.x, node.y)
                 pathTiles[tileX .. "," .. tileY] = true
             end
-            draw_tile_set(pathTiles, 1, 1, 0.5, 0.8, world) -- Gold color
+            draw_tile_set(pathTiles, 1, 1, 0.5, 0.8, world, brightness_map) -- Gold color
         end
 
         -- Draw the move destination effect (descending cursor and glowing tile)
@@ -828,8 +882,13 @@ local function draw_world_space_ui(world)
             if world.ui.playerTurnState == "cycle_targeting" and world.ui.targeting.cycle.active and #world.ui.targeting.cycle.targets > 0 then
                 local target = world.ui.targeting.cycle.targets[world.ui.targeting.cycle.selectedIndex]
                 if target then
-                    -- In cycle mode, the cursor is on the target itself.
-                    baseCursorPixelX, baseCursorPixelY = target.x, target.y
+                    if target.isTileTarget then
+                        -- For tile targets, convert their tile coordinates to pixels.
+                        baseCursorPixelX, baseCursorPixelY = Grid.toPixels(target.tileX, target.tileY)
+                    else
+                        -- For units/obstacles, use their existing pixel coordinates.
+                        baseCursorPixelX, baseCursorPixelY = target.x, target.y
+                    end
                 else
                     baseCursorPixelX, baseCursorPixelY = Grid.toPixels(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y)
                 end
@@ -857,7 +916,7 @@ local function draw_world_space_ui(world)
 
         -- Draw the ground aiming grid (the valid area for ground-targeted attacks)
         if world.ui.playerTurnState == "ground_aiming" and world.ui.pathing.groundAimingGrid then
-            draw_tile_set(world.ui.pathing.groundAimingGrid, 0.2, 0.8, 1, 0.4, world) -- A light, cyan-ish color
+            draw_tile_set(world.ui.pathing.groundAimingGrid, 0.2, 0.8, 1, 0.4, world, brightness_map) -- A light, cyan-ish color
         end
 
         -- 5. Draw the Attack AoE preview
@@ -948,8 +1007,16 @@ local function draw_world_space_ui(world)
                     else
                         -- Default preview for all other attacks (standard melee, ranged, etc.):
                         -- Just highlight the selected target tile.
+                        local pixelX, pixelY
+                        if target.isTileTarget then
+                            -- For tile targets, convert their tile coordinates to pixels.
+                            pixelX, pixelY = Grid.toPixels(target.tileX, target.tileY)
+                        else
+                            -- For units/obstacles, use their existing pixel coordinates.
+                            pixelX, pixelY = target.x, target.y
+                        end
                         love.graphics.setColor(1, 0.2, 0.2, 0.3) -- Semi-transparent red
-                        love.graphics.rectangle("fill", target.x + BORDER_WIDTH, target.y + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+                        love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                     end
                 end
             end
@@ -1116,6 +1183,10 @@ local function draw_pause_screen(world)
     love.graphics.setFont(currentFont) -- Revert to the normal font
     love.graphics.setColor(1, 1, 1, 0.6 + (math.sin(love.timer.getTime() * 2) + 1) / 2 * 0.4) -- Pulsing alpha
     love.graphics.printf("Press [Escape] to Resume", 0, Config.VIRTUAL_HEIGHT / 2 + 20, Config.VIRTUAL_WIDTH, "center")
+
+    -- Draw a prompt to reset the game.
+    love.graphics.setColor(1, 1, 1, 0.5) -- A slightly dimmer, non-pulsing white
+    love.graphics.printf("Press [L] to Reset", 0, Config.VIRTUAL_HEIGHT / 2 + 40, Config.VIRTUAL_WIDTH, "center")
 end
 
 local function draw_weapon_select_menu(world)

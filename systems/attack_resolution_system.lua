@@ -20,9 +20,51 @@ local Assets = require("modules.assets")
 local AttackResolutionSystem = {}
 
 function AttackResolutionSystem.update(dt, world)
+    -- Create a copy of the current effects to process for this frame.
+    -- This prevents newly created effects (like from Thunderguard) from being processed in the same frame,
+    -- which could cause state-management bugs where the game thinks an action is over prematurely.
+    local effectsToProcess = {}
     for _, effect in ipairs(world.attackEffects) do
+        -- Only process effects that haven't been applied yet.
+        if not effect.effectApplied then
+            table.insert(effectsToProcess, effect)
+        end
+    end
+
+    for _, effect in ipairs(effectsToProcess) do
         -- Process the effect on the frame it becomes active
         if effect.initialDelay <= 0 and not effect.effectApplied then
+            local attackData = AttackBlueprints[effect.attackName]
+
+            -- Check if the attack applies a status effect to the tile itself.
+            if attackData and attackData.appliesTileStatus then
+                local tileX, tileY = Grid.toTile(effect.x, effect.y)
+                local statusInfo = attackData.appliesTileStatus
+                local posKey = tileX .. "," .. tileY
+
+                -- Add conditional logic for applying tile statuses.
+                local canApply = false
+                if statusInfo.type == "frozen" then
+                    -- 'frozen' can only be applied to water tiles.
+                    canApply = WorldQueries.isTileWater_Base(tileX, tileY, world)
+                elseif statusInfo.type == "aflame" then
+                    -- 'aflame' cannot be applied to water, frozen tiles, or tiles with obstacles.
+                    local isWater = WorldQueries.isTileWater_Base(tileX, tileY, world)
+                    local isFrozen = world.tileStatuses[posKey] and world.tileStatuses[posKey].type == "frozen"
+                    local hasObstacle = WorldQueries.getObstacleAt(tileX, tileY, world)
+
+                    if not isWater and not isFrozen and not hasObstacle then
+                        canApply = true
+                    end
+                else -- Default behavior for any other future statuses.
+                    canApply = true
+                end
+
+                if canApply then
+                    world.tileStatuses[posKey] = { type = statusInfo.type, duration = statusInfo.duration }
+                end
+            end
+
             local targets = {}
             -- Build a list of potential targets for this effect.
             if effect.targetType == "enemy" then
@@ -93,6 +135,24 @@ function AttackResolutionSystem.update(dt, world)
                                     local critChance = CombatFormulas.calculateCritChance(effect.attacker, target, attackData.CritChance or 0)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
                                     local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit, effect.attackName, world)
+
+                                    -- Check for Unbound passive on the attacker.
+                                    if effect.attacker.wisp == 0 then
+                                        local unbound_providers = world.teamPassives[effect.attacker.type].Unbound
+                                        if unbound_providers then
+                                            local attackerHasUnbound = false
+                                            for _, provider in ipairs(unbound_providers) do
+                                                if provider == effect.attacker then
+                                                    attackerHasUnbound = true
+                                                    break
+                                                end
+                                            end
+                                            if attackerHasUnbound then
+                                                damage = damage * 1.5
+                                            end
+                                        end
+                                    end
+
                                     -- Apply damage multipliers from special properties (e.g., Impale).
                                     if effect.specialProperties and effect.specialProperties.damageMultiplier then
                                         damage = damage * effect.specialProperties.damageMultiplier
@@ -135,6 +195,12 @@ function AttackResolutionSystem.update(dt, world)
                                     if effect.attacker.type == "player" and target.type == "enemy" then
                                         local isKill = (target.hp - damage <= 0)
                                         local expGained = CombatFormulas.calculateExpGain(effect.attacker, target, isKill)
+
+                                        -- If the kill was from a reaction, flag the attacker so their turn isn't consumed by a level-up/promotion.
+                                        if isKill and effect.specialProperties and effect.specialProperties.isAetherfallAttack then
+                                            effect.attacker.components.level_up_from_reaction = true
+                                        end
+
                                         CombatActions.grantExp(effect.attacker, expGained, world)
                                     end
 

@@ -341,6 +341,7 @@ function EnemyTurnSystem.update(dt, world)
                     local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, winTileKey)
                     if path and #path > 0 then
                         actingEnemy.components.movement_path = path
+                        actingEnemy.speedMultiplier = 2
                         actingEnemy.components.action_in_progress = true -- Set flag to prevent re-evaluation
                         return
                     end
@@ -365,6 +366,7 @@ function EnemyTurnSystem.update(dt, world)
                 local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, bestPlayerAttack.destinationKey)
                 if path and #path > 0 then
                     actingEnemy.components.movement_path = path
+                    actingEnemy.speedMultiplier = 2
                     actingEnemy.components.ai.pending_attack = { name = bestPlayerAttack.attackName, target = bestPlayerAttack.target }
                 else
                     actingEnemy.components.action_in_progress = true
@@ -397,6 +399,7 @@ function EnemyTurnSystem.update(dt, world)
                 local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, bestObstacleAttack.destinationKey)
                 if path and #path > 0 then
                     actingEnemy.components.movement_path = path
+                    actingEnemy.speedMultiplier = 2
                     actingEnemy.components.ai.pending_attack = { name = bestObstacleAttack.attackName, target = bestObstacleAttack.target }
                     return -- Action decided, exit.
                 end
@@ -409,6 +412,7 @@ function EnemyTurnSystem.update(dt, world)
                 local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, moveDestinationKey)
                 if path and #path > 0 then
                     actingEnemy.components.movement_path = path
+                    actingEnemy.speedMultiplier = 2
                     actingEnemy.components.action_in_progress = true -- Set flag to prevent re-evaluation
                     return
                 end

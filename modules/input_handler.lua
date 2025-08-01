@@ -557,9 +557,16 @@ local function handle_action_menu_input(key, world)
         end
 
         local unit = menu.unit
+        -- If the unit triggered a hazard during movement, the move is committed and cannot be undone.
+        if unit and unit.components.move_is_committed then
+            -- TODO: Play an error/invalid sound effect here.
+            return -- Block the cancel action.
+        end
+
         if unit and unit.startOfMoveTileX then
             -- Teleport unit back to its starting position
             unit.tileX, unit.tileY = unit.startOfMoveTileX, unit.startOfMoveTileY
+            EventBus:dispatch("unit_tile_changed", { unit = unit, world = world })
             unit.x, unit.y = Grid.toPixels(unit.tileX, unit.tileY)
             unit.targetX, unit.targetY = unit.x, unit.y
 
@@ -1283,7 +1290,11 @@ end
 
 -- Handles input when the game is paused.
 stateHandlers.paused = function(key, world)
-    -- Most input is blocked. The global 'escape' handler in handle_key_press will unpause.
+    -- The global 'escape' handler in handle_key_press will unpause.
+    if key == "l" then
+        -- Signal to the main game loop that a reset is requested.
+        return "reset"
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -1310,7 +1321,11 @@ function InputHandler.handle_key_press(key, currentGameState, world)
     -- Find the correct handler for the current state and call it.
     local handler = stateHandlers[currentGameState]
     if handler then
-        handler(key, world)
+        -- The handler can return a new state string to trigger a change.
+        local newState = handler(key, world)
+        if newState then
+            return newState
+        end
     end
 
     -- Return the current state, as no state change was triggered by this key.

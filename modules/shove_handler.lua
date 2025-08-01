@@ -1,6 +1,7 @@
 -- modules/shove_handler.lua
 -- Contains the logic for executing the Shove command.
 
+local EventBus = require("modules.event_bus")
 local Grid = require("modules.grid")
 
 local ShoveHandler = {}
@@ -18,6 +19,7 @@ function ShoveHandler.shove(shover, target, world)
     -- 2. Update the target's logical and visual position.
     target.tileX, target.tileY = destTileX, destTileY
     target.targetX, target.targetY = Grid.toPixels(destTileX, destTileY)
+    EventBus:dispatch("unit_tile_changed", { unit = target, world = world })
     -- Give it a small speed boost for a quick slide.
     target.speedMultiplier = 2
 

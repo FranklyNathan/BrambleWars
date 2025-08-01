@@ -3,52 +3,64 @@
 
 local WorldQueries = require("modules.world_queries")
 local EventBus = require("modules.event_bus")
+local RescueHandler = require("modules.rescue_handler")
 
 local EnvironmentHazardSystem = {}
 
-function EnvironmentHazardSystem.update(dt, world)
-    -- Iterate through all units to check for hazards.
-    for _, entity in ipairs(world.all_entities) do
-        if (entity.type == "player" or entity.type == "enemy") and entity.hp > 0 then
-            local isOnWater = WorldQueries.isTileWater(entity.tileX, entity.tileY, world)
+-- Helper function to change the player's turn state and notify other systems.
+local function set_player_turn_state(newState, world)
+    local oldState = world.ui.playerTurnState
+    if oldState ~= newState then
+        world.ui.playerTurnState = newState
+        EventBus:dispatch("player_state_changed", { oldState = oldState, newState = newState, world = world })
+    end
+end
 
-            -- Manage the 'submerged' component for rendering.
-            if isOnWater and (entity.canSwim or entity.isFlying) then
-                -- Unit is safely in/over water, ensure it has the submerged component.
-                if not entity.components.submerged then
-                    entity.components.submerged = true
-                end
-            else
-                -- Unit is not in water, ensure it does not have the submerged component.
-                if entity.components.submerged then
-                    entity.components.submerged = nil
-                end
-            end
+-- This function is now called only when a unit's tile position changes.
+local function check_hazards_for_unit(unit, world)
+    if (unit.type == "player" or unit.type == "enemy") and unit.hp > 0 then
+        local isOnWater = WorldQueries.isTileWater(unit.tileX, unit.tileY, world)
 
-            -- Check for drowning hazard (only if not already sinking).
-            if isOnWater and not entity.components.sinking then
-                if not entity.isFlying and not entity.canSwim then
-                    -- This unit should drown.
-                    entity.hp = 0
-                    entity.components.sinking = { timer = 1.5, initialTimer = 1.5 }
-
-                    -- Announce the death. The killer is the environment (nil).
-                    EventBus:dispatch("unit_died", { victim = entity, killer = nil, world = world, reason = {type = "drown"} })
-                end
-            end
+        -- Manage the 'submerged' component for rendering.
+        if isOnWater and (unit.canSwim or unit.isFlying) then
+            if not unit.components.submerged then unit.components.submerged = true end
+        else
+            if unit.components.submerged then unit.components.submerged = nil end
         end
 
-        -- Update any existing sinking animations.
-        if entity.components.sinking then
-            local sinking = entity.components.sinking
-            sinking.timer = math.max(0, sinking.timer - dt)
-            if sinking.timer == 0 then
-                -- Animation is over, mark the unit for deletion.
-                entity.isMarkedForDeletion = true
-                entity.components.sinking = nil -- Clean up component
+        -- Check for drowning hazard (only if not already sinking).
+        if isOnWater and not unit.components.sinking then
+            if not unit.isFlying and not unit.canSwim then
+
+                -- Check if the drowning unit is carrying someone.
+                if unit.carriedUnit then
+                    if unit.carriedUnit.canSwim then
+                        -- The carried unit can swim! Drop them here to save them.
+                        -- This also resets the carrier's weight and rescue penalty.
+                        RescueHandler.drop(unit, unit.tileX, unit.tileY, world)
+                    end
+                end
+                
+                unit.hp = 0
+                unit.components.sinking = { timer = 1.5, initialTimer = 1.5 }
+                EventBus:dispatch("unit_died", { victim = unit, killer = nil, world = world, reason = {type = "drown"} })
+
+                -- If a player unit drowns mid-move, their turn is over.
+                -- This prevents the game from getting stuck waiting for an action from a dead unit.
+                if unit.type == "player" then
+                    unit.hasActed = true
+                    unit.components.movement_path = nil -- Stop any further movement.
+                    -- Return control to the player.
+                    set_player_turn_state("free_roam", world)
+                end
             end
         end
     end
 end
+
+-- Listen for the new event that signals a unit has landed on a new tile.
+EventBus:register("unit_tile_changed", function(data)
+    check_hazards_for_unit(data.unit, data.world)
+end)
 
 return EnvironmentHazardSystem

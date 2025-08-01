@@ -15,6 +15,7 @@
 local AttackBlueprints = {
     -- New Weapon-Based Basic Attacks
     slash = {
+        name = "Slash",
         power = 5, -- Base power of the move, used in damage calculations
         wispCost = 0, -- Cost of the move is Wisp, a resource used for attacks
         Accuracy = 100, -- Odds of hitting, used in accuracy calculations
@@ -25,6 +26,7 @@ local AttackBlueprints = {
         description = "A standard sword attack."
     },
     thrust = {
+        name = "Thrust",
         power = 5,
         wispCost = 0,
         Accuracy = 100,
@@ -35,6 +37,7 @@ local AttackBlueprints = {
         description = "A standard lance attack."
     },
     lash = {
+        name = "Lash",
         power = 5,
         wispCost = 0,
         Accuracy = 100,
@@ -45,6 +48,7 @@ local AttackBlueprints = {
         description = "A standard whip attack."
     },
     loose = {
+        name = "Loose",
         power = 5,
         wispCost = 0,
         Accuracy = 100,
@@ -55,6 +59,7 @@ local AttackBlueprints = {
         description = "A standard bow attack."
     },
     bonk = {
+        name = "Bonk",
         power = 5,
         wispCost = 0,
         Accuracy = 100,
@@ -65,6 +70,7 @@ local AttackBlueprints = {
         description = "A standard staff attack."
     },
     harm = {
+        name = "Harm",
         power = 5,
         wispCost = 0,
         Accuracy = 100,
@@ -75,6 +81,7 @@ local AttackBlueprints = {
         description = "A standard tome attack."
     },
     stab = {
+        name = "Stab",
         power = 5,
         wispCost = 0,
         Accuracy = 100,
@@ -87,6 +94,7 @@ local AttackBlueprints = {
 
     -- Damaging Melee Attacks
     venom_stab = {
+        name = "Venom Stab",
         power = 6,
         wispCost = 1,
         Accuracy = 100,
@@ -98,6 +106,7 @@ local AttackBlueprints = {
         description = "A physical attack that poisons the target."
     },
     uppercut = {
+        name = "Uppercut",
         power = 7,
         wispCost = 2,
         Accuracy = 90,
@@ -109,6 +118,7 @@ local AttackBlueprints = {
         description = "A powerful physical attack that sends the target airborne."
     },
     sever = {
+        name = "Sever",
         power = 6,
         wispCost = 1,
         Accuracy = 100,
@@ -119,6 +129,7 @@ local AttackBlueprints = {
         description = "A physical attack with a high critical hit chance."
     },
     shunt = {
+        name = "Shunt",
         power = 6,
         wispCost = 1,
         Accuracy = 100,
@@ -129,6 +140,7 @@ local AttackBlueprints = {
         description = "A weak physical attack that pushes the target back."
     },
     shockstrike = {
+        name = "Shockstrike",
         power = 6,
         wispCost = 1,
         Accuracy = 100,
@@ -141,6 +153,7 @@ local AttackBlueprints = {
         description = "A physical attack that may paralyze the target."
     },
     impale = {
+        name = "Impale",
         power = 7,
         wispCost = 1,
         Accuracy = 100,
@@ -152,6 +165,7 @@ local AttackBlueprints = {
     },
 
     disarm = {
+        name = "Disarm",
         power = 6,
         wispCost = 2,
         Accuracy = 100,
@@ -164,6 +178,7 @@ local AttackBlueprints = {
 
     -- Damaging Ranged Attacks
     fireball = {
+        name = "Fireball",
         power = 3,
         wispCost = 2,
         Accuracy = 95,
@@ -178,6 +193,7 @@ local AttackBlueprints = {
         description = "Launches a piercing fireball in a straight line."
     },
     longshot = {
+        name = "Longshot",
         power = 5,
         wispCost = 3,
         Accuracy = 85,
@@ -187,7 +203,23 @@ local AttackBlueprints = {
         patternType = "longshot_range", -- Can hit targets 2-3 tiles away.
         description = "A powerful, long-range physical attack with a high critical hit chance."
     },
+    ice_beam = {
+        name = "Ice Beam",
+        power = 5,
+        wispCost = 1,
+        Accuracy = 100,
+        CritChance = 5,
+        useType = "magical",
+        targeting_style = "cycle_target",
+        range = 7,
+        line_of_sight_only = true,
+        canTargetTileType = "water", -- New: Allows targeting specific tile types.
+        appliesTileStatus = { type = "frozen" }, -- Freezes water tiles it hits.
+        drawsTile = true, -- So the effect is visible.
+        description = "Fires a beam of ice that damages the first target hit and freezes water tiles in its path."
+    },
     slipstep = {
+        name = "Slipstep",
         power = 6,
         wispCost = 2,
         Accuracy = 100,
@@ -198,6 +230,7 @@ local AttackBlueprints = {
         description = "A quick strike that causes the user and target to switch places."
     },
     eruption = {
+        name = "Eruption",
         power = 5,
         wispCost = 4,
         Accuracy = 90,
@@ -207,11 +240,13 @@ local AttackBlueprints = {
         range = 7,
         patternType = "eruption_aoe", -- The 5x5 ripple effect.
         drawsTile = true,
-        description = "Causes a delayed, multi-stage explosion at a target location."
+        description = "Causes a delayed, multi-stage explosion at a target location, setting the ground aflame.",
+        appliesTileStatus = { type = "aflame", duration = 2 }
     },
 
     -- Damaging Special Attacks
     phantom_step = {
+        name = "Phantom Step",
         power = 7, -- A light utility attack.
         wispCost = 2,
         Accuracy = 100,
@@ -225,6 +260,7 @@ local AttackBlueprints = {
 
     -- Support Attacks
     invigoration = {
+        name = "Invigoration",
         power = 0,
         wispCost = 1,
         Accuracy = 100,
@@ -236,6 +272,7 @@ local AttackBlueprints = {
         description = "Refreshes an ally's turn if they have already acted."
     },
     mend = {
+        name = "Mend",
         power = 5,
         wispCost = 1,
         Accuracy = 100,
@@ -247,6 +284,7 @@ local AttackBlueprints = {
         description = "Restores a small amount of HP to any unit."
     },
     kindle = {
+        name = "Kindle",
         power = 0,
         wispCost = 1,
         useType = "support",
@@ -257,6 +295,7 @@ local AttackBlueprints = {
         description = "Restores 3 Wisp to an adjacent ally."
     },
     bodyguard = {
+        name = "Bodyguard",
         power = 0,
         wispCost = 2,
         useType = "utility",
@@ -272,6 +311,7 @@ local AttackBlueprints = {
 
     -- Status Attacks
     shockwave = {
+        name = "Shockwave",
         power = 0,
         wispCost = 3,
         useType = "utility",
@@ -284,6 +324,7 @@ local AttackBlueprints = {
 
     -- Movement Attacks
     quick_step = {
+        name = "Quick Step",
         power = 0,
         wispCost = 1,
         useType = "utility",
@@ -294,6 +335,7 @@ local AttackBlueprints = {
     },
 
     homecoming = {
+        name = "Homecoming",
         power = 0,
         wispCost = 3,
         useType = "utility",
@@ -308,6 +350,7 @@ local AttackBlueprints = {
 
     -- Environment Attacks
     grovecall = {
+        name = "Grovecall",
         power = 0,
         wispCost = 1,
         useType = "utility",
@@ -317,6 +360,7 @@ local AttackBlueprints = {
         description = "Summons a tree obstacle on the battlefield."
     },
     trap_set = {
+        name = "Trap Set",
         power = 0,
         wispCost = 2,
         useType = "utility",
@@ -326,6 +370,7 @@ local AttackBlueprints = {
         description = "Summons a bear trap on an empty tile."
     },
     ascension = {
+        name = "Ascension",
         power = 0,
         wispCost = 5,
         useType = "utility",
@@ -337,6 +382,7 @@ local AttackBlueprints = {
         ends_turn_immediately = true -- This move will end the turn even if the user has Hustle.
     },
     ascension_strike = {
+        name = "Ascension Strike",
         power = 9999, -- Instant kill
         wispCost = 0,
         Accuracy = 100,
@@ -347,15 +393,17 @@ local AttackBlueprints = {
     },
 
     thunderguard_retaliation = {
+        name = "Thunderguard Retaliation",
         power = 0,
         useType = "utility",
         targeting_style = "none",
-        drawsTile = true,
+        drawsTile = true, -- This is used by the effect created in combat_actions.lua
         description = "A burst of retaliatory energy."
     },
 
     -- Shared Attacks
     hookshot = {
+        name = "Hookshot",
         power = 5,
         wispCost = 2,
         useType = "physical",
@@ -365,6 +413,21 @@ local AttackBlueprints = {
         line_of_sight_only = true,
         description = "Fires a hook that pulls the user and target towards each other."
     },
+}
+
+-- Special System-Triggered Attacks (not used by players/AI directly)
+AttackBlueprints.combustive_explosion = {
+    name = "Combustive Explosion",
+    power = 10,
+    wispCost = 0,
+    Accuracy = 100,
+    useType = "utility",
+    targeting_style = "none",
+    patternType = "eruption_aoe", -- Use the same visual pattern as Eruption.
+    drawsTile = true,             -- This flag tells the renderer to draw the attack's visual effect.
+    deals_true_damage = true, -- New flag for flat damage that ignores stats and defenses.
+    appliesTileStatus = { type = "aflame", duration = 2 },
+    description = "The fiery explosion from a dying unit."
 }
 
 return AttackBlueprints

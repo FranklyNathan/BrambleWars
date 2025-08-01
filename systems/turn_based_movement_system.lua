@@ -7,6 +7,7 @@ local CharacterBlueprints = require("data.character_blueprints")
 local WeaponBlueprints = require("data.weapon_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
 local CombatActions = require("modules.combat_actions")
+local EventBus = require("modules.event_bus")
 local StatusEffectManager = require("modules.status_effect_manager")
 local Assets = require("modules.assets")
 
@@ -44,6 +45,7 @@ function TurnBasedMovementSystem.update(dt, world)
                 entity.x, entity.y = entity.targetX, entity.targetY
                 -- Update the logical tile position to match.
                 entity.tileX, entity.tileY = Grid.toTile(entity.x, entity.y)
+                EventBus:dispatch("unit_tile_changed", { unit = entity, world = world })
 
                 -- Check for traps on the tile the unit just landed on.
                 if not entity.isFlying then -- Flying units are immune to ground traps.

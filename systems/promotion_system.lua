@@ -67,8 +67,12 @@ function PromotionSystem.apply(unit, selectedOption, world)
     unit.hp = unit.finalMaxHp
     unit.wisp = unit.finalMaxWisp
 
-    -- 5. Finalize the unit's action for the turn.
-    unit.hasActed = true
+    -- 5. Finalize the unit's action.
+    -- Only consume the turn if the promotion was not from a reaction.
+    if not unit.components.level_up_from_reaction then
+        unit.hasActed = true
+    end
+    unit.components.level_up_from_reaction = nil -- Clean up the flag
     EventBus:dispatch("action_finalized", { unit = unit, world = world })
     set_player_turn_state("free_roam", world)
 end

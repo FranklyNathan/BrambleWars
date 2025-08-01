@@ -29,6 +29,12 @@ function BattleInfoSystem.refresh_forecast(world)
             return
         end
 
+        -- If the target is a tile, not a unit, don't show the forecast.
+        if target.isTileTarget then
+            menu.active = false
+            return
+        end
+
         -- If the target has no HP (i.e., it's an obstacle), don't show the forecast.
         if not target.hp then
             menu.active = false
@@ -63,6 +69,23 @@ function BattleInfoSystem.refresh_forecast(world)
             -- Damage forecast for physical, magical, and damaging utility
             menu.playerActionLabel = "Damage:"
             local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false, attackName, world)
+
+            -- Check for Unbound passive on the attacker for forecast.
+            if attacker.wisp == 0 then
+                local unbound_providers = world.teamPassives[attacker.type].Unbound
+                if unbound_providers then
+                    local attackerHasUnbound = false
+                    for _, provider in ipairs(unbound_providers) do
+                        if provider == attacker then
+                            attackerHasUnbound = true
+                            break
+                        end
+                    end
+                    if attackerHasUnbound then
+                        playerDmg = playerDmg * 1.5
+                    end
+                end
+            end
 
             -- Check for special, conditional damage multipliers to ensure the forecast is accurate.
             local damageMultiplier = 1.0 -- Default multiplier

@@ -153,8 +153,12 @@ function LevelUpDisplaySystem.update(dt, world)
             if unit.level == 2 then
                 PromotionSystem.start(unit, world)
             else
-                -- No promotion, so finalize the action now.
-                unit.hasActed = true
+                -- No promotion, so finalize the action.
+                -- Only consume the turn if the level up was not from a reaction.
+                if not unit.components.level_up_from_reaction then
+                    unit.hasActed = true
+                end
+                unit.components.level_up_from_reaction = nil -- Clean up the flag
                 EventBus:dispatch("action_finalized", { unit = unit, world = world })
             end
         end

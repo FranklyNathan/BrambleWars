@@ -113,6 +113,7 @@ function AetherfallSystem.update(dt, world)
                             -- Teleport the unit
                             unit.tileX, unit.tileY = warpTile.tileX, warpTile.tileY
                             unit.x, unit.y = Grid.toPixels(warpTile.tileX, warpTile.tileY)
+                            EventBus:dispatch("unit_tile_changed", { unit = unit, world = world })
                             unit.targetX, unit.targetY = unit.x, unit.y
 
                             -- Make the unit face the target

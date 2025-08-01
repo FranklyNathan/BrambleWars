@@ -67,6 +67,12 @@ function UnitInfoSystem.refresh_display(world)
         unit_to_display = WorldQueries.getUnitAt(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y, nil, world)
     end
 
+    -- New check: If the unit to display is a special tile target, don't show the info menu.
+    -- Tile targets are placeholders and don't have the full data of a unit.
+    if unit_to_display and unit_to_display.isTileTarget then
+        unit_to_display = nil
+    end
+
     -- Determine the true source of the ripple effect based on the game state.
     local ripple_source_unit = nil
     if world.ui.playerTurnState == "unit_selected" then

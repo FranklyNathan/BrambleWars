@@ -74,23 +74,43 @@ function AttackPatterns.line_of_sight(entity, world)
 end
 
 -- Creates a 3-stage expanding ripple pattern.
+-- This function now generates individual tiles for each stage of the explosion
+-- to create non-square shapes, instead of large rectangles.
 function AttackPatterns.eruption_aoe(centerX, centerY, rippleCenterSize)
+    local centerTileX, centerTileY = Grid.toTile(centerX, centerY)
+    local pattern = {}
     local step = Config.SQUARE_SIZE
-    local size1 = rippleCenterSize * step
-    local size2 = (rippleCenterSize + 2) * step
-    local size3 = (rippleCenterSize + 4) * step
-    return {
-        {shape = {type = "rect", x = centerX - size1 / 2, y = centerY - size1 / 2, w = size1, h = size1}, delay = 0},
-        {shape = {type = "rect", x = centerX - size2 / 2, y = centerY - size2 / 2, w = size2, h = size2}, delay = Config.FLASH_DURATION},
-        {shape = {type = "rect", x = centerX - size3 / 2, y = centerY - size3 / 2, w = size3, h = size3}, delay = Config.FLASH_DURATION * 2},
-    }
+
+    -- Define the tile patterns for each stage of the explosion.
+    local stage1_tiles = { {dx = 0, dy = 0} } -- Center tile
+    local stage2_tiles = AttackPatterns.standard_melee -- 1-range "+" shape
+    local stage3_tiles = AttackPatterns.standard_ranged -- 2-range diamond shape
+
+    -- Helper to add a stage's tiles to the main pattern list.
+    local function add_stage_to_pattern(tiles, delay)
+        for _, coord in ipairs(tiles) do
+            local tileX, tileY = centerTileX + coord.dx, centerTileY + coord.dy
+            local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+            table.insert(pattern, {
+                shape = {type = "rect", x = pixelX, y = pixelY, w = step, h = step},
+                delay = delay
+            })
+        end
+    end
+
+    -- Generate the full pattern with appropriate delays for each stage.
+    add_stage_to_pattern(stage1_tiles, 0)
+    add_stage_to_pattern(stage2_tiles, Config.FLASH_DURATION)
+    add_stage_to_pattern(stage3_tiles, Config.FLASH_DURATION * 2)
+
+    return pattern
 end
 
 -- Generates preview shapes for ground-targeted attacks.
 function AttackPatterns.getGroundAimPreviewShapes(attackName, centerTileX, centerTileY)
     local pixelX, pixelY = Grid.toPixels(centerTileX, centerTileY)
 
-    if attackName == "grovecall" then
+    if attackName == "grovecall" or attackName == "trap_set" then
         -- A simple 1x1 tile preview.
         return {{shape = {type = "rect", x = pixelX, y = pixelY, w = Config.SQUARE_SIZE, h = Config.SQUARE_SIZE}, delay = 0}}
     elseif attackName == "eruption" then

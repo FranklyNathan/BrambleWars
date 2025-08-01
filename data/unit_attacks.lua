@@ -2,6 +2,7 @@
 -- Contains all attack implementations.
 
 local EffectFactory = require("modules.effect_factory")
+local EventBus = require("modules.event_bus")
 local WorldQueries = require("modules.world_queries")
 local CombatActions = require("modules.combat_actions")
 local AttackPatterns = require("modules.attack_patterns")
@@ -223,6 +224,7 @@ UnitAttacks.shunt = function(attacker, world, attackInstanceId)
         target.targetX, target.targetY = destPixelX, destPixelY
         -- Update the logical tile position immediately.
         target.tileX, target.tileY = behindTileX, behindTileY
+        EventBus:dispatch("unit_tile_changed", { unit = target, world = world })
         -- Give it a speed boost for a quick slide.
         target.speedMultiplier = 3
     end
@@ -259,6 +261,8 @@ UnitAttacks.slipstep = function(attacker, world, attackInstanceId)
     local targetOldTileX, targetOldTileY, targetOldPixelX, targetOldPixelY = target.tileX, target.tileY, target.x, target.y
     attacker.tileX, attacker.tileY, attacker.targetX, attacker.targetY = targetOldTileX, targetOldTileY, targetOldPixelX, targetOldPixelY
     target.tileX, target.tileY, target.targetX, target.targetY = attackerOldTileX, attackerOldTileY, attackerOldPixelX, attackerOldPixelY
+    EventBus:dispatch("unit_tile_changed", { unit = attacker, world = world })
+    EventBus:dispatch("unit_tile_changed", { unit = target, world = world })
 
     -- 3. Give them a speed boost for a quick animation.
     attacker.speedMultiplier, target.speedMultiplier = 3, 3
@@ -356,6 +360,7 @@ UnitAttacks.phantom_step = function(square, world, attackInstanceId)
      square.x, square.y = teleportX, teleportY
      square.targetX, square.targetY = teleportX, teleportY
      square.tileX, square.tileY = teleportTileX, teleportTileY
+     EventBus:dispatch("unit_tile_changed", { unit = square, world = world })
  
      -- 4. Make the attacker face the target from the new position and add a lunge for visual feedback.
      -- This must be done *after* teleporting.
@@ -455,6 +460,7 @@ UnitAttacks.bodyguard = function(attacker, world, attackInstanceId)
     attacker.x, attacker.y = teleportX, teleportY
     attacker.targetX, attacker.targetY = teleportX, teleportY
     attacker.tileX, attacker.tileY = destinationTile.tileX, destinationTile.tileY
+    EventBus:dispatch("unit_tile_changed", { unit = attacker, world = world })
 
     -- 3. Make the attacker face the primary target for a better visual.
     local primaryTarget = secondary.primaryTarget
@@ -528,6 +534,7 @@ UnitAttacks.quick_step = function(attacker, world, attackInstanceId)
     -- This ensures that when 'airborne' is applied and Aetherfall triggers,
     -- the attacker is no longer considered to be on their starting tile.
     local startTileX, startTileY = attacker.tileX, attacker.tileY
+    EventBus:dispatch("unit_tile_changed", { unit = attacker, world = world })
     attacker.tileX, attacker.tileY = targetTileX, targetTileY
 
     -- 4. Set the attacker's target destination and speed for the visual movement.
@@ -720,6 +727,7 @@ UnitAttacks.homecoming = function(attacker, world, attackInstanceId)
     attacker.x, attacker.y = teleportX, teleportY
     attacker.targetX, attacker.targetY = teleportX, teleportY
     attacker.tileX, attacker.tileY = destinationTile.tileX, destinationTile.tileY
+    EventBus:dispatch("unit_tile_changed", { unit = attacker, world = world })
 
     -- 3. Create a visual effect for feedback.
     EffectFactory.createDamagePopup(world, attacker, "Zwoop!", false, {0.2, 0.8, 1.0, 1}) -- Cyan text
@@ -741,6 +749,69 @@ UnitAttacks.hookshot = function(attacker, world, attackInstanceId)
     local newHook = EntityFactory.createGrappleHook(attacker, power, range)
 
     world:queue_add_entity(newHook)
+    return true
+end
+
+UnitAttacks.ice_beam = function(attacker, world, attackInstanceId)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+ 
+    local attackName = "ice_beam"
+    local attackData = AttackBlueprints[attackName]
+    if not attackData then return false end
+ 
+    -- Use Bresenham's line algorithm to get all tiles in the path.
+    local startX, startY = attacker.tileX, attacker.tileY
+    local endX, endY = target.tileX, target.tileY
+    local line_tiles = {}
+    local dx = math.abs(endX - startX)
+    local dy = -math.abs(endY - startY)
+    local sx = (startX < endX) and 1 or -1
+    local sy = (startY < endY) and 1 or -1
+    local err = dx + dy
+    local x0, y0 = startX, startY
+ 
+    while true do
+        -- Don't include the attacker's own tile in the beam.
+        if not (x0 == startX and y0 == startY) then
+            table.insert(line_tiles, {tileX = x0, tileY = y0})
+        end
+        if x0 == endX and y0 == endY then break end
+        local e2 = 2 * err
+        if e2 >= dy then err = err + dy; x0 = x0 + sx; end
+        if e2 <= dx then err = err + dx; y0 = y0 + sy; end
+    end
+ 
+    local targetType = (attacker.type == "player") and "enemy" or "player"
+    local beamColor = {0.2, 0.8, 1.0, 0.8} -- Cyan
+    local stepDelay = 0.04 -- Time between each tile appearing
+    local persistDuration = 0.3 -- How long the full beam stays visible
+    local hasHitUnit = false
+ 
+    for i, tile in ipairs(line_tiles) do
+        local pixelX, pixelY = Grid.toPixels(tile.tileX, tile.tileY)
+        local initialDelay = (i - 1) * stepDelay
+        local flashDuration = ((#line_tiles - i) * stepDelay) + persistDuration
+ 
+        local unitOnTile = WorldQueries.getUnitAt(tile.tileX, tile.tileY, attacker, world)
+ 
+        local effectToCreate = {
+            attacker = attacker, attackName = attackName, x = pixelX, y = pixelY,
+            width = Config.SQUARE_SIZE, height = Config.SQUARE_SIZE, color = beamColor,
+            delay = initialDelay, duration = flashDuration,
+            specialProperties = { attackInstanceId = attackInstanceId }
+        }
+ 
+        if not hasHitUnit and unitOnTile and (unitOnTile.type == targetType or unitOnTile.isObstacle) then
+            effectToCreate.targetType = targetType -- This effect will do damage.
+            hasHitUnit = true
+        else
+            effectToCreate.targetType = "none" -- This effect is visual-only (but can still freeze water).
+        end
+        
+        EffectFactory.addAttackEffect(world, effectToCreate)
+    end
+
     return true
 end
 

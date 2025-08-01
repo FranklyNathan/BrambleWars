@@ -45,6 +45,11 @@ end
 
 -- Helper to calculate base damage for physical and magical attacks
 function CombatFormulas.calculateBaseDamage(attacker, defender, attackData, attackName)
+    -- New: Check for true damage, which bypasses all other calculations.
+    if attackData.deals_true_damage then
+        return attackData.power or 0
+    end
+
     print("--- Damage Calculation: " .. (attackName or "Unknown") .. " ---")
     print("Attacker: " .. (attacker.displayName or attacker.enemyType) .. ", Defender: " .. (defender.displayName or defender.enemyType or "Obstacle"))
 

@@ -40,6 +40,15 @@ function EffectTimerSystem.update(dt, world)
             end
         end
 
+        -- Update rescue animation timer
+        if s.components.being_rescued then
+            s.components.being_rescued.timer = s.components.being_rescued.timer - dt
+            if s.components.being_rescued.timer <= 0 then
+                s.isMarkedForDeletion = true
+                s.components.being_rescued = nil
+            end
+        end
+
         -- Update damage tint timer
         if s.components.damage_tint then
             s.components.damage_tint.timer = s.components.damage_tint.timer - dt
@@ -166,6 +175,18 @@ function EffectTimerSystem.update(dt, world)
         end
     end
 
+    -- Update any existing sinking animations.
+    for _, entity in ipairs(world.all_entities) do
+        if entity.components and entity.components.sinking then
+            local sinking = entity.components.sinking
+            sinking.timer = math.max(0, sinking.timer - dt)
+            if sinking.timer == 0 then
+                entity.isMarkedForDeletion = true
+                entity.components.sinking = nil
+            end
+        end
+    end
+
     -- 2. Update standalone visual effects
     -- Afterimages
     for i = #world.afterimageEffects, 1, -1 do
@@ -223,38 +244,32 @@ function EffectTimerSystem.update(dt, world)
     end
 
     -- 4. Handle queued ripple effects
-    if world.rippleEffectQueue and #world.rippleEffectQueue > 0 then
-        local rippleData = world.rippleEffectQueue[1] -- Process the first ripple in the queue
+    -- Process all ripples in the queue for this frame. This is more robust than processing one per frame.
+    for i = #world.rippleEffectQueue, 1, -1 do
+        local rippleData = world.rippleEffectQueue[i]
 
-        -- Check if we're still adding effects from this ripple
-        if rippleData.currentIndex <= #rippleData.pattern then
-            local effectData = rippleData.pattern[rippleData.currentIndex]
+        -- Create all attack effects defined in the ripple's pattern at once.
+        -- The individual 'delay' on each effect will handle the timing of its activation.
+        for _, effectData in ipairs(rippleData.pattern) do
             local s = effectData.shape
             local color = {1, 0, 0, 1} -- Default color (adjust if needed)
 
-            -- Create a single attack effect with its delay
             EffectFactory.addAttackEffect(world, {
                 attacker = rippleData.attacker,
                 attackName = rippleData.attackName,
-                x = s.x,
-                y = s.y,
-                width = s.w,
-                height = s.h,
+                x = s.x, y = s.y,
+                width = s.w, height = s.h,
                 color = color,
                 delay = effectData.delay,
                 targetType = rippleData.targetType,
                 statusEffect = rippleData.statusEffect,
                 specialProperties = rippleData.specialProperties
             })
-            
-            -- Move to the next effect in the ripple
-            rippleData.currentIndex = rippleData.currentIndex + 1
-        else
-            -- All effects from this ripple have been added. Remove from the queue
-            table.remove(world.rippleEffectQueue, 1)
         end
+
+        -- The ripple has been fully processed, so remove it from the queue.
+        table.remove(world.rippleEffectQueue, i)
     end
-    -- Check for delays and add subsequent ripple effect when appropriate.
     -- 5. Update EXP gain animation
     if world.ui.expGainAnimation and world.ui.expGainAnimation.active then
         local anim = world.ui.expGainAnimation

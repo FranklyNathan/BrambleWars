@@ -127,6 +127,7 @@ if target.isObstacle then
         attacker.speedMultiplier = pullSpeed
         -- Update the logical tile position immediately.
         attacker.tileX, attacker.tileY = Grid.toTile(destX, destY)
+        EventBus:dispatch("unit_tile_changed", { unit = attacker, world = world })
     elseif pullTarget then
         -- Target is pulled to the tile adjacent to the attacker
         local destX, destY = attacker.x, attacker.y
@@ -139,6 +140,7 @@ if target.isObstacle then
         target.speedMultiplier = pullSpeed
         -- Update the logical tile position immediately.
         target.tileX, target.tileY = Grid.toTile(destX, destY)
+        EventBus:dispatch("unit_tile_changed", { unit = target, world = world })
     elseif pullBoth then
         -- Both are pulled towards each other, meeting in the middle.
         local moveTiles = math.floor((hook.distanceTraveled / Config.SQUARE_SIZE) / 2)
@@ -150,7 +152,9 @@ if target.isObstacle then
         attacker.speedMultiplier, target.speedMultiplier = pullSpeed, pullSpeed
         -- Update the logical tile positions immediately.
         attacker.tileX, attacker.tileY = Grid.toTile(attacker.targetX, attacker.targetY)
+        EventBus:dispatch("unit_tile_changed", { unit = attacker, world = world })
         target.tileX, target.tileY = Grid.toTile(target.targetX, target.targetY)
+        EventBus:dispatch("unit_tile_changed", { unit = target, world = world })
     end
 
     -- 4. Mark the hook for deletion

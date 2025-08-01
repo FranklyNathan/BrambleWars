@@ -31,6 +31,7 @@ function World.new(gameMap)
     self.rippleEffectQueue = {}
     self.ascension_shadows = {}
     self.enemyPathfindingCache = {} -- Cache for AI pathfinding data for the current turn.
+    self.tileStatuses = {} -- Stores temporary statuses on map tiles, like "aflame".
 
     -- Player's global inventory
     self.playerInventory = {
@@ -152,6 +153,7 @@ function World.new(gameMap)
         player = {
             Bloodrush = {},
             HealingWinds = {},
+            Hustle = {},
             Whiplash = {},
             Aetherfall = {},
             Captor = {},
@@ -159,11 +161,14 @@ function World.new(gameMap)
             Desperate = {},
             Elusive = {},
             Treacherous = {},
-            Thunderguard = {}
+            Thunderguard = {},
+            Unbound = {},
+            Combustive = {}
         },
         enemy = {
             -- Enemies can also have team-wide passives.
             Bloodrush = {},
+            Hustle = {},
             HealingWinds = {},
             Whiplash = {},
             Aetherfall = {},
@@ -172,7 +177,9 @@ function World.new(gameMap)
             Desperate = {},
             Elusive = {},
             Treacherous = {},
-            Thunderguard = {}
+            Thunderguard = {},
+            Unbound = {},
+            Combustive = {}
         }
     }
 
@@ -422,6 +429,8 @@ function World:endTurn()
            -- Store the starting position for the upcoming move, in case of cancellation.
            player.startOfMoveTileX, player.startOfMoveTileY = player.tileX, player.tileY
            player.startOfMoveDirection = player.lastDirection
+           -- Reset the committed move flag for the new turn.
+           player.components.move_is_committed = nil
         end
         -- Clear the AI pathfinding cache for the next enemy turn.
         self.enemyPathfindingCache = {}

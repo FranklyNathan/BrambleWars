@@ -70,11 +70,27 @@ function WorldQueries.isTileOccupiedBySameTeam(tileX, tileY, originalSquare, wor
 end
 
 function WorldQueries.isTileWater(tileX, tileY, world)
+    -- A frozen tile is not considered water for gameplay purposes (movement, drowning).
+    local posKey = tileX .. "," .. tileY
+    if world.tileStatuses and world.tileStatuses[posKey] and world.tileStatuses[posKey].type == "frozen" then
+        return false
+    end
+
     local waterLayer = world.map.layers["Water"]
     if not waterLayer then return false end
     -- Tiled data is 1-based, our grid is 0-based.
     -- The STI library replaces raw GID numbers with tile objects.
     -- So, if a tile exists at this coordinate, the value will be a table. If not, it will be nil.
+    local tile = waterLayer.data[tileY + 1] and waterLayer.data[tileY + 1][tileX + 1]
+    return tile ~= nil
+end
+
+-- Checks if a tile is water based on the map layer, ignoring any tile statuses like 'frozen'.
+-- This is used for effects that specifically need to target water itself.
+function WorldQueries.isTileWater_Base(tileX, tileY, world)
+    local waterLayer = world.map.layers["Water"]
+    if not waterLayer then return false end
+    -- Tiled data is 1-based, our grid is 0-based.
     local tile = waterLayer.data[tileY + 1] and waterLayer.data[tileY + 1][tileX + 1]
     return tile ~= nil
 end
@@ -331,6 +347,27 @@ local function findValidTargets_Cycle(attacker, attackData, world)
             end
         end
 
+        -- New: If the attack can target a specific tile type, add valid tiles to the list.
+        if attackData.canTargetTileType == "water" then
+            local range = attackData.range or 0
+            local minRange = attackData.min_range or 1
+            for dx = -range, range do
+                for dy = -range, range do
+                    local dist = math.abs(dx) + math.abs(dy)
+                    if dist >= minRange and dist <= range then
+                        local tileX, tileY = attacker.tileX + dx, attacker.tileY + dy
+                        -- Check if it's a water tile and has line of sight.
+                        if WorldQueries.isTileWater_Base(tileX, tileY, world) then
+                            local tileTarget = { tileX = tileX, tileY = tileY, isTileTarget = true, hp = 1, weight = 1 } -- Add dummy properties to pass checks
+                            if not attackData.line_of_sight_only or findTargetsInLineOfSight(attacker, tileTarget, world) then
+                                table.insert(potentialTargets, tileTarget)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
         local range = attackData.range
         if attackName == "phantom_step" then range = WorldQueries.getUnitMovement(attacker) end -- Dynamic range
         local minRange = attackData.min_range or 1
@@ -352,6 +389,9 @@ local function findValidTargets_Cycle(attacker, attackData, world)
                     local objStartTileX, objStartTileY = target.tileX, target.tileY
                     local objEndTileX, objEndTileY = Grid.toTile(target.x + target.width - 1, target.y + target.height - 1)
                     distance = calculateDistanceToRect(attacker.tileX, attacker.tileY, objStartTileX, objStartTileY, objEndTileX, objEndTileY)
+                elseif target.isTileTarget then
+                    -- For tile targets, it's a simple Manhattan distance.
+                    distance = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
                 else
                     distance = math.abs(attacker.tileX - target.tileX) + math.abs(attacker.tileY - target.tileY)
                 end
@@ -545,8 +585,11 @@ function WorldQueries.isActionOngoing(world)
     -- Check if the promotion menu is active, as this also pauses the game flow.
     if world.ui.menus.promotion.active then return true end
 
+    -- An action is ongoing if there are pending attack effects or ripples.
+    -- These can trigger further game logic like damage, death, and other effects.
+    if #world.attackEffects > 0 or #world.rippleEffectQueue > 0 then return true end
+
     -- An action is ongoing if a projectile is in flight, or a counter-attack is pending.
-    -- We don't check attackEffects here, as those are purely visual and shouldn't block game state.
     if #world.projectiles > 0 or #world.pendingCounters > 0 then return true end
 
     -- ...or if any single unit is still performing a visual action.

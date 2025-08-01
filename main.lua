@@ -15,7 +15,6 @@ local StatusSystem = require("systems.status_system")
 local LevelUpDisplaySystem = require("systems.level_up_display_system")
 local CareeningSystem = require("systems.careening_system")
 local StatSystem = require("systems.stat_system")
-local EnvironmentHazardSystem = require("systems.environment_hazard_system")
 local EffectTimerSystem = require("systems.effect_timer_system")
 local ProjectileSystem = require("systems.projectile_system")
 local MovementSystem = require("systems.movement_system")
@@ -24,22 +23,28 @@ local BattleInfoSystem = require("systems.battle_info_system")
 local EnemyTurnSystem = require("systems.enemy_turn_system")
 local TurnBasedMovementSystem = require("systems.turn_based_movement_system")
 local CounterAttackSystem = require("systems.counter_attack_system")
+local MoveRevertSystem = require("systems.move_revert_system")
 local PassiveSystem = require("systems.passive_system")
 local ActionFinalizationSystem = require("systems.action_finalization_system")
 local AttackResolutionSystem = require("systems.attack_resolution_system")
 local ActionMenuPreviewSystem = require("systems.action_menu_preview_system")
-local RescueAnimationSystem = require("systems.rescue_animation_system")
 local AetherfallSystem = require("systems.aetherfall_system")
 local GrappleHookSystem = require("systems.grapple_hook_system")
+local WhiplashSystem = require("systems.whiplash_system")
 local DeathSystem = require("systems.death_system")
 local Renderer = require("modules.renderer") 
 local BloodrushSystem = require("systems.bloodrush_system")
 local HustleSystem = require("systems.hustle_system")
+local HealingWindsSystem = require("systems.healing_winds_system")
+local PromotionSystem = require("systems.promotion_system")
 local CombatActions = require("modules.combat_actions")
 local EventBus = require("modules.event_bus")
 local Camera = require("modules.camera")
 local WispRegenerationSystem = require("systems.wisp_regeneration_system")
 local InputHandler = require("modules.input_handler")
+local EnvironmentHazardSystem = require("systems.environment_hazard_system")
+local TileStatusSystem = require("systems.tile_status_system")
+local TileHazardSystem = require("systems.tile_hazard_system")
 
 world = nil -- Will be initialized in love.load after assets are loaded
 
@@ -50,47 +55,42 @@ local scale = 1
 -- This makes adding, removing, or reordering systems trivial.
 -- The order is important: Intent -> Action -> Resolution
 local update_systems = {
-    -- 1. State and timer updates
+    -- 1. State and timer updates (timers, visual state changes)
     EffectTimerSystem,
     LevelUpDisplaySystem,
-    -- 2. Movement and Animation (update physical state)
+
+    -- 2. Movement and Animation (physical state updates)
     TurnBasedMovementSystem,
     MovementSystem,
     AnimationSystem,
-    RescueAnimationSystem,
-    -- 3. AI and Player Actions (decide what to do)
-    EnemyTurnSystem,
+
+    -- 3. AI and Player Actions (decision making)
+    EnemyTurnSystem, -- Player actions are handled by InputHandler
+
     -- 4. Update ongoing effects of actions
     ProjectileSystem,
     GrappleHookSystem,
     CounterAttackSystem,
     CareeningSystem,
     AetherfallSystem,
-    EnvironmentHazardSystem,
+
     -- 5. Resolve the consequences of actions
     AttackResolutionSystem,
+
     -- 6. Finalize the turn state after all actions are resolved
     ActionFinalizationSystem,
 }
 
--- love.load() is called once when the game starts.
--- It's used to initialize game variables and load assets.
-function love.load()
-    local sti = require'libraries.sti' -- Load the Simple Tiled Implementation library for maps
-    love.graphics.setDefaultFilter("nearest", "nearest") -- Ensures crisp scaling
-
-    -- Load all game assets (images, animations, sounds)
-    Assets.load()
-
-    -- Load the map specified in the config file.
+-- It's good practice to put your setup logic in its own function so it can be called again for a reset.
+function resetGame()
+    -- This function re-initializes the game world, effectively resetting the game.
+    local sti = require("libraries.sti")
     local mapPath = "maps/" .. Config.CURRENT_MAP_NAME .. ".lua"
 
-    -- Add more specific checks to help diagnose loading issues.
+    -- Add the same robust error checking from love.load()
     if not love.filesystem.getInfo(mapPath) then
         error("FATAL: Map file not found at '" .. mapPath .. "'. Please ensure the file exists in the 'maps' folder.")
     end
-
-    -- Use pcall to safely load the map and get a detailed error message if it fails
     local success, gameMap_or_error = pcall(sti, mapPath)
     if not success then
         error("FATAL: The map library 'sti' failed to load the map '" .. mapPath .. "'.\n" ..
@@ -98,14 +98,18 @@ function love.load()
               "Original error: " .. tostring(gameMap_or_error))
     end
     local gameMap = gameMap_or_error
-
-    -- Add a final check to ensure the map object is valid.
     if not gameMap or not gameMap.width or not gameMap.tilewidth then
         error("FATAL: Map loaded, but it is not a valid map object (missing width/tilewidth). File: '" .. mapPath .. "'.")
     end
-
-    -- The world must be created AFTER assets are loaded, so entities can get their sprites.
     world = World.new(gameMap)
+end
+
+function love.load()
+    -- Load all game assets (images, sounds, animations). This must be done before creating the world.
+    Assets.load()
+
+    -- The world must be created AFTER assets are loaded, so entities can get their sprites and animations.
+    resetGame()
 
     -- Load the custom font. Replace with your actual font file and its native size.
     -- For pixel fonts, using the intended size (e.g., 8, 16) is crucial for sharpness.
@@ -145,13 +149,23 @@ function love.update(dt)
         -- Process all entity additions and deletions that were queued by the systems.
         world:process_additions_and_deletions()
 
-    end -- End of if world.gameState == "gameplay"
+    end
 end
 
--- love.keypressed(key) is used for discrete actions, like switching players or attacking.
-function love.keypressed(key)
-    -- Pass the current state to the handler and get the new state back.
-    world.gameState = InputHandler.handle_key_press(key, world.gameState, world)
+-- love.keypressed() is called once when a key is pressed.
+-- It's used to handle single, discrete actions.
+function love.keypressed(key, scancode, isrepeat)
+    -- We only care about the initial press, not repeats, for this handler.
+    if not isrepeat then
+        local newState = InputHandler.handle_key_press(key, world.gameState, world)
+        if newState == "reset" then
+            -- The input handler signaled a game reset.
+            resetGame()
+        else
+            -- Otherwise, update the game state as normal.
+            world.gameState = newState
+        end
+    end
 end
 
 function love.resize(w, h)

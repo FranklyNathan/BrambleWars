@@ -39,6 +39,8 @@ function Assets.load()
     Assets.images.Flag = loadImage("assets/tree.png") -- For Sceptile's attack
     Assets.images.Punter = loadImage("assets/punter.png")
     Assets.images.BearTrap = loadImage("assets/beartrap.png")
+    Assets.images.Aflame = loadImage("assets/Aflame.png") -- For the new tile status
+    Assets.images.Frozen = loadImage("assets/Frozen.png") -- For the new tile status
 
     -- Load portraits
     Assets.images.Default_Portrait = loadImage("assets/Portraits/Default_Portrait.png")
