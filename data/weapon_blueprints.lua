@@ -63,7 +63,7 @@ local WeaponBlueprints = {
         description = "A book of basic elemental magic for the studious adventurer.",
         stats = {
             magicStat = 2,
-            maxWisp = 5,
+            maxWisp = 1,
         },
         grants_moves = { "fireball" },
         grants_passives = {},

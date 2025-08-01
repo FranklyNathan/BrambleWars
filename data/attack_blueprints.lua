@@ -246,6 +246,29 @@ local AttackBlueprints = {
         drawsTile = true,
         description = "Restores a small amount of HP to any unit."
     },
+    kindle = {
+        power = 0,
+        wispCost = 1,
+        useType = "support",
+        targeting_style = "cycle_target",
+        affects = "allies",
+        patternType = "standard_melee",
+        drawsTile = true,
+        description = "Restores 3 Wisp to an adjacent ally."
+    },
+    bodyguard = {
+        power = 0,
+        wispCost = 2,
+        useType = "utility",
+        targeting_style = "cycle_target",
+        affects = "allies",
+        range = 99, -- Global range
+        secondary_targeting_style = "adjacent_tiles", -- New: Triggers a second targeting step.
+        drawsTile = true,
+        description = "Instantly teleport to a vacant tile next to an ally. Ends the turn.",
+        ends_turn_immediately = true,
+        createsDangerZone = false -- This is a teleport, not a threat.
+    },
 
     -- Status Attacks
     shockwave = {
@@ -268,6 +291,19 @@ local AttackBlueprints = {
         range = 3,
         line_of_sight_only = true,
         description = "A quick dash that makes enemies passed through airborne."
+    },
+
+    homecoming = {
+        power = 0,
+        wispCost = 3,
+        useType = "utility",
+        targeting_style = "cycle_valid_tiles",
+        valid_tile_type = "winTiles", -- The type of tile to look for in the world object.
+        range = 99, -- Can be used from anywhere, so range check is not needed.
+        drawsTile = true, -- So the cursor is visible
+        description = "Instantly teleport to a friendly goal tile. Ends the turn.",
+        ends_turn_immediately = true,
+        createsDangerZone = false -- This is a teleport, not a threat.
     },
 
     -- Environment Attacks
@@ -297,7 +333,8 @@ local AttackBlueprints = {
         range = 5,
         drawsTile = true,
         displayPower = "KO", -- Special display text for the UI.
-        description = "Ascend, becoming untargetable. Descend at the end of the enemy turn, killing any unit on the chosen tile."
+        description = "Ascend, becoming untargetable. Descend at the end of the enemy turn, killing any unit on the chosen tile.",
+        ends_turn_immediately = true -- This move will end the turn even if the user has Hustle.
     },
     ascension_strike = {
         power = 9999, -- Instant kill

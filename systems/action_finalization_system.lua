@@ -1,7 +1,7 @@
 -- systems/action_finalization_system.lua
 -- This system checks when a unit's action (attack, move, etc.) is fully complete,
 -- including any reactions like counter-attacks, and then sets their 'hasActed' state.
- 
+
 local EventBus = require("modules.event_bus")
 local WorldQueries = require("modules.world_queries")
 local LevelUpSystem = require("systems.level_up_system")
@@ -10,8 +10,6 @@ local ActionFinalizationSystem = {}
 function ActionFinalizationSystem.update(dt, world)
     -- Use the centralized query to determine if any action is ongoing.
     local isActionOngoing = WorldQueries.isActionOngoing(world)
-
-    local anyActionFinalized = false
 
     -- If the action state is idle, we can finalize any pending actions.
     if not isActionOngoing then
@@ -28,8 +26,9 @@ function ActionFinalizationSystem.update(dt, world)
                 if not leveledUp then
                     -- No level up occurred. Finalize the action immediately.
                     entity.hasActed = true
-                    entity.components.action_in_progress = nil -- Clean up the component.
-                    anyActionFinalized = true
+                    entity.components.action_in_progress = nil -- Clean up the flag.
+                    -- Fire an event specifically for this unit so other systems can react.
+                    EventBus:dispatch("action_finalized", { unit = entity, world = world })
                 else
                     -- A level up animation has started. The LevelUpDisplaySystem
                     -- is now in control and will set hasActed when it's finished.
@@ -39,10 +38,6 @@ function ActionFinalizationSystem.update(dt, world)
                 end
             end
         end
-    end
-
-    if anyActionFinalized then
-        EventBus:dispatch("action_finalized", { world = world })
     end
 end
 

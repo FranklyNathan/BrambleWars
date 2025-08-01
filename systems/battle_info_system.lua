@@ -63,7 +63,20 @@ function BattleInfoSystem.refresh_forecast(world)
             -- Damage forecast for physical, magical, and damaging utility
             menu.playerActionLabel = "Damage:"
             local playerDmg = CombatFormulas.calculateFinalDamage(attacker, target, attackData, false, attackName)
-            menu.playerDamage = tostring(playerDmg)
+
+            -- Check for special, conditional damage multipliers to ensure the forecast is accurate.
+            local damageMultiplier = 1.0 -- Default multiplier
+
+            if attackName == "impale" then
+                local dx = target.tileX - attacker.tileX
+                local dy = target.tileY - attacker.tileY
+                local behindTileX, behindTileY = target.tileX + dx, target.tileY + dy
+                local secondaryTarget = WorldQueries.getUnitAt(behindTileX, behindTileY, target, world)
+                if secondaryTarget and secondaryTarget.type ~= attacker.type then
+                    damageMultiplier = 1.5
+                end
+            end
+            menu.playerDamage = tostring(math.floor(playerDmg * damageMultiplier))
             local attackOriginType = attackData.originType or attacker.originType
             if CombatFormulas.calculateTypeEffectiveness(attackOriginType, target.originType) > 1 then
                 menu.playerDamage = menu.playerDamage .. "!"

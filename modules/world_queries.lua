@@ -35,15 +35,22 @@ function WorldQueries.getObstacleAt(tileX, tileY, world)
     return nil
 end
 
+-- Helper to check if a given unit is at a specific tile and is in a valid state to be interacted with.
+local function is_valid_unit_at(unit, tileX, tileY, excludeUnit)
+    return unit ~= excludeUnit and
+           unit.hp > 0 and
+           not (unit.components and unit.components.ascended) and
+           unit.tileX == tileX and
+           unit.tileY == tileY
+end
+
 function WorldQueries.getUnitAt(tileX, tileY, excludeSquare, world)
-    for _, s in ipairs(world.all_entities) do
-        -- Only check against players and enemies, not projectiles etc.
-        -- Also, ignore units that are currently ascended.
-        if (s.type == "player" or s.type == "enemy") and s ~= excludeSquare and s.hp > 0 and not (s.components and s.components.ascended) then
-            if s.tileX == tileX and s.tileY == tileY then
-                return s
-            end
-        end
+    -- Iterate through players and enemies separately for efficiency, instead of all_entities.
+    for _, player in ipairs(world.players) do
+        if is_valid_unit_at(player, tileX, tileY, excludeSquare) then return player end
+    end
+    for _, enemy in ipairs(world.enemies) do
+        if is_valid_unit_at(enemy, tileX, tileY, excludeSquare) then return enemy end
     end
     return nil
 end
@@ -190,7 +197,7 @@ local function findTargetsInFixedPattern(attacker, attackData, potentialTargets,
         local canBeTargeted = not isSelf and not (target.hp and target.hp <= 0)
 
         -- For healing moves, don't target units at full health.
-        if attackData.useType == "support" and (attackData.power or 0) > 0 and target.hp and target.maxHp and target.hp >= target.maxHp then
+        if attackData.useType == "support" and (attackData.power or 0) > 0 and target.hp and target.finalMaxHp and target.hp >= target.finalMaxHp then
             canBeTargeted = false
         end
 
@@ -457,6 +464,9 @@ function WorldQueries.isActionOngoing(world)
     -- An action is considered ongoing if there are active global effects...
     -- Check if the level up display sequence is active.
     if LevelUpDisplaySystem.active then return true end
+
+    -- Check if the EXP gain animation is active.
+    if world.ui.expGainAnimation and world.ui.expGainAnimation.active then return true end
 
     -- Check if the promotion menu is active, as this also pauses the game flow.
     if world.ui.menus.promotion.active then return true end

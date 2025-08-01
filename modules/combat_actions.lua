@@ -11,7 +11,7 @@ local CombatActions = {}
 function CombatActions.applyDirectHeal(target, healAmount)
     if target and target.hp and target.hp > 0 then
         target.hp = math.floor(target.hp + healAmount)
-        if target.hp > target.maxHp then target.hp = target.maxHp end
+        if target.hp > target.finalMaxHp then target.hp = target.finalMaxHp end
         return true
     end
     return false

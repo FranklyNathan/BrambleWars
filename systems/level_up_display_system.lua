@@ -4,6 +4,7 @@
 
 local EventBus = require("modules.event_bus")
 local PromotionSystem = require("systems.promotion_system")
+local StatSystem = require("systems.stat_system")
 local LevelUpSystem = require("systems.level_up_system")
 
 local LevelUpDisplaySystem = {}
@@ -81,10 +82,13 @@ function LevelUpDisplaySystem.applyStatChanges(world)
     -- Handle level, EXP, and HP restoration
     LevelUpDisplaySystem.unit.level = LevelUpDisplaySystem.unit.level + 1
     LevelUpDisplaySystem.unit.exp = LevelUpDisplaySystem.unit.exp - LevelUpDisplaySystem.unit.maxExp
-    LevelUpDisplaySystem.unit.hp = LevelUpDisplaySystem.unit.maxHp -- Fully heal the unit on level up
-    if LevelUpDisplaySystem.unit.maxWisp then
-        LevelUpDisplaySystem.unit.wisp = LevelUpDisplaySystem.unit.maxWisp
-    end
+
+    -- Recalculate final stats to account for the base stat gains.
+    StatSystem.recalculate_for_unit(LevelUpDisplaySystem.unit)
+
+    -- Fully heal the unit to its new final max HP and Wisp.
+    LevelUpDisplaySystem.unit.hp = LevelUpDisplaySystem.unit.finalMaxHp
+    LevelUpDisplaySystem.unit.wisp = LevelUpDisplaySystem.unit.finalMaxWisp
 
     -- Update the UI state to remove the "+1"s and change colors back to normal.
     -- The renderer will stop drawing "+1"s because the fade is over.
@@ -151,7 +155,7 @@ function LevelUpDisplaySystem.update(dt, world)
             else
                 -- No promotion, so finalize the action now.
                 unit.hasActed = true
-                EventBus:dispatch("action_finalized", { world = world })
+                EventBus:dispatch("action_finalized", { unit = unit, world = world })
             end
         end
         -- If leveledUpAgain is true, a new animation has started, so we do nothing here.

@@ -123,6 +123,12 @@ local function finalize_player_action(unit, world)
     -- 2. Reset all targeting states to clean up the UI.
     world.ui.targeting.cycle.active = false
     world.ui.targeting.cycle.targets = {}
+    world.ui.targeting.secondary.active = false
+    world.ui.targeting.secondary.tiles = {}
+    world.ui.targeting.secondary.primaryTarget = nil
+    world.ui.targeting.tile_cycle.active = false
+    world.ui.targeting.tile_cycle.tiles = {}
+    world.ui.targeting.tile_cycle.selectedIndex = 1
     world.ui.targeting.rescue.active = false
     world.ui.targeting.rescue.targets = {}
     world.ui.targeting.drop.active = false
@@ -602,7 +608,31 @@ local function handle_action_menu_input(key, world)
             -- Calculate the range for this specific attack to be displayed during targeting.
             world.ui.pathing.attackableTiles = RangeCalculator.calculateSingleAttackRange(unit, attackName, world)
 
-            if attackData.targeting_style == "cycle_target" then
+            if attackData.targeting_style == "cycle_valid_tiles" then
+                local tileType = attackData.valid_tile_type -- e.g., "win_tiles"
+                local validTiles = {}
+                if world[tileType] then
+                    for _, tile in ipairs(world[tileType]) do
+                        -- A tile is valid if it's not occupied
+                        if not WorldQueries.isTileOccupied(tile.x, tile.y, nil, world) then
+                            table.insert(validTiles, {tileX = tile.x, tileY = tile.y})
+                        end
+                    end
+                end
+
+                if #validTiles > 0 then
+                    local tileCycle = world.ui.targeting.tile_cycle
+                    tileCycle.active = true
+                    tileCycle.tiles = validTiles
+                    tileCycle.selectedIndex = 1
+                    set_player_turn_state("tile_cycling", world)
+                    
+                    -- Snap cursor to first valid tile
+                    local firstTile = validTiles[1]
+                    world.ui.mapCursorTile.x = firstTile.tileX
+                    world.ui.mapCursorTile.y = firstTile.tileY
+                end
+            elseif attackData.targeting_style == "cycle_target" then
                 local validTargets = WorldQueries.findValidTargetsForAttack(unit, attackName, world)
                 -- The menu logic should prevent this, but as a failsafe:
                 if #validTargets > 0 then
@@ -760,6 +790,130 @@ local function handle_ground_aiming_input(key, world)
     end
 end
 
+-- Handles input when the player is cycling through specific ground tiles (e.g., for Homecoming).
+local function handle_tile_cycling_input(key, world)
+    local tileCycle = world.ui.targeting.tile_cycle
+    if not tileCycle.active then return end
+
+    local indexChanged = false
+    if key == "a" or key == "d" then -- Cycle tiles
+        if key == "a" then
+            tileCycle.selectedIndex = tileCycle.selectedIndex - 1
+            if tileCycle.selectedIndex < 1 then tileCycle.selectedIndex = #tileCycle.tiles end
+        else -- key == "d"
+            tileCycle.selectedIndex = tileCycle.selectedIndex + 1
+            if tileCycle.selectedIndex > #tileCycle.tiles then tileCycle.selectedIndex = 1 end
+        end
+        indexChanged = true
+    elseif key == "k" then -- Cancel
+        if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+        set_player_turn_state("action_menu", world)
+        world.ui.menus.action.active = true
+        tileCycle.active = false
+        tileCycle.tiles = {}
+        world.ui.targeting.selectedAttackName = nil
+    elseif key == "j" then -- Confirm
+        local attacker = world.ui.menus.action.unit
+        local attackName = world.ui.targeting.selectedAttackName
+        -- The attack implementation will now read the selected tile from world.ui.targeting.tile_cycle
+        if AttackHandler.execute(attacker, attackName, world) then
+            finalize_player_action(attacker, world)
+        end
+    end
+
+    if indexChanged then
+        if Assets.sounds.cursor_move then Assets.sounds.cursor_move:stop(); Assets.sounds.cursor_move:play() end
+        local newTile = tileCycle.tiles[tileCycle.selectedIndex]
+        if newTile then
+            world.ui.mapCursorTile.x, world.ui.mapCursorTile.y = newTile.tileX, newTile.tileY
+            EventBus:dispatch("cursor_moved", { tileX = newTile.tileX, tileY = newTile.tileY, world = world })
+        end
+    end
+end
+
+-- Handles input when the player is cycling through specific ground tiles (e.g., for Homecoming).
+local function handle_tile_cycling_input(key, world)
+    local tileCycle = world.ui.targeting.tile_cycle
+    if not tileCycle.active then return end
+
+    local indexChanged = false
+    if key == "a" or key == "d" then -- Cycle tiles
+        if key == "a" then
+            tileCycle.selectedIndex = tileCycle.selectedIndex - 1
+            if tileCycle.selectedIndex < 1 then tileCycle.selectedIndex = #tileCycle.tiles end
+        else -- key == "d"
+            tileCycle.selectedIndex = tileCycle.selectedIndex + 1
+            if tileCycle.selectedIndex > #tileCycle.tiles then tileCycle.selectedIndex = 1 end
+        end
+        indexChanged = true
+    elseif key == "k" then -- Cancel
+        if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+        set_player_turn_state("action_menu", world)
+        world.ui.menus.action.active = true
+        tileCycle.active = false
+        tileCycle.tiles = {}
+        world.ui.targeting.selectedAttackName = nil
+    elseif key == "j" then -- Confirm
+        local attacker = world.ui.menus.action.unit
+        local attackName = world.ui.targeting.selectedAttackName
+        -- The attack implementation will now read the selected tile from world.ui.targeting.tile_cycle
+        if AttackHandler.execute(attacker, attackName, world) then
+            finalize_player_action(attacker, world)
+        end
+    end
+
+    if indexChanged then
+        if Assets.sounds.cursor_move then Assets.sounds.cursor_move:stop(); Assets.sounds.cursor_move:play() end
+        local newTile = tileCycle.tiles[tileCycle.selectedIndex]
+        if newTile then
+            world.ui.mapCursorTile.x, world.ui.mapCursorTile.y = newTile.tileX, newTile.tileY
+            EventBus:dispatch("cursor_moved", { tileX = newTile.tileX, tileY = newTile.tileY, world = world })
+        end
+    end
+end
+
+-- Handles input when the player is choosing a secondary target tile (e.g., for Bodyguard).
+local function handle_secondary_targeting_input(key, world)
+    local secondary = world.ui.targeting.secondary
+    if not secondary.active then return end
+
+    local indexChanged = false
+    if key == "a" or key == "d" then -- Cycle tiles
+        if key == "a" then
+            secondary.selectedIndex = secondary.selectedIndex - 1
+            if secondary.selectedIndex < 1 then secondary.selectedIndex = #secondary.tiles end
+        else -- key == "d"
+            secondary.selectedIndex = secondary.selectedIndex + 1
+            if secondary.selectedIndex > #secondary.tiles then secondary.selectedIndex = 1 end
+        end
+        indexChanged = true
+    elseif key == "k" then -- Cancel secondary targeting
+        if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+        -- Return to the primary cycle targeting state
+        set_player_turn_state("cycle_targeting", world)
+        secondary.active = false
+        secondary.tiles = {}
+        secondary.primaryTarget = nil
+    elseif key == "j" then -- Confirm final target tile
+        local attacker = world.ui.menus.action.unit
+        local attackName = world.ui.targeting.selectedAttackName
+        
+        -- The attack implementation will now read the selected tile from world.ui.targeting.secondary
+        if AttackHandler.execute(attacker, attackName, world) then
+            finalize_player_action(attacker, world)
+        end
+    end
+
+    if indexChanged then
+        if Assets.sounds.cursor_move then Assets.sounds.cursor_move:stop(); Assets.sounds.cursor_move:play() end
+        local newTile = secondary.tiles[secondary.selectedIndex]
+        if newTile then
+            world.ui.mapCursorTile.x, world.ui.mapCursorTile.y = newTile.tileX, newTile.tileY
+            EventBus:dispatch("cursor_moved", { tileX = newTile.tileX, tileY = newTile.tileY, world = world })
+        end
+    end
+end
+
 -- Handles input when the player is cycling through targets for an attack.
 local function handle_cycle_targeting_input(key, world)
     local cycle = world.ui.targeting.cycle
@@ -784,9 +938,10 @@ local function handle_cycle_targeting_input(key, world)
         cycle.active = false
         cycle.targets = {}
         world.ui.targeting.selectedAttackName= nil
-    elseif key == "l" then -- Lock Unit Info Menu on the current target
+    elseif key == "l" then
+        -- Lock Unit Info Menu on the current target, but only if it's a unit (not an obstacle).
         local target = cycle.targets[cycle.selectedIndex]
-        if target then
+        if target and not target.isObstacle then
             local menu = world.ui.menus.unitInfo
             menu.isLocked = true
             menu.unit = target
@@ -797,12 +952,44 @@ local function handle_cycle_targeting_input(key, world)
     elseif key == "j" then -- Confirm
         local attacker = world.ui.menus.action.unit
         local attackName = world.ui.targeting.selectedAttackName
+        local attackData = attackName and AttackBlueprints[attackName]
+        if not attackData then return end
 
-        -- The attack implementation will read the selected target from world.ui.targeting.cycle
-        AttackHandler.execute(attacker, attackName, world)
+        -- Check if this attack requires a secondary targeting step.
+        if attackData.secondary_targeting_style == "adjacent_tiles" then
+            local primaryTarget = cycle.targets[cycle.selectedIndex]
+            if not primaryTarget then return end -- Failsafe
 
-        -- Reset state after execution
-        finalize_player_action(attacker, world)
+            -- Find all valid, landable adjacent tiles.
+            local adjacentTiles = {}
+            local neighbors = {{dx = 0, dy = -1}, {dx = 0, dy = 1}, {dx = -1, dy = 0}, {dx = 1, dy = 0}}
+            for _, move in ipairs(neighbors) do
+                local tileX, tileY = primaryTarget.tileX + move.dx, primaryTarget.tileY + move.dy
+                if WorldQueries.isTileLandable(tileX, tileY, attacker, world) then
+                    table.insert(adjacentTiles, {tileX = tileX, tileY = tileY})
+                end
+            end
+
+            if #adjacentTiles > 0 then
+                -- Transition to the secondary targeting state.
+                local secondary = world.ui.targeting.secondary
+                secondary.active = true
+                secondary.primaryTarget = primaryTarget
+                secondary.tiles = adjacentTiles
+                secondary.selectedIndex = 1
+                set_player_turn_state("secondary_targeting", world)
+                
+                -- Snap cursor to the first available tile.
+                local firstTile = adjacentTiles[1]
+                world.ui.mapCursorTile.x = firstTile.tileX
+                world.ui.mapCursorTile.y = firstTile.tileY
+            end
+        else
+            -- Standard attack execution
+            if AttackHandler.execute(attacker, attackName, world) then
+                finalize_player_action(attacker, world)
+            end
+        end
     end
 
     -- If the selection changed, snap the cursor to the new target.
@@ -1013,6 +1200,8 @@ local playerStateInputHandlers = {
     unit_selected = handle_unit_selected_input,
     unit_moving = function() end, -- Input is locked while a unit is moving.
     action_menu = handle_action_menu_input,
+    tile_cycling = handle_tile_cycling_input,
+    secondary_targeting = handle_secondary_targeting_input,
     ground_aiming = handle_ground_aiming_input,
     cycle_targeting = handle_cycle_targeting_input,
     rescue_targeting = handle_rescue_targeting_input,
@@ -1039,6 +1228,15 @@ stateHandlers.gameplay = function(key, world)
     -- Only accept input on the player's turn, with an exception for promotion selection,
     -- which can happen during the enemy's turn after a player unit levels up.
     if world.turn ~= "player" and world.ui.playerTurnState ~= "promotion_select" then
+        return
+    end
+
+    local state = world.ui.playerTurnState
+
+    -- If a major action is ongoing (like an animation), block most input.
+    -- The promotion selection menu is the only state that should be interactive
+    -- while isActionOngoing is true.
+    if WorldQueries.isActionOngoing(world) and state ~= "promotion_select" then
         return
     end
 
@@ -1123,6 +1321,12 @@ function InputHandler.handle_continuous_input(dt, world)
 
     if world.turn ~= "player" or not movement_allowed then
         world.ui.cursorInput.activeKey = nil -- Reset when not in a valid state
+        return
+    end
+
+    -- Block continuous input if a major action is ongoing, except for promotion menu navigation.
+    if WorldQueries.isActionOngoing(world) and state ~= "promotion_select" then
+        world.ui.cursorInput.activeKey = nil
         return
     end
 

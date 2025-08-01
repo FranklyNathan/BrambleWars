@@ -11,9 +11,9 @@ local function regenerate_wisp_for_team(team_list)
 
     for _, unit in ipairs(team_list) do
         -- Only regenerate for living units that have a Wisp stat.
-        if unit.hp > 0 and unit.wisp and unit.maxWisp then
+        if unit.hp > 0 and unit.wisp ~= nil then
             -- Increment wisp by 1, but do not exceed the maximum.
-            unit.wisp = math.min(unit.maxWisp, unit.wisp + 1)
+            unit.wisp = math.min(unit.finalMaxWisp, unit.wisp + 1)
         end
     end
 end

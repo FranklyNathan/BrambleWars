@@ -11,7 +11,7 @@ local HealingWindsSystem = {}
 local function heal_team(team_list, world)
     if not team_list or #team_list == 0 then return end
     for _, unit in ipairs(team_list) do
-        if unit.hp > 0 and unit.hp < unit.maxHp then
+        if unit.hp > 0 and unit.hp < unit.finalMaxHp then
             if CombatActions.applyDirectHeal(unit, 5) then
                 EffectFactory.createDamagePopup(world, unit, "5", false, {0.5, 1, 0.5, 1}) -- Green text for heal
             end

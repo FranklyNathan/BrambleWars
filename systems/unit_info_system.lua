@@ -8,6 +8,26 @@ local RangeCalculator = require("modules.range_calculator")
 
 local UnitInfoSystem = {}
 
+-- Tracks the last unit for which a hover preview was calculated to prevent redundant calculations.
+UnitInfoSystem.last_previewed_unit = nil
+
+--- Calculates and displays the hover preview ranges.
+-- This is an expensive function that should only be called when needed.
+-- @param unit (table) The unit to show the preview for.
+-- @param world (table) The main game world.
+local function show_hover_preview(unit, world)
+    if not unit or unit.hasActed then
+        world.ui.pathing.hoverReachableTiles = nil
+        world.ui.pathing.hoverAttackableTiles = nil
+        return
+    end
+
+    -- This is the expensive part that was causing lag.
+    local reachable, _, _ = Pathfinding.calculateReachableTiles(unit, world)
+    world.ui.pathing.hoverReachableTiles = reachable
+    world.ui.pathing.hoverAttackableTiles = RangeCalculator.calculateAttackableTiles(unit, world, reachable)
+end
+
 -- This is the core logic. It's called by event handlers to update the UI.
 function UnitInfoSystem.refresh_display(world)
     -- If a level up is happening, we *always* show the info panel for that unit.
@@ -17,7 +37,7 @@ function UnitInfoSystem.refresh_display(world)
         world.ui.menus.unitInfo.unit = world.ui.levelUpAnimation.unit
         -- Clear hover previews during level up to avoid visual clutter.
         world.ui.pathing.hoverReachableTiles = nil
-        world.ui.pathing.hoverAttackableTiles= nil
+        world.ui.pathing.hoverAttackableTiles = nil
         world.ui.menus.unitInfo.rippleSourceUnit = nil -- Disable ripple during level up
         return -- Exit early, level-up display takes precedence.
     end
@@ -32,7 +52,9 @@ function UnitInfoSystem.refresh_display(world)
     if shouldHide then
         world.ui.menus.unitInfo.active = false
         world.ui.pathing.hoverReachableTiles = nil
-        world.ui.pathing.hoverAttackableTiles= nil
+        world.ui.pathing.hoverAttackableTiles = nil
+        -- Also reset the preview tracker when hiding the UI.
+        UnitInfoSystem.last_previewed_unit = nil
         return
     end
 
@@ -64,27 +86,28 @@ function UnitInfoSystem.refresh_display(world)
 
     -- The unit being displayed in the info box is separate from the ripple source.
     world.ui.menus.unitInfo.unit = unit_to_display
-    
-    if unit_to_display then -- A unit is being hovered over or targeted.
-        -- A unit is being hovered over.
-        world.ui.menus.unitInfo.active = true
+    world.ui.menus.unitInfo.active = (unit_to_display ~= nil)
 
-        -- Only calculate and show hover previews (movement/attack range) when the player
-        -- is in the 'free_roam' state. This prevents visual clutter during other actions.
-        if world.ui.playerTurnState == "free_roam" and not unit_to_display.hasActed then
-            local reachable, _, _ = Pathfinding.calculateReachableTiles(unit_to_display, world)
-            world.ui.pathing.hoverReachableTiles = reachable
-            world.ui.pathing.hoverAttackableTiles= RangeCalculator.calculateAttackableTiles(unit_to_display, world, reachable)
+    -- The unit that should have a range preview is the one under the cursor, but only in free_roam.
+    -- In other states (like 'unit_selected' or 'cycle_targeting'), we don't show a hover preview.
+    local unit_to_preview = nil
+    if world.ui.playerTurnState == "free_roam" then
+        unit_to_preview = unit_to_display
+    end
+
+    -- Check if the unit we should be previewing has changed since the last time we checked.
+    if unit_to_preview ~= UnitInfoSystem.last_previewed_unit then
+        -- The unit has changed, so we need to update the preview.
+        UnitInfoSystem.last_previewed_unit = unit_to_preview
+
+        if unit_to_preview then
+            -- A new unit is being hovered in free_roam, calculate its preview.
+            show_hover_preview(unit_to_preview, world)
         else
-            -- In any other state (like 'unit_selected'), clear the hover previews.
+            -- No unit is being hovered, or we are not in free_roam. Clear the preview.
             world.ui.pathing.hoverReachableTiles = nil
-            world.ui.pathing.hoverAttackableTiles= nil
+            world.ui.pathing.hoverAttackableTiles = nil
         end
-    else
-        -- No unit is being hovered over.
-        world.ui.menus.unitInfo.active = false
-        world.ui.pathing.hoverReachableTiles = nil
-        world.ui.pathing.hoverAttackableTiles= nil
     end
 end
 

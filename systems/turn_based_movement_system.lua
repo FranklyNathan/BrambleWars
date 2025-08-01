@@ -124,6 +124,17 @@ function TurnBasedMovementSystem.update(dt, world)
                                         if #WorldQueries.findValidTargetsForAttack(entity, attackName, world) > 0 then
                                             showAttack = true
                                         end
+                                elseif style == "cycle_valid_tiles" then
+                                    -- Check if there are any valid tiles for this move.
+                                    local tileType = attackData.valid_tile_type
+                                    if world[tileType] then
+                                        for _, tile in ipairs(world[tileType]) do
+                                            if not WorldQueries.isTileOccupied(tile.x, tile.y, nil, world) then
+                                                showAttack = true
+                                                break -- Found one, that's enough to show the move.
+                                            end
+                                        end
+                                    end
                                     end
 
                                     if showAttack then

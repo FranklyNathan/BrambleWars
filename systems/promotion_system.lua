@@ -23,7 +23,7 @@ function PromotionSystem.start(unit, world)
     if not currentClassData or not next(currentClassData.promotions) then
         -- This unit cannot promote, so finalize their action.
         unit.hasActed = true
-        EventBus:dispatch("action_finalized", { world = world })
+        EventBus:dispatch("action_finalized", { unit = unit, world = world })
         return
     end
 
@@ -56,18 +56,20 @@ function PromotionSystem.apply(unit, selectedOption, world)
     for stat, bonus in pairs(bonuses) do
         if unit[stat] then unit[stat] = unit[stat] + bonus end
     end
-    if bonuses.maxHp and bonuses.maxHp > 0 then unit.hp = unit.hp + bonuses.maxHp end
 
     -- 2. Change the unit's class.
     unit.class = newClassId
 
-
     -- 3. Force a recalculation of the unit's final stats.
     StatSystem.recalculate_for_unit(unit)
 
-    -- 4. Finalize the unit's action for the turn.
+    -- 4. Fully heal the unit to its new maximums.
+    unit.hp = unit.finalMaxHp
+    unit.wisp = unit.finalMaxWisp
+
+    -- 5. Finalize the unit's action for the turn.
     unit.hasActed = true
-    EventBus:dispatch("action_finalized", { world = world })
+    EventBus:dispatch("action_finalized", { unit = unit, world = world })
     set_player_turn_state("free_roam", world)
 end
 

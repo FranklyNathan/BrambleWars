@@ -411,6 +411,69 @@ UnitAttacks.invigoration = function(attacker, world, attackInstanceId)
     return true
 end
 
+UnitAttacks.kindle = function(attacker, world, attackInstanceId)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+
+    -- Failsafe: Ensure the target can have wisp.
+    if not target.wisp or not target.maxWisp then
+        return false
+    end
+
+    local wispBefore = target.wisp
+    target.wisp = math.min(target.finalMaxWisp, target.wisp + 3)
+    local wispRestored = target.wisp - wispBefore
+
+    if wispRestored > 0 then
+        EffectFactory.createDamagePopup(world, target, "Wisp +" .. wispRestored, false, {1, 1, 0.5, 1}) -- Yellow text
+    else
+        EffectFactory.createDamagePopup(world, target, "Wisp Full", false, {0.8, 0.8, 0.8, 1}) -- Grey text
+    end
+
+    -- Create a visual effect on the target tile.
+    EffectFactory.addAttackEffect(world, {
+        attacker = attacker,
+        attackName = "kindle",
+        x = target.x, y = target.y,
+        width = target.size, height = target.size,
+        color = {1, 1, 0.5, 0.7}, -- Yellowish color
+        isHeal = true, -- Prevents counter-attacks and treats it as a friendly action.
+        targetType = "none",
+        specialProperties = { attackInstanceId = attackInstanceId }
+    })
+    return true
+end
+
+UnitAttacks.bodyguard = function(attacker, world, attackInstanceId)
+    -- 1. Get the selected destination tile from the secondary targeting state.
+    -- The input handler has already validated the tile and set up the state.
+    local secondary = world.ui.targeting.secondary
+    if not secondary.active or not secondary.tiles[secondary.selectedIndex] then
+        return false -- Failsafe, should not happen if called correctly.
+    end
+    local destinationTile = secondary.tiles[secondary.selectedIndex]
+
+    -- 2. Teleport the attacker to the chosen tile.
+    local teleportX, teleportY = Grid.toPixels(destinationTile.tileX, destinationTile.tileY)
+    attacker.x, attacker.y = teleportX, teleportY
+    attacker.targetX, attacker.targetY = teleportX, teleportY
+    attacker.tileX, attacker.tileY = destinationTile.tileX, destinationTile.tileY
+
+    -- 3. Make the attacker face the primary target for a better visual.
+    local primaryTarget = secondary.primaryTarget
+    if primaryTarget then
+        attacker.lastDirection = Grid.getDirection(attacker.tileX, attacker.tileY, primaryTarget.tileX, primaryTarget.tileY)
+    end
+
+    -- 4. Create a visual effect for feedback.
+    EffectFactory.createDamagePopup(world, attacker, "Bodyguard!", false, {0.2, 0.8, 1.0, 1}) -- Cyan text
+
+    -- 5. The move consumes the unit's turn and bypasses Hustle.
+    attacker.components.turn_ended_by_move = true
+    attacker.components.action_in_progress = true
+    return true
+end
+
 UnitAttacks.eruption = function(attacker, world, attackInstanceId)
     -- This is the new model for a ground_aim AoE attack.
     -- 1. Get the target tile from the ground aiming cursor.
@@ -637,6 +700,35 @@ UnitAttacks.ascension = function(attacker, world, attackInstanceId)
 
     -- 4. The move consumes the unit's turn.
     -- The action_finalization_system will set hasActed = true.
+    local attackData = AttackBlueprints.ascension
+    if attackData.ends_turn_immediately then
+        -- This flag tells the Hustle system not to grant a second action.
+        attacker.components.turn_ended_by_move = true
+    end
+    attacker.components.action_in_progress = true
+    return true
+end
+
+UnitAttacks.homecoming = function(attacker, world, attackInstanceId)
+    -- 1. Get the selected destination tile from the tile_cycle targeting state.
+    -- The input handler has already validated the tile and set up the state.
+    local tileCycle = world.ui.targeting.tile_cycle
+    if not tileCycle.active or not tileCycle.tiles[tileCycle.selectedIndex] then
+        return false -- Failsafe
+    end
+    local destinationTile = tileCycle.tiles[tileCycle.selectedIndex]
+
+    -- 2. Teleport the attacker.
+    local teleportX, teleportY = Grid.toPixels(destinationTile.tileX, destinationTile.tileY)
+    attacker.x, attacker.y = teleportX, teleportY
+    attacker.targetX, attacker.targetY = teleportX, teleportY
+    attacker.tileX, attacker.tileY = destinationTile.tileX, destinationTile.tileY
+
+    -- 3. Create a visual effect for feedback.
+    EffectFactory.createDamagePopup(world, attacker, "Zwoop!", false, {0.2, 0.8, 1.0, 1}) -- Cyan text
+
+    -- 4. The move consumes the unit's turn and bypasses Hustle.
+    attacker.components.turn_ended_by_move = true
     attacker.components.action_in_progress = true
     return true
 end

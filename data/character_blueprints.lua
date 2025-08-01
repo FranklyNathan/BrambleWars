@@ -53,7 +53,7 @@ local CharacterBlueprints = {
         equippedWeapon = "travelers_staff",
         isFlying = true,
         dominantColor = {1.0, 0.6, 0.8}, -- Biblo: Light Pink
-        passives = {"HealingWinds"},
+        passives = {"HealingWinds", "Hustle"},
         growths = {
             maxHp = 70,
             attackStat = 15,
@@ -66,7 +66,7 @@ local CharacterBlueprints = {
             -- Melee Attacks
             "venom_stab", "uppercut", "sever", "shunt", "shockstrike", "impale", "disarm", "slipstep",
             -- Ranged & Special Attacks
-            "fireball", "longshot", "eruption", "phantom_step", "shockwave", "quick_step", "grovecall", "trap_set", "ascension", "hookshot",
+            "fireball", "longshot", "eruption", "phantom_step", "shockwave", "quick_step", "grovecall", "trap_set", "ascension", "hookshot", "homecoming", "kindle",
             -- Support Attacks
             "mend", "invigoration"
         }
@@ -220,7 +220,7 @@ local CharacterBlueprints = {
             witStat = 50,
         },
         attacks = {
-            "impale", "grovecall", "hookshot"
+            "impale", "grovecall", "hookshot", "bodyguard"
         }
     },
     dupe = {
@@ -240,8 +240,8 @@ local CharacterBlueprints = {
         weight = 5, -- Medium-Light
         equippedWeapon = "travelers_dagger",
         isFlying = true,
-        dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown
-        passives = {"Aetherfall"},
+        dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown,
+        passives = {"Aetherfall", "Hustle"},
         growths = {
             maxHp = 80,
             attackStat = 45,

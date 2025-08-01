@@ -115,7 +115,7 @@ end
 
 local function drawWispBar(square, world)
     -- Only draw if the unit actually uses Wisp.
-    if not square.wisp or not square.maxWisp then return end
+    if square.wisp == nil then return end
 
     -- Determine vertical position, accounting for the HP and EXP bars.
     local hpBarHeight = WorldQueries.getUnitHealthBarHeight(square, world)
@@ -134,7 +134,7 @@ local function drawWispBar(square, world)
     local baseX, baseY = math.floor(square.x), barYOffset
 
     local maxNotches = 8 -- Character with max 8 wisp will have a bar as long as the health bar
-    local currentNotches = math.min(square.maxWisp, maxNotches)
+    local currentNotches = math.min(square.finalMaxWisp, maxNotches)
     if currentNotches == 0 then return end -- Don't draw if there are no notches to show.
 
     local barWidth = (currentNotches / maxNotches) * barMaxWidth
@@ -792,10 +792,12 @@ local function draw_world_space_ui(world)
 
         -- 4. Draw the map cursor.
         if world.ui.playerTurnState == "free_roam" or world.ui.playerTurnState == "unit_selected" or
-           world.ui.playerTurnState == "cycle_targeting" or world.ui.playerTurnState == "ground_aiming" or 
+           world.ui.playerTurnState == "cycle_targeting" or world.ui.playerTurnState == "ground_aiming" or
            world.ui.playerTurnState == "enemy_range_display" or
            world.ui.playerTurnState == "rescue_targeting" or world.ui.playerTurnState == "drop_targeting" or
-           world.ui.playerTurnState == "shove_targeting" or world.ui.playerTurnState == "take_targeting"
+           world.ui.playerTurnState == "shove_targeting" or world.ui.playerTurnState == "take_targeting" or
+           world.ui.playerTurnState == "secondary_targeting" or -- For Bodyguard
+           world.ui.playerTurnState == "tile_cycling" -- For Homecoming
            then
             -- Animate the cursor's line width for a "lock in" effect
             local target_cursor_line_width = 2 -- Normal thickness
@@ -1019,6 +1021,42 @@ local function draw_world_space_ui(world)
                 if selectedTarget then
                     love.graphics.setColor(0.8, 0.2, 0.8, 0.7) -- Brighter magenta
                     local pixelX, pixelY = Grid.toPixels(selectedTarget.tileX, selectedTarget.tileY)
+                    love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+                end
+            end
+        elseif world.ui.playerTurnState == "secondary_targeting" and world.ui.targeting.secondary.active then
+            local secondary = world.ui.targeting.secondary
+            -- Draw all potential destination tiles with a base color.
+            love.graphics.setColor(0.2, 0.8, 1, 0.4) -- Semi-transparent cyan
+            for _, tile in ipairs(secondary.tiles) do
+                local pixelX, pixelY = Grid.toPixels(tile.tileX, tile.tileY)
+                love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+            end
+
+            -- Draw the selected tile with a brighter color.
+            if #secondary.tiles > 0 then
+                local selectedTile = secondary.tiles[secondary.selectedIndex]
+                if selectedTile then
+                    love.graphics.setColor(0.2, 0.8, 1, 0.7) -- Brighter cyan
+                    local pixelX, pixelY = Grid.toPixels(selectedTile.tileX, selectedTile.tileY)
+                    love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+                end
+            end
+        elseif world.ui.playerTurnState == "tile_cycling" and world.ui.targeting.tile_cycle.active then
+            local tileCycle = world.ui.targeting.tile_cycle
+            -- Draw all potential destination tiles with a base color.
+            love.graphics.setColor(0.2, 1.0, 0.2, 0.4) -- Semi-transparent green (like win tiles)
+            for _, tile in ipairs(tileCycle.tiles) do
+                local pixelX, pixelY = Grid.toPixels(tile.tileX, tile.tileY)
+                love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+            end
+
+            -- Draw the selected tile with a brighter color.
+            if #tileCycle.tiles > 0 then
+                local selectedTile = tileCycle.tiles[tileCycle.selectedIndex]
+                if selectedTile then
+                    love.graphics.setColor(0.2, 1.0, 0.2, 0.7) -- Brighter green
+                    local pixelX, pixelY = Grid.toPixels(selectedTile.tileX, selectedTile.tileY)
                     love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
                 end
             end

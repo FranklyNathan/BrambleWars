@@ -78,6 +78,8 @@ function World.new(gameMap)
             selectedAttackName = nil, -- The name of the attack being targeted
             attackAoETiles = nil, -- The shape of the attack for the targeting preview
             cycle = { active = false, targets = {}, selectedIndex = 1 },
+            secondary = { active = false, primaryTarget = nil, tiles = {}, selectedIndex = 1 }, -- For two-step targeting
+            tile_cycle = { active = false, tiles = {}, selectedIndex = 1 }, -- For cycling through specific ground tiles (e.g., Homecoming)
             rescue = { active = false, targets = {}, selectedIndex = 1 },
             drop = { active = false, tiles = {}, selectedIndex = 1 },
             shove = { active = false, targets = {}, selectedIndex = 1 },
