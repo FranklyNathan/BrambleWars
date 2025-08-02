@@ -99,7 +99,7 @@ local CharacterBlueprints = {
             witStat = 30,
         },
         attacks = {
-            "fireball", "eruption", "shockwave", "ice_beam"
+            "fireball", "eruption", "shockwave", "ice_beam", "taunt", "aegis"
         }
     },
     mortimer = {
@@ -148,8 +148,8 @@ local CharacterBlueprints = {
         movement = 5,
         weight = 7, -- Medium-Heavy
         equippedWeapon = "travelers_whip",
-        dominantColor = {1.0, 0.8, 0.1}, -- Cedric: Electric Yellow
-        passives = {"Whiplash", "Captor"},
+        dominantColor = {1.0, 0.8, 0.1}, -- Cedric: Electric Yellow,
+        passives = {"Whiplash", "Captor", "Infernal"},
         growths = {
             maxHp = 85,
             attackStat = 55,
@@ -220,7 +220,7 @@ local CharacterBlueprints = {
             witStat = 50,
         },
         attacks = {
-            "impale", "grovecall", "hookshot", "bodyguard"
+            "impale", "grovecall", "hookshot", "bodyguard", "battle_cry"
         }
     },
     dupe = {

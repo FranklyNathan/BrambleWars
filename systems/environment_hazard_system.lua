@@ -44,15 +44,6 @@ local function check_hazards_for_unit(unit, world)
                 unit.hp = 0
                 unit.components.sinking = { timer = 1.5, initialTimer = 1.5 }
                 EventBus:dispatch("unit_died", { victim = unit, killer = nil, world = world, reason = {type = "drown"} })
-
-                -- If a player unit drowns mid-move, their turn is over.
-                -- This prevents the game from getting stuck waiting for an action from a dead unit.
-                if unit.type == "player" then
-                    unit.hasActed = true
-                    unit.components.movement_path = nil -- Stop any further movement.
-                    -- Return control to the player.
-                    set_player_turn_state("free_roam", world)
-                end
             end
         end
     end

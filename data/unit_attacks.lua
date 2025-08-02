@@ -713,6 +713,79 @@ UnitAttacks.ascension = function(attacker, world, attackInstanceId)
     return true
 end
 
+UnitAttacks.taunt = function(attacker, world, attackInstanceId)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+
+    local attackName = "taunt"
+    local attackData = AttackBlueprints[attackName]
+    if not attackData then return false end
+
+    -- Apply the status effect directly.
+    local statusToApply = {
+        type = attackData.statusEffect.type,
+        duration = attackData.statusEffect.duration,
+        attacker = attacker -- IMPORTANT: store who applied the taunt
+    }
+    StatusEffectManager.applyStatusEffect(target, statusToApply, world)
+
+    -- Create a visual effect on the target tile.
+    EffectFactory.addAttackEffect(world, {
+        attacker = attacker, attackName = attackName, x = target.x, y = target.y,
+        width = target.size, height = target.size, color = {1, 0.2, 0.2, 0.7},
+        targetType = "none", specialProperties = { attackInstanceId = attackInstanceId }
+    })
+    return true
+end
+
+UnitAttacks.aegis = function(attacker, world, attackInstanceId)
+    local attackName = "aegis"
+    local attackData = AttackBlueprints[attackName]
+    if not attackData then return false end
+
+    -- Apply the status effect to self.
+    local statusToApply = {
+        type = attackData.statusEffect.type,
+        duration = attackData.statusEffect.duration,
+        attacker = attacker
+    }
+    StatusEffectManager.applyStatusEffect(attacker, statusToApply, world)
+
+    -- Create a visual effect on the user.
+    EffectFactory.addAttackEffect(world, {
+        attacker = attacker, attackName = attackName, x = attacker.x, y = attacker.y,
+        width = attacker.size, height = attacker.size, color = {1, 0.85, 0.2, 0.7},
+        targetType = "none", specialProperties = { attackInstanceId = attackInstanceId }
+    })
+    return true
+end
+
+UnitAttacks.battle_cry = function(attacker, world, attackInstanceId)
+    local attackName = "battle_cry"
+    local attackData = AttackBlueprints[attackName]
+    if not attackData then return false end
+
+    -- 1. Apply Invincible to self. Duration is 1.5 to last through the end-of-turn tick.
+    StatusEffectManager.applyStatusEffect(attacker, {type = "invincible", duration = 1.5, attacker = attacker}, world)
+
+    -- 2. Find and taunt all enemies within range using the centralized query.
+    local targets = WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
+    for _, target in ipairs(targets) do
+        -- Apply Taunt status to the enemy.
+        StatusEffectManager.applyStatusEffect(target, {type = "taunted", duration = 1, attacker = attacker}, world)
+    end
+
+    -- 3. Create a single, large visual effect centered on the attacker to represent the cry.
+    EffectFactory.addAttackEffect(world, {
+        attacker = attacker, attackName = attackName, x = attacker.x, y = attacker.y,
+        width = attacker.size, height = attacker.size,
+        -- A distinct color for the battle cry effect.
+        color = {1, 0.5, 0, 0.7}, -- Orange
+        targetType = "none", specialProperties = { attackInstanceId = attackInstanceId }
+    })
+    return true
+end
+
 UnitAttacks.homecoming = function(attacker, world, attackInstanceId)
     -- 1. Get the selected destination tile from the tile_cycle targeting state.
     -- The input handler has already validated the tile and set up the state.

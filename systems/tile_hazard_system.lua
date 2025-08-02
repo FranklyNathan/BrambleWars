@@ -23,7 +23,18 @@ local function on_unit_tile_changed(data)
         if not blueprint then return end
 
         if status.type == "aflame" then
-            if blueprint.damage and blueprint.damage > 0 then
+            -- Check for Infernal passive before applying damage.
+            local hasInfernal = false
+            if unit.type and world.teamPassives[unit.type] and world.teamPassives[unit.type].Infernal then
+                for _, provider in ipairs(world.teamPassives[unit.type].Infernal) do
+                    if provider == unit then
+                        hasInfernal = true
+                        break
+                    end
+                end
+            end
+
+            if not hasInfernal and blueprint.damage and blueprint.damage > 0 then
                 CombatActions.applyDirectDamage(world, unit, blueprint.damage, false, nil)
             end
         elseif status.type == "frozen" then

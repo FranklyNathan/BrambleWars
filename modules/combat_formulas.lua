@@ -44,8 +44,13 @@ function CombatFormulas.calculateHitChance(attacker, defender, moveAccuracy)
 end
 
 -- Helper to calculate base damage for physical and magical attacks
-function CombatFormulas.calculateBaseDamage(attacker, defender, attackData, attackName)
-    -- New: Check for true damage, which bypasses all other calculations.
+function CombatFormulas.calculateBaseDamage(attacker, defender, attackData, attackName, world)
+    -- Check for Invincible status on the defender first. It blocks ALL incoming damage.
+    if defender.statusEffects and defender.statusEffects.invincible then
+        return 0 -- Immune to all damage.
+    end
+
+    -- Check for true damage, which bypasses all other calculations except invincibility.
     if attackData.deals_true_damage then
         return attackData.power or 0
     end
@@ -98,7 +103,7 @@ end
 
 -- Helper to calculate final damage including base damage and critical hit multiplier
 function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isCrit, attackName, world)
-    local damage = CombatFormulas.calculateBaseDamage(attacker, defender, attackData, attackName)
+    local damage = CombatFormulas.calculateBaseDamage(attacker, defender, attackData, attackName, world)
     if isCrit then
         damage = damage * 2
     end

@@ -8,6 +8,15 @@ local RescueHandler = require("modules.rescue_handler")
 
 local DeathSystem = {}
 
+-- Helper function to change the player's turn state and notify other systems.
+local function set_player_turn_state(newState, world)
+    local oldState = world.ui.playerTurnState
+    if oldState ~= newState then
+        world.ui.playerTurnState = newState
+        EventBus:dispatch("player_state_changed", { oldState = oldState, newState = newState, world = world })
+    end
+end
+
 -- Event listener for unit deaths
 EventBus:register("unit_died", function(data)
     local victim = data.victim
@@ -23,8 +32,12 @@ EventBus:register("unit_died", function(data)
 
     -- If a player unit dies mid-move (e.g., from a trap or drowning),
     -- ensure the visual effect on the destination tile is cleared.
+    -- Also, end their turn and return control to the player to prevent getting stuck.
     if victim and victim.type == "player" and victim.components.movement_path then
         world.ui.pathing.moveDestinationEffect = nil
+        victim.hasActed = true
+        victim.components.movement_path = nil -- Stop any further movement.
+        set_player_turn_state("free_roam", world)
     end
 
     if victim and victim.hp <= 0 and not victim.isMarkedForDeletion and not victim.components.fade_out then

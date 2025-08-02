@@ -183,8 +183,7 @@ local function findBestPlayerAttackAction(enemy, reachableTiles, world)
                 if attackData and enemy.wisp >= (attackData.wispCost or 0) then
                     -- Check if we can attack from the current position.
                     local currentTargets = WorldQueries.findValidTargetsForAttack(enemy, attackName, world)
-                    if table_contains(currentTargets, targetPlayer) then
-                        local damage = CombatFormulas.calculateFinalDamage(enemy, targetPlayer, attackData, false)
+                    if table_contains(currentTargets, targetPlayer) then                        local damage = CombatFormulas.calculateFinalDamage(enemy, targetPlayer, attackData, false, attackName, world)
                         local hitChance = CombatFormulas.calculateHitChance(enemy, targetPlayer, attackData.Accuracy or 100)
                         local expectedDamage = damage * hitChance
                         local score = expectedDamage - (attackData.wispCost or 0) * 5
@@ -203,7 +202,7 @@ local function findBestPlayerAttackAction(enemy, reachableTiles, world)
                     if attackData.targeting_style == "cycle_target" then
                         local bestMovePosKey = findBestCycleTargetAttackPosition(enemy, targetPlayer, attackName, reachableTiles, world)
                         if bestMovePosKey then
-                            local damage = CombatFormulas.calculateFinalDamage(enemy, targetPlayer, attackData, false)
+                            local damage = CombatFormulas.calculateFinalDamage(enemy, targetPlayer, attackData, false, attackName, world)
                             local hitChance = CombatFormulas.calculateHitChance(enemy, targetPlayer, attackData.Accuracy or 100)
                             local expectedDamage = damage * hitChance
                             local score = (expectedDamage - (attackData.wispCost or 0) * 5) - 1 -- A small penalty for moving first.
@@ -329,6 +328,77 @@ function EnemyTurnSystem.update(dt, world)
         local reachableTiles = pathData.reachableTiles
         local came_from = pathData.came_from
         local cost_so_far = pathData.cost_so_far
+
+        -- New: Check for Taunt status. This overrides all other AI logic.
+        if actingEnemy.statusEffects and actingEnemy.statusEffects.taunted then
+            local tauntData = actingEnemy.statusEffects.taunted
+            local taunter = tauntData.attacker
+
+            if taunter and taunter.hp > 0 then
+                -- This enemy is taunted and must target the taunter.
+                local bestTauntAttack = nil
+                local bestScore = -1
+                local all_moves = WorldQueries.getUnitMoveList(actingEnemy)
+
+                for _, attackName in ipairs(all_moves) do
+                    local attackData = AttackBlueprints[attackName]
+                    if attackData and actingEnemy.wisp >= (attackData.wispCost or 0) and attackData.useType ~= "support" then
+                        -- Check if can attack from current position
+                        local currentTargets = WorldQueries.findValidTargetsForAttack(actingEnemy, attackName, world)
+                        if table_contains(currentTargets, taunter) then
+                            local score = 100 -- Prioritize attacking now over moving.
+                            if score > bestScore then
+                                bestScore = score
+                                bestTauntAttack = { type = "attack_now", attackName = attackName, target = taunter }
+                            end
+                        end
+
+                        -- Check if can move to attack
+                        if attackData.targeting_style == "cycle_target" then
+                            local bestMovePosKey = findBestCycleTargetAttackPosition(actingEnemy, taunter, attackName, reachableTiles, world)
+                            if bestMovePosKey then
+                                local score = 99 -- Slightly lower score for moving.
+                                if score > bestScore then
+                                    bestScore = score
+                                    bestTauntAttack = { type = "move_and_attack", attackName = attackName, target = taunter, destinationKey = bestMovePosKey }
+                                end
+                            end
+                        end
+                    end
+                end
+
+                -- Execute the best found action against the taunter.
+                if bestTauntAttack then
+                    if bestTauntAttack.type == "attack_now" then
+                        world.ui.targeting.cycle.targets = {bestTauntAttack.target}
+                        UnitAttacks[bestTauntAttack.attackName](actingEnemy, world)
+                        actingEnemy.components.action_in_progress = true
+                    elseif bestTauntAttack.type == "move_and_attack" then
+                        local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
+                        local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, bestTauntAttack.destinationKey)
+                        actingEnemy.components.movement_path = path
+                        actingEnemy.speedMultiplier = 2
+                        actingEnemy.components.ai.pending_attack = { name = bestTauntAttack.attackName, target = bestTauntAttack.target }
+                    end
+                    return -- Taunted action decided.
+                end
+
+                -- No attack is possible, so just move closer.
+                local moveDestinationKey = findBestMoveOnlyTile(actingEnemy, taunter, reachableTiles, world)
+                if moveDestinationKey then
+                    local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
+                    local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, moveDestinationKey)
+                    actingEnemy.components.movement_path = path
+                    actingEnemy.speedMultiplier = 2
+                    actingEnemy.components.action_in_progress = true
+                    return
+                end
+            else
+                -- Taunter is dead, remove the status.
+                local StatusEffectManager = require("modules.status_effect_manager")
+                StatusEffectManager.remove(actingEnemy, "taunted", world)
+            end
+        end
 
         -- AI Decision Making Logic
 

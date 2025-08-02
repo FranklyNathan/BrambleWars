@@ -163,7 +163,8 @@ function World.new(gameMap)
             Treacherous = {},
             Thunderguard = {},
             Unbound = {},
-            Combustive = {}
+            Combustive = {},
+            Infernal = {},
         },
         enemy = {
             -- Enemies can also have team-wide passives.
@@ -179,7 +180,8 @@ function World.new(gameMap)
             Treacherous = {},
             Thunderguard = {},
             Unbound = {},
-            Combustive = {}
+            Combustive = {},
+            Infernal = {}
         }
     }
 
@@ -376,12 +378,6 @@ function World.new(gameMap)
         Camera.y = math.max(0, math.min(cameraStartY, mapPixelHeight - Config.VIRTUAL_HEIGHT))
     end
 
-    -- Manually initialize start-of-turn positions for the very first turn.
-    -- This ensures the "undo move" feature works from the start.
-    for _, player in ipairs(self.players) do
-        player.startOfMoveTileX, player.startOfMoveTileY = player.tileX, player.tileY
-    end
-
     -- Set the initial cursor position to the first player.
     if self.players[1] then
         self.ui.mapCursorTile.x = self.players[1].tileX
@@ -426,11 +422,6 @@ function World:endTurn()
         -- Reset player state for their upcoming turn.
         for _, player in ipairs(self.players) do
            player.hasActed = false
-           -- Store the starting position for the upcoming move, in case of cancellation.
-           player.startOfMoveTileX, player.startOfMoveTileY = player.tileX, player.tileY
-           player.startOfMoveDirection = player.lastDirection
-           -- Reset the committed move flag for the new turn.
-           player.components.move_is_committed = nil
         end
         -- Clear the AI pathfinding cache for the next enemy turn.
         self.enemyPathfindingCache = {}

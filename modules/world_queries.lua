@@ -446,6 +446,33 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
     local attackData = AttackBlueprints[attackName]
     if not attackData then return {} end
 
+    -- New: Check if the attacker is taunted.
+    if attacker.statusEffects and attacker.statusEffects.taunted then
+        local tauntData = attacker.statusEffects.taunted
+        local taunter = tauntData.attacker
+
+        if taunter and taunter.hp > 0 then
+            -- The unit is taunted. They can only target the taunter.
+            -- We need to check if the taunter is a valid target for the selected attack.
+            -- To do this, we can run the normal targeting logic but only check against the taunter.
+            attackData.name = attackName -- Ensure name is set for helpers
+            local finder = targetFinders[attackData.targeting_style]
+            if finder then
+                local allPossibleTargets = finder(attacker, attackData, world)
+                for _, possibleTarget in ipairs(allPossibleTargets) do
+                    if possibleTarget == taunter then
+                        return { taunter } -- The taunter is a valid target. Return ONLY them.
+                    end
+                end
+            end
+            return {} -- The taunter is not a valid target for this move (e.g., out of range).
+        else
+            -- Taunter is dead or gone, so the effect is broken.
+            local StatusEffectManager = require("modules.status_effect_manager")
+            StatusEffectManager.remove(attacker, "taunted", world)
+        end
+    end
+
     -- Add the attack name to the data table for the helper functions to use.
     attackData.name = attackName
 

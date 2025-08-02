@@ -322,6 +322,38 @@ local AttackBlueprints = {
         description = "Paralyzes all enemies within a wide radius."
     },
 
+    taunt = {
+        name = "Taunt",
+        power = 0,
+        wispCost = 2,
+        useType = "utility",
+        targeting_style = "cycle_target",
+        range = 5,
+        statusEffect = {type = "taunted", duration = 2},
+        description = "Forces an enemy to target only you for 2 turns."
+    },
+
+    aegis = {
+        name = "Aegis",
+        power = 0,
+        wispCost = 4,
+        useType = "utility",
+        targeting_style = "no_target",
+        statusEffect = {type = "invincible", duration = 1.5},
+        description = "Become immune to damage for 1 turn."
+    },
+
+    battle_cry = {
+        name = "Battle Cry",
+        power = 0,
+        wispCost = 3,
+        useType = "utility",
+        targeting_style = "auto_hit_all",
+        range = 8, -- For the taunt effect
+        affects = "enemies",
+        description = "Taunts all enemies within 8 range for 1 turn and grants user Invincibility for 1 turn."
+    },
+
     -- Movement Attacks
     quick_step = {
         name = "Quick Step",

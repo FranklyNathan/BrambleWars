@@ -53,6 +53,10 @@ local PassiveBlueprints = {
     Combustive = {
         name = "Combustive",
         description = "Explodes upon death, dealing 10 damage to all units within 1 range."
+    },
+    Infernal = {
+        name = "Infernal",
+        description = "Immune to Aflame tile damage. Gains +5 Atk/Def/Mag/Res while on an Aflame tile."
     }
 }
 

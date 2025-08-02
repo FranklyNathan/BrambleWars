@@ -221,6 +221,24 @@ local function draw_visual_effect_overlays(entity, currentAnim, spriteSheet, w, 
         currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
     end
 
+    -- If taunted, draw a semi-transparent pulsating red overlay.
+    if entity.statusEffects.taunted then
+        love.graphics.setShader(Assets.shaders.solid_color)
+        local pulse = (math.sin(love.timer.getTime() * 8) + 1) / 2 -- 0 to 1
+        local effectAlpha = 0.2 + pulse * 0.3 -- 0.2 to 0.5
+        Assets.shaders.solid_color:send("solid_color", {1.0, 0.2, 0.2, effectAlpha * baseAlpha})
+        currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
+    end
+
+    -- If invincible, draw a semi-transparent pulsating gold overlay.
+    if entity.statusEffects.invincible then
+        love.graphics.setShader(Assets.shaders.solid_color)
+        local pulse = (math.sin(love.timer.getTime() * 6) + 1) / 2 -- 0 to 1
+        local effectAlpha = 0.3 + pulse * 0.3 -- 0.3 to 0.6
+        Assets.shaders.solid_color:send("solid_color", {1.0, 0.85, 0.2, effectAlpha * baseAlpha}) -- Gold color
+        currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
+    end
+
     -- If stunned, draw a static purple overlay.
     if entity.statusEffects.stunned then
         love.graphics.setShader(Assets.shaders.solid_color)

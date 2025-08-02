@@ -171,11 +171,6 @@ local function handle_free_roam_input(key, world)
                 world.ui.pathing.movementPath = {} -- Start with an empty path
                 world.ui.pathing.cursorPath = {} -- Start with an empty cursor path
 
-                -- Store the unit's position at the start of this specific move action.
-                -- This is crucial for the "undo" logic to work correctly for multi-move turns.
-                unit.startOfMoveTileX, unit.startOfMoveTileY = unit.tileX, unit.tileY
-                unit.startOfMoveDirection = unit.lastDirection
-
                 -- Add a selection flash effect to the unit.
                 unit.components.selection_flash = { timer = 0, duration = 0.25 }
             elseif unit.type == "enemy" then
@@ -557,23 +552,19 @@ local function handle_action_menu_input(key, world)
         end
 
         local unit = menu.unit
-        -- If the unit triggered a hazard during movement, the move is committed and cannot be undone.
-        if unit and unit.components.move_is_committed then
-            -- TODO: Play an error/invalid sound effect here.
-            return -- Block the cancel action.
-        end
+        -- Use the centralized pre_move_state to revert the unit. This now handles HP as well.
+        if unit and unit.components.pre_move_state then
+            local state = unit.components.pre_move_state
 
-        if unit and unit.startOfMoveTileX then
-            -- Teleport unit back to its starting position
-            unit.tileX, unit.tileY = unit.startOfMoveTileX, unit.startOfMoveTileY
-            EventBus:dispatch("unit_tile_changed", { unit = unit, world = world })
+            -- Revert HP, position, and direction.
+            unit.hp = state.hp
+            unit.tileX, unit.tileY = state.tileX, state.tileY
+            unit.lastDirection = state.direction
+
+            -- Instantly snap pixel position to match the reverted tile position.
             unit.x, unit.y = Grid.toPixels(unit.tileX, unit.tileY)
             unit.targetX, unit.targetY = unit.x, unit.y
-
-            -- Restore the unit's direction to what it was at the start of the turn.
-            if unit.startOfMoveDirection then
-                unit.lastDirection = unit.startOfMoveDirection
-            end
+            EventBus:dispatch("unit_tile_changed", { unit = unit, world = world })
 
             -- Re-select the unit and allow them to move again
             set_player_turn_state("unit_selected", world)
@@ -804,47 +795,6 @@ local function handle_ground_aiming_input(key, world)
         world.ui.targeting.selectedAttackName= nil
         world.ui.targeting.attackAoETiles = nil
         world.ui.pathing.groundAimingGrid= nil -- Clear the grid
-    end
-end
-
--- Handles input when the player is cycling through specific ground tiles (e.g., for Homecoming).
-local function handle_tile_cycling_input(key, world)
-    local tileCycle = world.ui.targeting.tile_cycle
-    if not tileCycle.active then return end
-
-    local indexChanged = false
-    if key == "a" or key == "d" then -- Cycle tiles
-        if key == "a" then
-            tileCycle.selectedIndex = tileCycle.selectedIndex - 1
-            if tileCycle.selectedIndex < 1 then tileCycle.selectedIndex = #tileCycle.tiles end
-        else -- key == "d"
-            tileCycle.selectedIndex = tileCycle.selectedIndex + 1
-            if tileCycle.selectedIndex > #tileCycle.tiles then tileCycle.selectedIndex = 1 end
-        end
-        indexChanged = true
-    elseif key == "k" then -- Cancel
-        if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
-        set_player_turn_state("action_menu", world)
-        world.ui.menus.action.active = true
-        tileCycle.active = false
-        tileCycle.tiles = {}
-        world.ui.targeting.selectedAttackName = nil
-    elseif key == "j" then -- Confirm
-        local attacker = world.ui.menus.action.unit
-        local attackName = world.ui.targeting.selectedAttackName
-        -- The attack implementation will now read the selected tile from world.ui.targeting.tile_cycle
-        if AttackHandler.execute(attacker, attackName, world) then
-            finalize_player_action(attacker, world)
-        end
-    end
-
-    if indexChanged then
-        if Assets.sounds.cursor_move then Assets.sounds.cursor_move:stop(); Assets.sounds.cursor_move:play() end
-        local newTile = tileCycle.tiles[tileCycle.selectedIndex]
-        if newTile then
-            world.ui.mapCursorTile.x, world.ui.mapCursorTile.y = newTile.tileX, newTile.tileY
-            EventBus:dispatch("cursor_moved", { tileX = newTile.tileX, tileY = newTile.tileY, world = world })
-        end
     end
 end
 

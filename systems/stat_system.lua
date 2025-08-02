@@ -22,7 +22,9 @@ local MODIFIABLE_STATS = {
 }
 
 -- This is the core logic. It recalculates all final stats for a single unit.
-function StatSystem.recalculate_for_unit(unit)
+function StatSystem.recalculate_for_unit(unit, world)
+    -- Failsafe if world is not passed (e.g., from an older event call)
+    if not world then return end
 
     -- 1. Start with base stats.
     for _, statName in ipairs(MODIFIABLE_STATS) do
@@ -58,6 +60,28 @@ function StatSystem.recalculate_for_unit(unit)
         end
     end
 
+    -- 4. Apply modifiers from passives based on conditions (e.g., Infernal).
+    if unit.type and world.teamPassives[unit.type] and world.teamPassives[unit.type].Infernal then
+        local unitHasInfernal = false
+        for _, provider in ipairs(world.teamPassives[unit.type].Infernal) do
+            if provider == unit then
+                unitHasInfernal = true
+                break
+            end
+        end
+
+        if unitHasInfernal then
+            local posKey = unit.tileX .. "," .. unit.tileY
+            if world.tileStatuses[posKey] and world.tileStatuses[posKey].type == "aflame" then
+                local INFERNAL_BONUS = 5
+                unit.finalAttackStat = unit.finalAttackStat + INFERNAL_BONUS
+                unit.finalDefenseStat = unit.finalDefenseStat + INFERNAL_BONUS
+                unit.finalMagicStat = unit.finalMagicStat + INFERNAL_BONUS
+                unit.finalResistanceStat = unit.finalResistanceStat + INFERNAL_BONUS
+            end
+        end
+    end
+
     -- 4. Ensure stats don't fall below a minimum (e.g., 0).
     for _, statName in ipairs(MODIFIABLE_STATS) do
         local finalStatName = "final" .. capitalize(statName)
@@ -67,19 +91,25 @@ end
 
 -- Event handler for when a unit is added to the world.
 local function on_unit_added(data)
-    StatSystem.recalculate_for_unit(data.unit)
+    StatSystem.recalculate_for_unit(data.unit, data.world)
 end
 
 -- Event handler for when a status is applied or removed.
 -- The logic is the same for both: just recalculate everything.
 local function on_status_changed(data)
     -- The event payload for status effects uses 'target' for the unit.
-    StatSystem.recalculate_for_unit(data.target)
+    StatSystem.recalculate_for_unit(data.target, data.world)
 end
 
 -- Event handler for when a unit equips a new weapon.
 local function on_weapon_changed(data)
-    StatSystem.recalculate_for_unit(data.unit)
+    StatSystem.recalculate_for_unit(data.unit, data.world)
+end
+
+-- Event handler for when a unit moves to a new tile.
+-- This is crucial for conditional passives like Infernal.
+local function on_unit_tile_changed(data)
+    StatSystem.recalculate_for_unit(data.unit, data.world)
 end
 
 -- Register the event listeners. This code runs when the module is required.
@@ -88,5 +118,6 @@ EventBus:register("status_applied", on_status_changed)
 EventBus:register("status_removed", on_status_changed)
 -- This event will be dispatched by the UI when a weapon is equipped.
 EventBus:register("weapon_equipped", on_weapon_changed)
+EventBus:register("unit_tile_changed", on_unit_tile_changed)
 
 return StatSystem

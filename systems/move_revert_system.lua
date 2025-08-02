@@ -30,7 +30,8 @@ local function on_player_state_changed(data)
             current_selected_unit.components.pre_move_state = {
                 hp = current_selected_unit.hp,
                 tileX = current_selected_unit.tileX,
-                tileY = current_selected_unit.tileY
+                tileY = current_selected_unit.tileY,
+                direction = current_selected_unit.lastDirection
             }
         end
     end
@@ -47,6 +48,11 @@ local function on_player_state_changed(data)
             last_selected_unit.hp = state.hp
             last_selected_unit.tileX = state.tileX
             last_selected_unit.tileY = state.tileY
+
+            -- Restore the unit's direction to what it was at the start of the move.
+            if state.direction then
+                last_selected_unit.lastDirection = state.direction
+            end
 
             -- Instantly snap pixel position to match the reverted tile position.
             last_selected_unit.x, last_selected_unit.y = Grid.toPixels(state.tileX, state.tileY)
