@@ -31,7 +31,8 @@ local function on_player_state_changed(data)
                 hp = current_selected_unit.hp,
                 tileX = current_selected_unit.tileX,
                 tileY = current_selected_unit.tileY,
-                direction = current_selected_unit.lastDirection
+                direction = current_selected_unit.lastDirection,
+                frozenTiles = {} -- For Frozenfoot passive
             }
         end
     end
@@ -57,6 +58,14 @@ local function on_player_state_changed(data)
             -- Instantly snap pixel position to match the reverted tile position.
             last_selected_unit.x, last_selected_unit.y = Grid.toPixels(state.tileX, state.tileY)
             last_selected_unit.targetX, last_selected_unit.targetY = last_selected_unit.x, last_selected_unit.y
+
+            -- New: Revert any tiles that were frozen by the Frozenfoot passive during this move.
+            if state.frozenTiles and #state.frozenTiles > 0 then
+                for _, posKey in ipairs(state.frozenTiles) do
+                    -- Setting the status to nil reverts it to its base state (water).
+                    world.tileStatuses[posKey] = nil
+                end
+            end
 
             -- The move has been reverted, so clear the stored state.
             clear_pre_move_state(last_selected_unit)

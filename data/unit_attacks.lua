@@ -683,6 +683,44 @@ UnitAttacks.trap_set = function(square, world, attackInstanceId)
     return true
 end
 
+UnitAttacks.sow_seeds = function(attacker, world, attackInstanceId)
+    local attackName = "sow_seeds"
+    local attackData = AttackBlueprints[attackName]
+    if not attackData then return false end
+ 
+    -- The "+" shape pattern: current tile + 4 adjacent.
+    local pattern = {
+        {dx = 0, dy = 0}, -- Center
+        {dx = 0, dy = -1}, {dx = 0, dy = 1}, {dx = -1, dy = 0}, {dx = 1, dy = 0} -- Adjacent
+    }
+ 
+    local grassPlanted = false
+ 
+    for _, coord in ipairs(pattern) do
+        local tileX, tileY = attacker.tileX + coord.dx, attacker.tileY + coord.dy
+        local posKey = tileX .. "," .. tileY
+ 
+        -- 1. Validate that the tile is valid for Tall Grass and doesn't already have it.
+        if WorldQueries.isTileValidForGroundStatus(tileX, tileY, world) then
+            if not (world.tileStatuses[posKey] and world.tileStatuses[posKey].type == "tall_grass") then
+                -- 2. Apply the 'tall_grass' status to the tile.
+                world.tileStatuses[posKey] = { type = "tall_grass" }
+                grassPlanted = true
+ 
+                -- 3. Create a visual effect for feedback on each tile.
+                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+                EffectFactory.addAttackEffect(world, {
+                    attacker = attacker, attackName = attackName, x = pixelX, y = pixelY,
+                    width = Config.SQUARE_SIZE, height = Config.SQUARE_SIZE, color = {0.2, 0.8, 0.3, 0.7},
+                    targetType = "none", specialProperties = { attackInstanceId = attackInstanceId }
+                })
+            end
+        end
+    end
+ 
+    return grassPlanted -- Succeeds if at least one patch of grass was planted.
+end
+
 UnitAttacks.ascension = function(attacker, world, attackInstanceId)
     -- 1. Get the target tile from the ground aiming cursor.
     local targetTileX, targetTileY = world.ui.mapCursorTile.x, world.ui.mapCursorTile.y

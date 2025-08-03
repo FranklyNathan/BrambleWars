@@ -45,8 +45,15 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.magicStat = blueprint.magicStat
         square.resistanceStat = blueprint.resistanceStat
         square.witStat = blueprint.witStat
-        square.maxWisp = blueprint.wispStat
-        square.equippedWeapon = blueprint.equippedWeapon
+        square.maxWisp = blueprint.wispStat        
+        -- A shallow copy is sufficient here since weapon names are strings.
+        -- This prevents all instances of a character type from sharing the same weapon table.
+        square.equippedWeapons = {}
+        if blueprint.equippedWeapons then
+            for slot, weaponName in pairs(blueprint.equippedWeapons) do
+                square.equippedWeapons[slot] = weaponName
+            end
+        end
         square.attacks = blueprint.attacks
         square.displayName = blueprint.displayName -- Use display name from blueprint
         square.class = blueprint.class
@@ -86,6 +93,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
     elseif square.type == "enemy" then
         square.enemyType = subType -- e.g., "standard"
         local blueprint = EnemyBlueprints[subType]
+        square.color = {blueprint.dominantColor[1], blueprint.dominantColor[2], blueprint.dominantColor[3], 1}
         square.originType = blueprint.originType
         square.maxHp = blueprint.maxHp
         square.attackStat = blueprint.attackStat
@@ -94,8 +102,14 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.resistanceStat = blueprint.resistanceStat
         square.witStat = blueprint.witStat
         square.maxWisp = blueprint.wispStat
-        square.class = blueprint.class
-        square.equippedWeapon = blueprint.equippedWeapon
+        square.class = blueprint.class        
+        -- A shallow copy is sufficient here since weapon names are strings.
+        square.equippedWeapons = {}
+        if blueprint.equippedWeapons then
+            for slot, weaponName in pairs(blueprint.equippedWeapons) do
+                square.equippedWeapons[slot] = weaponName
+            end
+        end
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
         square.weight = blueprint.weight
         square.attacks = blueprint.attacks

@@ -67,8 +67,9 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
                                 canLand = false -- Cannot land on any non-trap obstacle.
                             end
                     elseif isWater then 
-                            canPass = startUnit.isFlying or startUnit.canSwim
-                            canLand = (startUnit.isFlying or startUnit.canSwim) and not occupyingUnit
+                            local hasFrozenfoot = WorldQueries.hasPassive(startUnit, "Frozenfoot", world)
+                            canPass = startUnit.isFlying or startUnit.canSwim or hasFrozenfoot
+                            canLand = (startUnit.isFlying or startUnit.canSwim or hasFrozenfoot) and not occupyingUnit
                         elseif occupyingUnit then
                         if occupyingUnit.type == startUnit.type then
                             -- Can always pass through allies.

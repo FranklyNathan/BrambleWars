@@ -401,6 +401,15 @@ local AttackBlueprints = {
         drawsTile = true,
         description = "Summons a bear trap on an empty tile."
     },
+    sow_seeds = {
+        name = "Sow Seeds",
+        power = 0,
+        wispCost = 1,
+        useType = "utility",
+        targeting_style = "no_target",
+        drawsTile = true,
+        description = "Creates a patch of Tall Grass in a '+' shape around the user."
+    },
     ascension = {
         name = "Ascension",
         power = 0,

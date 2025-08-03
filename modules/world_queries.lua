@@ -8,6 +8,7 @@ local AttackBlueprints = require("data.attack_blueprints")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
 local WeaponBlueprints = require("data.weapon_blueprints")
+local PassiveBlueprints = require("data/passive_blueprints")
 
 local WorldQueries = {}
 
@@ -40,6 +41,7 @@ local function is_valid_unit_at(unit, tileX, tileY, excludeUnit)
     return unit ~= excludeUnit and
            unit.hp > 0 and
            not (unit.components and unit.components.ascended) and
+           not (unit.components and unit.components.reviving) and
            unit.tileX == tileX and
            unit.tileY == tileY
 end
@@ -95,6 +97,19 @@ function WorldQueries.isTileWater_Base(tileX, tileY, world)
     return tile ~= nil
 end
 
+-- A new helper to check if a tile is valid for a ground-based status (Aflame, Tall Grass, etc.)
+function WorldQueries.isTileValidForGroundStatus(tileX, tileY, world)
+    -- Cannot be placed on water (frozen or not)
+    if WorldQueries.isTileWater_Base(tileX, tileY, world) then
+        return false
+    end
+    -- Cannot be placed on a tile with an obstacle
+    if WorldQueries.getObstacleAt(tileX, tileY, world) then
+        return false
+    end
+    return true
+end
+
 -- A comprehensive check to see if a unit can end its movement on a specific tile.
 function WorldQueries.isTileLandable(tileX, tileY, unit, world)
     -- A tile is not landable if it's outside the map.
@@ -109,8 +124,9 @@ function WorldQueries.isTileLandable(tileX, tileY, unit, world)
     end
 
     if WorldQueries.isTileWater(tileX, tileY, world) then
-        -- Only flying units can land on water. A nil unit is treated as non-flying.
-        return unit and unit.isFlying
+        -- Flying, swimming, or Frozenfoot units can land on water. A nil unit is treated as non-flying.
+        local hasFrozenfoot = unit and WorldQueries.hasPassive(unit, "Frozenfoot", world)
+        return unit and (unit.isFlying or unit.canSwim or hasFrozenfoot)
     end
 
     -- Check if another unit is on the tile.
@@ -163,14 +179,20 @@ function WorldQueries.getUnitMovement(unit)
 end
 
 -- Helper to check for Treacherous passive
-function WorldQueries.hasTreacherous(unit, world)
-    if not unit or not world or not world.teamPassives[unit.type] or not world.teamPassives[unit.type].Treacherous then return false end
-    for _, provider in ipairs(world.teamPassives[unit.type].Treacherous) do
+function WorldQueries.hasPassive(unit, passiveName, world)
+    if not unit or not world or not unit.type or not world.teamPassives[unit.type] or not world.teamPassives[unit.type][passiveName] then
+        return false
+    end
+    for _, provider in ipairs(world.teamPassives[unit.type][passiveName]) do
         if provider == unit then return true end
     end
     return false
 end
 
+-- Helper to check for Treacherous passive
+function WorldQueries.hasTreacherous(unit, world)
+    return WorldQueries.hasPassive(unit, "Treacherous", world)
+end
 -- Helper to get a list of potential targets based on an attack's 'affects' property.
 local function getPotentialTargets(attacker, attackData, world)
     local potentialTargets = {}
@@ -679,24 +701,33 @@ function WorldQueries.getUnitMoveList(unit)
     local all_moves = {}
     local move_exists = {} -- Use a set to track existing moves and prevent duplicates
 
-    -- 1. Add the basic attack and granted moves from the equipped weapon.
-    if unit.equippedWeapon and WeaponBlueprints[unit.equippedWeapon] then
-        local weapon = WeaponBlueprints[unit.equippedWeapon]
-        -- Add the weapon's basic attack first. This is crucial for counter-attack logic.
-        local basicAttackName = WEAPON_TYPE_TO_BASIC_ATTACK[weapon.type]
-        if basicAttackName and not move_exists[basicAttackName] then
-            table.insert(all_moves, basicAttackName)
-            move_exists[basicAttackName] = true
-        end
-        -- Add any special moves the weapon grants.
-        if weapon.grants_moves then
-            for _, attackName in ipairs(weapon.grants_moves) do
-                if not move_exists[attackName] then table.insert(all_moves, attackName); move_exists[attackName] = true end
+    -- 1. Add basic attacks from all equipped weapons first. This is crucial for counter-attack logic.
+    if unit.equippedWeapons then
+        for _, weaponName in ipairs(unit.equippedWeapons) do
+            local weapon = WeaponBlueprints[weaponName]
+            if weapon then
+                local basicAttackName = WEAPON_TYPE_TO_BASIC_ATTACK[weapon.type]
+                if basicAttackName and not move_exists[basicAttackName] then
+                    table.insert(all_moves, basicAttackName)
+                    move_exists[basicAttackName] = true
+                end
             end
         end
     end
 
-    -- 2. Add moves from the character's innate blueprint list.
+    -- 2. Add any special moves the weapons grant.
+    if unit.equippedWeapons then
+        for _, weaponName in ipairs(unit.equippedWeapons) do
+            local weapon = WeaponBlueprints[weaponName]
+            if weapon and weapon.grants_moves then
+                for _, attackName in ipairs(weapon.grants_moves) do
+                    if not move_exists[attackName] then table.insert(all_moves, attackName); move_exists[attackName] = true end
+                end
+            end
+        end
+    end
+
+    -- 3. Add moves from the character's innate blueprint list.
     local blueprint = (unit.type == "player") and CharacterBlueprints[unit.playerType] or EnemyBlueprints[unit.enemyType]
     if blueprint and blueprint.attacks then
         for _, attackName in ipairs(blueprint.attacks) do
@@ -713,6 +744,12 @@ end
 function WorldQueries.getUnitPassiveList(unit)
     if not unit then return {} end
 
+    -- If passives are overridden (e.g., by Necromantia + Proliferate),
+    -- return that list directly. It is the single source of truth.
+    if unit.overriddenPassives then
+        return unit.overriddenPassives
+    end
+
     local all_passives = {}
     local passive_exists = {} -- Use a set to track existing passives and prevent duplicates
 
@@ -724,17 +761,78 @@ function WorldQueries.getUnitPassiveList(unit)
         end
     end
 
-    -- 2. Get passives from the equipped weapon.
-    if unit.equippedWeapon and WeaponBlueprints[unit.equippedWeapon] then
-        local weapon = WeaponBlueprints[unit.equippedWeapon]
-        if weapon.grants_passives then
-            for _, passiveName in ipairs(weapon.grants_passives) do
-                if not passive_exists[passiveName] then table.insert(all_passives, passiveName); passive_exists[passiveName] = true end
+    -- 2. Get passives from all equipped weapons.
+    if unit.equippedWeapons then
+        for _, weaponName in ipairs(unit.equippedWeapons) do
+            local weapon = WeaponBlueprints[weaponName]
+            if weapon and weapon.grants_passives then
+                for _, passiveName in ipairs(weapon.grants_passives) do
+                    if not passive_exists[passiveName] then table.insert(all_passives, passiveName); passive_exists[passiveName] = true end
+                end
             end
         end
     end
 
     return all_passives
+end
+
+--- Gets the total lifesteal percentage for a unit from all sources (weapon, passives).
+-- @param unit (table): The unit to check.
+-- @param world (table): The game world.
+-- @return (number): The total lifesteal percentage (e.g., 0.5 for 50%).
+function WorldQueries.getUnitLifestealPercent(unit, world)
+    if not unit then return 0 end
+
+    local totalLifesteal = 0
+
+    -- 1. Get lifesteal from all equipped weapons.
+    if unit.equippedWeapons then
+        for _, weaponName in ipairs(unit.equippedWeapons) do
+            local weapon = WeaponBlueprints[weaponName]
+            if weapon and weapon.lifesteal_percent then
+                totalLifesteal = totalLifesteal + weapon.lifesteal_percent
+            end
+        end
+    end
+
+    -- 2. Get lifesteal from passives (future-proofing).
+    if unit.type and world.teamPassives[unit.type] and world.teamPassives[unit.type].Vampirism then
+        local unitHasVampirism = false
+        for _, provider in ipairs(world.teamPassives[unit.type].Vampirism) do
+            if provider == unit then
+                unitHasVampirism = true
+                break
+            end
+        end
+        if unitHasVampirism then
+            local passiveData = PassiveBlueprints.Vampirism
+            if passiveData and passiveData.lifesteal_percent then
+                totalLifesteal = totalLifesteal + passiveData.lifesteal_percent
+            end
+        end
+    end
+
+    return totalLifesteal
+end
+
+--- Counts the number of living, non-carried allied units adjacent to a given unit.
+-- @param unit (table): The unit to check around.
+-- @param world (table): The game world.
+-- @return (number): The count of adjacent allies.
+function WorldQueries.countAdjacentAllies(unit, world)
+    if not unit then return 0 end
+    local count = 0
+    local allies = (unit.type == "player") and world.players or world.enemies
+    local neighbors = {{dx=0,dy=-1},{dx=0,dy=1},{dx=-1,dy=0},{dx=1,dy=0}}
+
+    for _, move in ipairs(neighbors) do
+        local checkX, checkY = unit.tileX + move.dx, unit.tileY + move.dy
+        local occupyingUnit = WorldQueries.getUnitAt(checkX, checkY, unit, world)
+        if occupyingUnit and occupyingUnit.type == unit.type then
+            count = count + 1
+        end
+    end
+    return count
 end
 
 return WorldQueries

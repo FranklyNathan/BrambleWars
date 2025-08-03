@@ -126,6 +126,65 @@ function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isC
         end
     end
 
+    -- New: Check for Spiritburn weapon property
+    if world and attacker.equippedWeapons and attacker.wisp > 0 then
+        local WeaponBlueprints = require("data.weapon_blueprints")
+        for _, weaponName in ipairs(attacker.equippedWeapons) do
+            local weapon = WeaponBlueprints[weaponName]
+            if weapon and weapon.spiritburn_bonus then
+                -- The wisp deduction happens in attack_resolution_system.
+                -- Here, we just apply the damage bonus.
+                damage = damage * weapon.spiritburn_bonus
+                break -- Apply bonus only once, even if both weapons have it.
+            end
+        end
+    end
+
+    -- New: Check for Harmony weapon property
+    if world and attacker.equippedWeapons then
+        local WeaponBlueprints = require("data.weapon_blueprints")
+        local totalHarmonyBonus = 0
+        for _, weaponName in ipairs(attacker.equippedWeapons) do
+            local weapon = WeaponBlueprints[weaponName]
+            if weapon and weapon.harmony_bonus_per_ally then
+                totalHarmonyBonus = totalHarmonyBonus + weapon.harmony_bonus_per_ally
+            end
+        end
+
+        if totalHarmonyBonus > 0 then
+            local WorldQueries = require("modules.world_queries")
+            local adjacentAllies = WorldQueries.countAdjacentAllies(attacker, world)
+            if adjacentAllies > 0 then
+                local harmonyMultiplier = 1 + (adjacentAllies * totalHarmonyBonus)
+                damage = damage * harmonyMultiplier
+            end
+        end
+    end
+
+    -- New: Check for Last Stand passive
+    if world and world.teamPassives[attacker.type] and world.teamPassives[attacker.type].LastStand then
+        local last_stand_providers = world.teamPassives[attacker.type].LastStand
+        local attackerHasLastStand = false
+        for _, provider in ipairs(last_stand_providers) do
+            if provider == attacker then
+                attackerHasLastStand = true
+                break
+            end
+        end
+
+        if attackerHasLastStand then
+            local onWinTile = false
+            if world.winTiles then
+                for _, winTile in ipairs(world.winTiles) do
+                    if attacker.tileX == winTile.x and attacker.tileY == winTile.y then
+                        onWinTile = true; break;
+                    end
+                end
+            end
+            if onWinTile then damage = damage * 2 end
+        end
+    end
+
     return damage
 end
 

@@ -213,25 +213,29 @@ local function handle_weapon_select_input(key, world)
         navigate_vertical_menu(key, menu, nil, world)
     elseif key == "k" then -- Cancel
         if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+        menu.unit = nil
+        menu.slot = nil
         menu.active = false
         set_player_turn_state("unit_info_locked", world)
     elseif key == "j" then -- Confirm selection
         local selectedOption = menu.options[menu.selectedIndex]
+        local unit = menu.unit
+        local slot = menu.slot
 
         if selectedOption == "unequip" then
-            local unit = menu.unit
-            if unit.equippedWeapon then
-                local weaponKey = unit.equippedWeapon
+            if unit.equippedWeapons[slot] then
+                local weaponKey = unit.equippedWeapons[slot]
                 world.playerInventory.weapons[weaponKey] = (world.playerInventory.weapons[weaponKey] or 0) + 1
-                unit.equippedWeapon = nil
+                unit.equippedWeapons[slot] = nil
                 EventBus:dispatch("weapon_equipped", { unit = unit, world = world })
             end
             menu.active = false
+            menu.unit = nil
+            menu.slot = nil
             set_player_turn_state("unit_info_locked", world)
             if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
         elseif selectedOption ~= "unequip" then
-            local unit = menu.unit
-            local oldWeaponKey = unit.equippedWeapon
+            local oldWeaponKey = unit.equippedWeapons[slot]
             local newWeaponKey = selectedOption
 
             -- 1. Add the old weapon back to the inventory if one was equipped.
@@ -243,9 +247,11 @@ local function handle_weapon_select_input(key, world)
             world.playerInventory.weapons[newWeaponKey] = world.playerInventory.weapons[newWeaponKey] - 1
 
             -- 3. Equip the new weapon and dispatch the event.
-            unit.equippedWeapon = newWeaponKey
+            unit.equippedWeapons[slot] = newWeaponKey
             EventBus:dispatch("weapon_equipped", { unit = unit, world = world })
             -- Close the menu
+            menu.unit = nil
+            menu.slot = nil
             menu.active = false
             set_player_turn_state("unit_info_locked", world)
             if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
@@ -272,13 +278,23 @@ local function move_unit_info_selection(key, world)
     local moveList = WorldQueries.getUnitMoveList(menu.unit)
     local numMoves = #moveList
 
+    local hasDualWielder = false
+    for _, p in ipairs(passiveList) do
+        if p == "DualWielder" then
+            hasDualWielder = true
+            break
+        end
+    end
+    local numWeaponSlots = hasDualWielder and 2 or 1
+
     local NAME_INDEX = 1
     local CLASS_INDEX = 2
-    local WEAPON_INDEX = 3
-    local HP_INDEX = 4
-    local WISP_INDEX = 5
-    local STATS_START = 6
-    local STATS_END = 11 -- 3 rows of 2 stats each = 6 items. 6 to 11.
+    local WEAPON_START_INDEX = 3
+    local WEAPON_END_INDEX = WEAPON_START_INDEX + numWeaponSlots - 1
+    local HP_INDEX = WEAPON_END_INDEX + 1
+    local WISP_INDEX = WEAPON_END_INDEX + 2
+    local STATS_START = WEAPON_END_INDEX + 3
+    local STATS_END = STATS_START + 5 -- 3 rows of 2 stats each = 6 items.
     local PASSIVES_START = STATS_END + 1
     local PASSIVES_END = PASSIVES_START + numPassives - 1
     local MOVES_START = PASSIVES_END + 1
@@ -292,8 +308,8 @@ local function move_unit_info_selection(key, world)
 
     if key == "w" then
         if oldIndex == NAME_INDEX then newIndex = totalSlices
-        elseif oldIndex > NAME_INDEX and oldIndex <= WEAPON_INDEX then newIndex = oldIndex - 1
-        elseif oldIndex == HP_INDEX or oldIndex == WISP_INDEX then newIndex = WEAPON_INDEX
+        elseif oldIndex > NAME_INDEX and oldIndex <= WEAPON_END_INDEX then newIndex = oldIndex - 1
+        elseif oldIndex == HP_INDEX or oldIndex == WISP_INDEX then newIndex = WEAPON_END_INDEX -- This should navigate up to the last weapon
         elseif oldIndex >= STATS_START and oldIndex <= STATS_END then newIndex = oldIndex - 2
         elseif oldIndex > PASSIVES_START and oldIndex <= PASSIVES_END then newIndex = oldIndex - 1
         elseif oldIndex == PASSIVES_START then newIndex = STATS_END
@@ -303,26 +319,40 @@ local function move_unit_info_selection(key, world)
         elseif CARRIED_UNIT_INDEX and oldIndex == CARRIED_UNIT_INDEX then newIndex = MOVES_END
         end
     elseif key == "s" then
-        if oldIndex < HP_INDEX then newIndex = oldIndex + 1
-        elseif oldIndex == HP_INDEX then newIndex = STATS_START
-        elseif oldIndex == WISP_INDEX then newIndex = STATS_START + 1
-        elseif oldIndex < STATS_END - 1 then newIndex = oldIndex + 2
+        if oldIndex < WEAPON_END_INDEX then newIndex = oldIndex + 1
+        elseif oldIndex == WEAPON_END_INDEX then newIndex = HP_INDEX
+        elseif oldIndex == HP_INDEX then newIndex = STATS_START -- From HP, go to first stat in first row
+        elseif oldIndex == WISP_INDEX then newIndex = STATS_START + 1 -- From Wisp, go to second stat in first row
+        elseif oldIndex < STATS_END - 1 then newIndex = oldIndex + 2 -- Move down a row in stats
         elseif oldIndex <= STATS_END then -- From last row of stats
             if numPassives > 0 then newIndex = PASSIVES_START
             elseif numMoves > 0 then newIndex = MOVES_START
             elseif hasCarriedUnit then newIndex = CARRIED_UNIT_INDEX
             else newIndex = 1 end -- Wrap if nothing below
         elseif oldIndex < PASSIVES_END then newIndex = oldIndex + 1
-        elseif oldIndex == PASSIVES_END then
+        elseif oldIndex >= PASSIVES_END and oldIndex < MOVES_START then
             if numMoves > 0 then newIndex = MOVES_START
             elseif hasCarriedUnit then newIndex = CARRIED_UNIT_INDEX
             else newIndex = 1 end
         elseif oldIndex < totalSlices then newIndex = oldIndex + 1
         else newIndex = 1 end
     elseif key == "a" then -- Horizontal Navigation (Left)
-        if (oldIndex >= STATS_START and oldIndex <= STATS_END and oldIndex % 2 == 1) or (oldIndex == WISP_INDEX) then newIndex = oldIndex - 1 end
+        if oldIndex >= STATS_START and oldIndex <= STATS_END then
+            -- Check relative position in the stats block to avoid parity issues
+            if (oldIndex - STATS_START) % 2 == 1 then -- In right column of stats
+                newIndex = oldIndex - 1
+            end
+        elseif oldIndex == WISP_INDEX then
+            newIndex = HP_INDEX
+        end
     elseif key == "d" then -- Horizontal Navigation (Right)
-        if (oldIndex >= STATS_START and oldIndex <= STATS_END and oldIndex % 2 == 0) or (oldIndex == HP_INDEX) then newIndex = oldIndex + 1 end
+        if oldIndex >= STATS_START and oldIndex <= STATS_END then
+            if (oldIndex - STATS_START) % 2 == 0 then -- In left column of stats
+                newIndex = oldIndex + 1
+            end
+        elseif oldIndex == HP_INDEX then
+            newIndex = WISP_INDEX
+        end
     end
 
     if newIndex ~= oldIndex then
@@ -351,13 +381,19 @@ local function handle_unit_info_locked_input(key, world)
         world.ui.previousPlayerTurnState = nil -- Clean up the stored state.
     elseif key == "w" or key == "s" or key == "a" or key == "d" then
         move_unit_info_selection(key, world)
-    elseif key == "j" then -- Confirm/Select
-        local WEAPON_INDEX = 3 -- The weapon slice is now the 3rd item in the menu.
-        if menu.selectedIndex == WEAPON_INDEX then
+    elseif key == "j" then
+        local passives = WorldQueries.getUnitPassiveList(menu.unit)
+        local hasDualWielder = false
+        for _, p in ipairs(passives) do if p == "DualWielder" then hasDualWielder = true; break; end end
+        local numWeaponSlots = hasDualWielder and 2 or 1
+
+        if menu.selectedIndex >= 3 and menu.selectedIndex < 3 + numWeaponSlots then
             -- Open the weapon selection menu
             local weaponMenu = world.ui.menus.weaponSelect
             weaponMenu.active = true
             weaponMenu.unit = menu.unit
+            local slotIndex = menu.selectedIndex - 2 -- weapon1 is index 3 -> slot 1
+            weaponMenu.slot = slotIndex
             weaponMenu.options = {}
             weaponMenu.selectedIndex = 1
 
@@ -386,19 +422,23 @@ local function handle_unit_info_locked_input(key, world)
             end
 
             -- Add an "Unequip" option at the bottom if the unit has a weapon equipped.
-            if weaponMenu.unit.equippedWeapon then
+            if weaponMenu.unit.equippedWeapons[slotIndex] then
                 table.insert(weaponMenu.options, "unequip")
             end
 
-            -- Set the initial selected index to the currently equipped weapon
-            for i, weaponKey in ipairs(weaponMenu.options) do
-                if weaponKey == weaponMenu.unit.equippedWeapon then
-                    weaponMenu.selectedIndex = i
-                    break
+            -- Only open the menu if there are options available.
+            if #weaponMenu.options > 0 then
+                weaponMenu.active = true
+                -- Set the initial selected index to the currently equipped weapon
+                local currentWeapon = weaponMenu.unit.equippedWeapons[slotIndex]
+                for i, optionKey in ipairs(weaponMenu.options) do
+                    if optionKey == currentWeapon then
+                        weaponMenu.selectedIndex = i
+                        break
+                    end
                 end
+                set_player_turn_state("weapon_select", world)
             end
-
-            set_player_turn_state("weapon_select", world)
         end
     end
 end
@@ -556,6 +596,14 @@ local function handle_action_menu_input(key, world)
         if unit and unit.components.pre_move_state then
             local state = unit.components.pre_move_state
 
+            -- New: Revert any tiles that were frozen by the Frozenfoot passive during this move.
+            if state.frozenTiles and #state.frozenTiles > 0 then
+                for _, posKey in ipairs(state.frozenTiles) do
+                    -- Setting the status to nil reverts it to its base state (water).
+                    world.tileStatuses[posKey] = nil
+                end
+            end
+
             -- Revert HP, position, and direction.
             unit.hp = state.hp
             unit.tileX, unit.tileY = state.tileX, state.tileY
@@ -564,7 +612,7 @@ local function handle_action_menu_input(key, world)
             -- Instantly snap pixel position to match the reverted tile position.
             unit.x, unit.y = Grid.toPixels(unit.tileX, unit.tileY)
             unit.targetX, unit.targetY = unit.x, unit.y
-            EventBus:dispatch("unit_tile_changed", { unit = unit, world = world })
+            EventBus:dispatch("unit_tile_changed", { unit = unit, world = world, isUndo = true })
 
             -- Re-select the unit and allow them to move again
             set_player_turn_state("unit_selected", world)

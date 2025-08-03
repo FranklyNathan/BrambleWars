@@ -165,6 +165,11 @@ function World.new(gameMap)
             Unbound = {},
             Combustive = {},
             Infernal = {},
+            Vampirism = {},
+            LastStand = {},
+            Necromantia = {},
+            Proliferate = {},
+            Frozenfoot = {},
         },
         enemy = {
             -- Enemies can also have team-wide passives.
@@ -181,7 +186,11 @@ function World.new(gameMap)
             Thunderguard = {},
             Unbound = {},
             Combustive = {},
-            Infernal = {}
+            Infernal = {},
+            Vampirism = {},
+            LastStand = {},
+            Necromantia = {},
+            Frozenfoot = {},
         }
     }
 
@@ -387,9 +396,13 @@ function World.new(gameMap)
     -- Process all queued additions to ensure entities like walls and obstacles are fully loaded.
     self:process_additions_and_deletions()
 
-    -- The player's inventory of unequipped weapons starts empty.
-    -- Weapons are added to it when they are found or unequipped.
-    self.playerInventory.weapons = { durendal = 1 }
+    -- Populate the player's starting inventory with all non-Traveler's weapons.
+    self.playerInventory.weapons = {}
+    for weaponKey, weaponData in pairs(WeaponBlueprints) do
+        if not string.find(weaponKey, "travelers_") then
+            self.playerInventory.weapons[weaponKey] = (self.playerInventory.weapons[weaponKey] or 0) + 1
+        end
+    end
 
     return self
 end

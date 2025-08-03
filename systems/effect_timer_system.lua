@@ -4,6 +4,8 @@
 local EffectFactory = require("modules.effect_factory")
 local CharacterBlueprints = require("data.character_blueprints")
 local Assets = require("modules.assets")
+local StatusEffectManager = require("modules.status_effect_manager")
+local TileStatusBlueprints = require("data.tile_status_blueprints")
 
 -- A simple linear interpolation function.
 local function lerp(a, b, t)
@@ -63,6 +65,19 @@ function EffectTimerSystem.update(dt, world)
             if s.components.fade_out.timer <= 0 then
                 s.isMarkedForDeletion = true -- Mark for deletion now that the fade is complete.
                 s.components.fade_out = nil
+            end
+        end
+
+        -- New: Handle reviving animation for Necromantia
+        if s.components.reviving then
+            local reviving = s.components.reviving
+            reviving.timer = math.max(0, reviving.timer - dt)
+            if reviving.timer == 0 then
+                -- Animation is finished. Finalize the revival.
+                s.hp = s.finalMaxHp
+                s.wisp = s.finalMaxWisp
+                s.hasActed = false -- Now the unit can act.
+                s.components.reviving = nil
             end
         end
 
@@ -270,6 +285,7 @@ function EffectTimerSystem.update(dt, world)
         -- The ripple has been fully processed, so remove it from the queue.
         table.remove(world.rippleEffectQueue, i)
     end
+
     -- 5. Update EXP gain animation
     if world.ui.expGainAnimation and world.ui.expGainAnimation.active then
         local anim = world.ui.expGainAnimation
@@ -331,11 +347,40 @@ function EffectTimerSystem.update(dt, world)
         end
     end
 
-        -- Handle the next effect in queue, if any and it is time.
-       
-        
-        
-    
+    -- 6. Handle sequential fire spreading for tile statuses.
+    if world.tileStatuses then
+        local spreads_to_process = {}
+
+        for posKey, status in pairs(world.tileStatuses) do
+            if status.is_spreading then
+                status.spread_timer = status.spread_timer - dt
+                if status.spread_timer <= 0 then
+                    table.insert(spreads_to_process, posKey)
+                    -- Mark it so we don't process it again this frame.
+                    status.is_spreading = false 
+                end
+            end
+        end
+
+        for _, posKey in ipairs(spreads_to_process) do
+            local tileX = tonumber(string.match(posKey, "(-?%d+)"))
+            local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+            
+            -- Check neighbors and ignite them.
+            local neighbors = {{dx=0,dy=-1},{dx=0,dy=1},{dx=-1,dy=0},{dx=1,dy=0}}
+            for _, move in ipairs(neighbors) do
+                local nextX, nextY = tileX + move.dx, tileY + move.dy
+                local nextPosKey = nextX .. "," .. nextY
+                local nextStatus = world.tileStatuses[nextPosKey]
+                local nextBlueprint = nextStatus and TileStatusBlueprints[nextStatus.type]
+
+                if nextBlueprint and nextBlueprint.spreads_fire then
+                    local duration = (world.tileStatuses[posKey] and world.tileStatuses[posKey].duration) or 2
+                    StatusEffectManager.igniteTileAndSpread(nextX, nextY, world, duration)
+                end
+            end
+        end
+    end
 end
 
 return EffectTimerSystem

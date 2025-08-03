@@ -2,6 +2,7 @@
 -- Applies the effects of tile statuses when a unit moves onto them.
 
 local EventBus = require("modules.event_bus")
+local WorldQueries = require("modules.world_queries")
 local CombatActions = require("modules.combat_actions")
 local TileStatusBlueprints = require("data.tile_status_blueprints")
 local EffectFactory = require("modules.effect_factory")
@@ -12,6 +13,10 @@ local TileHazardSystem = {}
 local function on_unit_tile_changed(data)
     local unit = data.unit
     local world = data.world
+
+    -- Do not apply tile hazards if the tile change was due to an "undo" action.
+    -- This prevents taking damage from a tile you are returned to.
+    if data.isUndo then return end
 
     if not unit or unit.hp <= 0 or not world.tileStatuses then return end
 
@@ -39,7 +44,8 @@ local function on_unit_tile_changed(data)
             end
         elseif status.type == "frozen" then
             -- Check if the unit's weight exceeds the ice's limit.
-            if unit.weight and blueprint.weightLimit and unit.weight > blueprint.weightLimit then
+            local hasFrozenfoot = WorldQueries.hasPassive(unit, "Frozenfoot", world)
+            if not hasFrozenfoot and unit.weight and blueprint.weightLimit and unit.weight > blueprint.weightLimit then
                 -- Break the ice!
                 world.tileStatuses[posKey] = nil -- Remove the frozen status.
                 unit.components.movement_path = nil -- Stop any further movement.

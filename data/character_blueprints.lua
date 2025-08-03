@@ -19,10 +19,10 @@ local CharacterBlueprints = {
         witStat = 5, -- Used when calculating if a move hits/misses and if a move is a critical hit
         movement = 6, -- How many tiles a character can move in a turn
         weight = 8, -- Heavy
-        equippedWeapon = "blightblade",
+        equippedWeapons = {[1] = "travelers_sword"},
         canSwim = true,
         dominantColor = {0.5, 0.2, 0.8}, -- Clementine: Purple
-        passives = {"Desperate", "Treacherous", "Unbound"}, -- Characters can have multiple
+        passives = {"DualWielder", "Desperate", "Treacherous", "Unbound", "Vampirism", "Frozenfoot"},
         growths = {
             maxHp = 90,
             attackStat = 50,
@@ -48,9 +48,9 @@ local CharacterBlueprints = {
         magicStat = 8,
         resistanceStat = 8,
         witStat = 6,
-        movement = 20,
+        movement = 10,
         weight = 13,
-        equippedWeapon = "travelers_staff",
+        equippedWeapons = {[1] = "travelers_staff"},
         isFlying = true,
         dominantColor = {1.0, 0.6, 0.8}, -- Biblo: Light Pink
         passives = {"HealingWinds", "Hustle", "Captor"},
@@ -86,7 +86,7 @@ local CharacterBlueprints = {
         witStat = 4,
         movement = 5,
         weight = 9, -- Very Heavy
-        equippedWeapon = "travelers_tome",
+        equippedWeapons = {[1] = "travelers_tome"},
         canSwim = true,
         dominantColor = {0.6, 0.9, 0.6}, -- Winthrop: Pale Green
         passives = {"Thunderguard"},
@@ -117,9 +117,9 @@ local CharacterBlueprints = {
         witStat = 3,
         movement = 14,
         weight = 10, -- Heaviest
-        equippedWeapon = "travelers_tome",
+        equippedWeapons = {[1] = "travelers_tome"},
         dominantColor = {0.6, 0.6, 0.7}, -- Mortimer: Steel Grey,
-        passives = {"Soulsnatcher", "Elusive"},
+        passives = {"Soulsnatcher", "Elusive", "Necromantia"},
         growths = {
             maxHp = 75,
             attackStat = 20,
@@ -129,7 +129,7 @@ local CharacterBlueprints = {
             witStat = 20,
         },
         attacks = {
-            "sever", "fireball", "hookshot"
+            "sever", "fireball", "hookshot", "sow_seeds"
         }
     },
     cedric = {
@@ -147,7 +147,7 @@ local CharacterBlueprints = {
         witStat = 7,
         movement = 5,
         weight = 7, -- Medium-Heavy
-        equippedWeapon = "travelers_whip",
+        equippedWeapons = {[1] = "travelers_whip"},
         dominantColor = {1.0, 0.8, 0.1}, -- Cedric: Electric Yellow,
         passives = {"Whiplash", "Captor", "Infernal"},
         growths = {
@@ -177,9 +177,9 @@ local CharacterBlueprints = {
         witStat = 3,
         movement = 4,
         weight = 9, -- Very Heavy
-        equippedWeapon = "blightbow",
-        dominantColor = {0.1, 0.3, 0.8}, -- Ollo: Dark Blue
-        passives = {},
+        equippedWeapons = {[1] = "travelers_bow"},
+        dominantColor = {0.1, 0.3, 0.8}, -- Ollo: Dark Blue,
+        passives = {"LastStand", "Frozenfoot", "Aetherfall"},
         growths = {
             maxHp = 100,
             attackStat = 45,
@@ -207,7 +207,7 @@ local CharacterBlueprints = {
         witStat = 8,
         movement = 6,
         weight = 6, -- Medium
-        equippedWeapon = "travelers_lance",
+        equippedWeapons = {[1] = "travelers_lance"},
         canSwim = true,
         dominantColor = {0.1, 0.8, 0.3}, -- Plop: Leaf Green
         passives = {},
@@ -238,10 +238,10 @@ local CharacterBlueprints = {
         witStat = 8,
         movement = 8,
         weight = 5, -- Medium-Light
-        equippedWeapon = "travelers_dagger",
+        equippedWeapons = {[1] = "travelers_dagger"},
         isFlying = true,
         dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown,
-        passives = {"Aetherfall", "Elusive"},
+        passives = {"Aetherfall", "Elusive", "Devourer"},
         growths = {
             maxHp = 80,
             attackStat = 45,

@@ -13,6 +13,7 @@ local EnemyBlueprints = require("data.enemy_blueprints")
 local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local EffectFactory = require("modules.effect_factory")
+local WeaponBlueprints = require("data.weapon_blueprints")
 local Grid = require("modules.grid")
 local Assets = require("modules.assets")
 
@@ -31,6 +32,8 @@ function AttackResolutionSystem.update(dt, world)
         end
     end
 
+    local processed_spiritburn_instances = {} -- Track for this frame to prevent multiple wisp deductions.
+
     for _, effect in ipairs(effectsToProcess) do
         -- Process the effect on the frame it becomes active
         if effect.initialDelay <= 0 and not effect.effectApplied then
@@ -42,25 +45,11 @@ function AttackResolutionSystem.update(dt, world)
                 local statusInfo = attackData.appliesTileStatus
                 local posKey = tileX .. "," .. tileY
 
-                -- Add conditional logic for applying tile statuses.
-                local canApply = false
-                if statusInfo.type == "frozen" then
+                -- The logic for where a status can be applied is now handled by the status application function itself.
+                if statusInfo.type == "aflame" then
+                    StatusEffectManager.igniteTileAndSpread(tileX, tileY, world, statusInfo.duration)
+                elseif statusInfo.type == "frozen" and WorldQueries.isTileWater_Base(tileX, tileY, world) then
                     -- 'frozen' can only be applied to water tiles.
-                    canApply = WorldQueries.isTileWater_Base(tileX, tileY, world)
-                elseif statusInfo.type == "aflame" then
-                    -- 'aflame' cannot be applied to water, frozen tiles, or tiles with obstacles.
-                    local isWater = WorldQueries.isTileWater_Base(tileX, tileY, world)
-                    local isFrozen = world.tileStatuses[posKey] and world.tileStatuses[posKey].type == "frozen"
-                    local hasObstacle = WorldQueries.getObstacleAt(tileX, tileY, world)
-
-                    if not isWater and not isFrozen and not hasObstacle then
-                        canApply = true
-                    end
-                else -- Default behavior for any other future statuses.
-                    canApply = true
-                end
-
-                if canApply then
                     world.tileStatuses[posKey] = { type = statusInfo.type, duration = statusInfo.duration }
                 end
             end
@@ -136,6 +125,24 @@ function AttackResolutionSystem.update(dt, world)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
                                     local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit, effect.attackName, world)
 
+                                    -- New: Handle Spiritburn weapon property (Wisp deduction)
+                                    -- This happens *after* damage is calculated, so the formula sees the wisp.
+                                    local attacker = effect.attacker
+                                    if attacker.equippedWeapons and attacker.wisp > 0 then
+                                        for _, weaponName in ipairs(attacker.equippedWeapons) do
+                                            local weapon = WeaponBlueprints[weaponName]
+                                            if weapon and weapon.spiritburn_bonus then
+                                                local instanceId = effect.specialProperties.attackInstanceId
+                                                if not processed_spiritburn_instances[instanceId] then
+                                                    attacker.wisp = attacker.wisp - 1
+                                                    EffectFactory.createDamagePopup(world, attacker, "-1 Wisp", false, {0.7, 0.2, 0.9, 1}) -- Purple text
+                                                    processed_spiritburn_instances[instanceId] = true
+                                                end
+                                                break -- Only deduct wisp once per attack, even if both weapons have Spiritburn.
+                                            end
+                                        end
+                                    end
+
                                     -- Check for Unbound passive on the attacker.
                                     if effect.attacker.wisp == 0 then
                                         local unbound_providers = world.teamPassives[effect.attacker.type].Unbound
@@ -156,6 +163,16 @@ function AttackResolutionSystem.update(dt, world)
                                     -- Apply damage multipliers from special properties (e.g., Impale).
                                     if effect.specialProperties and effect.specialProperties.damageMultiplier then
                                         damage = damage * effect.specialProperties.damageMultiplier
+                                    end
+
+                                    -- Handle Lifesteal property
+                                    local lifestealPercent = WorldQueries.getUnitLifestealPercent(effect.attacker, world)
+                                    if lifestealPercent > 0 then
+                                        local healAmount = math.floor(damage * lifestealPercent)
+                                        if healAmount > 0 then
+                                            CombatActions.applyDirectHeal(effect.attacker, healAmount)
+                                            EffectFactory.createDamagePopup(world, effect.attacker, "+" .. healAmount, false, {0.5, 1, 0.5, 1}) -- Green text
+                                        end
                                     end
 
                                     -- Check for Treacherous passive on the attacker.

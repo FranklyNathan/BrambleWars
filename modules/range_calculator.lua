@@ -101,7 +101,9 @@ function RangeCalculator.calculateAttackableTiles(unit, world, reachableTiles)
                                 local teleportTileX, teleportTileY = target.tileX + dx_p, target.tileY + dy_p
                                 local newReachableKey = teleportTileX .. "," .. teleportTileY
                                 if not reachableTiles[newReachableKey] then
-                                    reachableTiles[newReachableKey] = { cost = -1, landable = true } -- Cost is irrelevant here, just needs to exist.
+                                    -- Add the tile to the reachable set so it's drawn in blue,
+                                    -- but mark it as NOT landable so the player can't move to it directly.
+                                    reachableTiles[newReachableKey] = { cost = -1, landable = false }
                                 end
                             end
                         elseif attackData.targeting_style == "ground_aim" then

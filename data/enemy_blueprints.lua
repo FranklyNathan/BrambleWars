@@ -15,7 +15,8 @@ local EnemyBlueprints = {
         witStat = 2,
         movement = 5,
         weight = 5,
-        equippedWeapon = "travelers_sword",
+        equippedWeapons = {[1] = "travelers_sword"},
+        dominantColor = {0.7, 0.3, 0.2}, -- Rusty Red
         expReward = 20,
         growths = {
             maxHp = 80,
@@ -26,7 +27,7 @@ local EnemyBlueprints = {
             witStat = 20,
         },
         attacks = {"sever"},
-        passives = {"Combustive"}
+        passives = {"Combustive", "Desperate"}
     },
     archer = {
         originType = "cavernborn",
@@ -41,7 +42,8 @@ local EnemyBlueprints = {
         witStat = 4,
         movement = 4,
         weight = 4,
-        equippedWeapon = "travelers_bow",
+        equippedWeapons = {[1] = "travelers_bow"},
+        dominantColor = {0.3, 0.5, 0.2}, -- Muted Green
         expReward = 20,
         growths = {
             maxHp = 60,
@@ -51,7 +53,8 @@ local EnemyBlueprints = {
             resistanceStat = 25,
             witStat = 45,
         },
-        attacks = {"fireball", "longshot"}
+        attacks = {"fireball", "longshot"},
+        passives = {"Unbound"}
     },
     punter = {
         originType = "cavernborn",
@@ -66,7 +69,8 @@ local EnemyBlueprints = {
         witStat = 1,
         movement = 5,
         weight = 7,
-        equippedWeapon = "travelers_lance",
+        equippedWeapons = {[1] = "travelers_lance"},
+        dominantColor = {0.5, 0.5, 0.6}, -- Slate Blue
         expReward = 30,
         growths = {
             maxHp = 75,
@@ -76,7 +80,8 @@ local EnemyBlueprints = {
             resistanceStat = 30,
             witStat = 25,
         },
-        attacks = {"uppercut"}
+        attacks = {"uppercut"},
+        passives = {"Thunderguard"}
     }
 }
 

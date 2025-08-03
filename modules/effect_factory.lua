@@ -58,8 +58,8 @@ function EffectFactory.createDamagePopup(world, target, damage, isCrit, colorOve
     table.insert(world.damagePopups, popup)
 end
 
-function EffectFactory.createShatterEffect(world, x, y, size, color)
-    local numParticles = 30
+function EffectFactory.createShatterEffect(world, x, y, size, color, particleCount)
+    local numParticles = particleCount or 30
     for i = 1, numParticles do
         table.insert(world.particleEffects, {
             x = x + size / 2,

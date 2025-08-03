@@ -45,6 +45,22 @@ function TurnBasedMovementSystem.update(dt, world)
                 entity.x, entity.y = entity.targetX, entity.targetY
                 -- Update the logical tile position to match.
                 entity.tileX, entity.tileY = Grid.toTile(entity.x, entity.y)
+
+                -- Check for Frozenfoot passive
+                -- This must happen before dispatching unit_tile_changed to prevent drowning.
+                if WorldQueries.hasPassive(entity, "Frozenfoot", world) then
+                    -- Check if the tile is water (base check, ignoring frozen status)
+                    if WorldQueries.isTileWater_Base(entity.tileX, entity.tileY, world) then
+                        local posKey = entity.tileX .. "," .. entity.tileY
+                        world.tileStatuses[posKey] = { type = "frozen" }
+                        -- If this is a player unit making a move, record the change for undo.
+                        if entity.type == "player" and entity.components.pre_move_state then
+                            -- Add the key to the list of tiles frozen during this move.
+                            table.insert(entity.components.pre_move_state.frozenTiles, posKey)
+                        end
+                    end
+                end
+
                 EventBus:dispatch("unit_tile_changed", { unit = entity, world = world })
 
                 -- Check for traps on the tile the unit just landed on.

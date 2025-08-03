@@ -11,6 +11,7 @@ local AttackPatterns = require("modules.attack_patterns")
 local WorldQueries = require("modules.world_queries")
 local BattleInfoMenu = require("modules.battle_info_menu")
 local UnitInfoMenu = require("modules.unit_info_menu")
+local TileStatusBlueprints = require("data.tile_status_blueprints")
 local ExpBarRendererSystem = require("systems.exp_bar_renderer_system")
 local PromotionMenu = require("modules.promotion_menu")
 
@@ -45,6 +46,36 @@ local function wrapText(text, limit, font)
     end
     table.insert(lines, currentLine)
     return lines
+end
+
+-- New helper to draw tile statuses based on their render layer.
+local function draw_tile_statuses_by_layer(world, layer)
+    if not world.tileStatuses then return end
+
+    for posKey, status in pairs(world.tileStatuses) do
+        local blueprint = TileStatusBlueprints[status.type]
+        if blueprint and blueprint.renderLayer == layer then
+            -- Construct image name from blueprint name (e.g., "Tall Grass" -> "TallGrass")
+            local imageName = string.gsub(blueprint.name, " ", "")
+            local image = Assets.images[imageName]
+            if image then
+                local tileX = tonumber(string.match(posKey, "(-?%d+)"))
+                local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+                if tileX and tileY then
+                    local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+                    
+                    local alpha = 1.0
+                    -- Add a subtle pulsating alpha to make the fire feel more alive.
+                    if status.type == "aflame" then
+                        alpha = 0.7 + (math.sin(love.timer.getTime() * 5) + 1) / 2 * 0.2 -- Pulsates between 0.7 and 0.9
+                    end
+
+                    love.graphics.setColor(1, 1, 1, alpha)
+                    love.graphics.draw(image, pixelX, pixelY, 0, 1, 1)
+                end
+            end
+        end
+    end
 end
 
 local function drawHealthBar(square, world)
@@ -363,6 +394,11 @@ local function draw_entity(entity, world, is_active_player)
             local progress = 1 - (sinking.timer / sinking.initialTimer) -- 0 to 1
             finalDrawY = finalDrawY + progress * entity.size -- Move down
             baseAlpha = 1 - progress -- Fade out
+        elseif entity.components.reviving then
+            local reviving = entity.components.reviving
+            local progress = 1 - (reviving.timer / reviving.initialTimer) -- 0 to 1
+            finalDrawY = finalDrawY + (1 - progress) * entity.size -- Move up from below ground
+            baseAlpha = progress -- Fade in
         elseif entity.components.fade_out then
             baseAlpha = entity.components.fade_out.timer / entity.components.fade_out.initialTimer
         end
@@ -691,28 +727,6 @@ local function draw_world_space_ui(world)
     -- Draw Turn-Based UI Elements (Ranges, Path, Cursor)
     local BORDER_WIDTH = 1
     local INSET_SIZE = Config.SQUARE_SIZE - (BORDER_WIDTH * 2)
-
-    -- Draw Tile Status Effects (like Aflame)
-    if world.tileStatuses then
-        for posKey, status in pairs(world.tileStatuses) do
-            if status.type == "aflame" and Assets.images.Aflame then
-                local tileX = tonumber(string.match(posKey, "(-?%d+)"))
-                local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
-                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
-                -- Add a subtle pulsating alpha to make the fire feel more alive.
-                local alpha = 0.7 + (math.sin(love.timer.getTime() * 5) + 1) / 2 * 0.2 -- Pulsates between 0.7 and 0.9
-                love.graphics.setColor(1, 1, 1, alpha)
-                love.graphics.draw(Assets.images.Aflame, pixelX, pixelY, 0, 1, 1)
-            elseif status.type == "frozen" and Assets.images.Frozen then
-                local tileX = tonumber(string.match(posKey, "(-?%d+)"))
-                local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
-                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
-                -- Draw the frozen tile opaquely, as requested.
-                love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.draw(Assets.images.Frozen, pixelX, pixelY, 0, 1, 1)
-            end
-        end
-    end
 
     -- New: Draw pulsating WinTiles. This is drawn first so other UI elements appear on top.
     -- This should be visible during both player and enemy turns.
@@ -1520,8 +1534,15 @@ function Renderer.draw(world)
     -- (entities, UI elements like range indicators, etc.) so they are positioned correctly
     -- relative to the map.
     Camera.apply()
+
+    -- Draw background tile statuses (e.g., Frozen)
+    draw_tile_statuses_by_layer(world, "background")
+
     draw_world_space_ui(world)
     draw_all_entities_and_effects(world)
+
+    -- Draw foreground tile statuses (e.g., Aflame, Tall Grass)
+    draw_tile_statuses_by_layer(world, "foreground")
 
     -- Draw the EXP bar here, so it's in world-space and on top of entities.
     ExpBarRendererSystem.draw(world)

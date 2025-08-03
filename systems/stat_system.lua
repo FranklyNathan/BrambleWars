@@ -6,6 +6,7 @@
 
 local EventBus = require("modules.event_bus")
 local WeaponBlueprints = require("data.weapon_blueprints")
+local TileStatusBlueprints = require("data.tile_status_blueprints")
 
 local StatSystem = {}
 
@@ -33,14 +34,16 @@ function StatSystem.recalculate_for_unit(unit, world)
         unit[finalStatName] = unit[statName] or 0
     end
 
-    -- 2. Apply modifiers from the equipped weapon.
-    if unit.equippedWeapon and WeaponBlueprints[unit.equippedWeapon] then
-        local weapon = WeaponBlueprints[unit.equippedWeapon]
-        if weapon.stats then
-            for statName, bonus in pairs(weapon.stats) do
-                local finalStatName = "final" .. capitalize(statName)
-                if unit[finalStatName] ~= nil then
-                    unit[finalStatName] = unit[finalStatName] + bonus
+    -- 2. Apply modifiers from all equipped weapons.
+    if unit.equippedWeapons then
+        for _, weaponName in ipairs(unit.equippedWeapons) do
+            local weapon = WeaponBlueprints[weaponName]
+            if weapon and weapon.stats then
+                for statName, bonus in pairs(weapon.stats) do
+                    local finalStatName = "final" .. capitalize(statName)
+                    if unit[finalStatName] ~= nil then
+                        unit[finalStatName] = unit[finalStatName] + bonus
+                    end
                 end
             end
         end
@@ -82,7 +85,20 @@ function StatSystem.recalculate_for_unit(unit, world)
         end
     end
 
-    -- 4. Ensure stats don't fall below a minimum (e.g., 0).
+    -- 5. Apply modifiers from the tile the unit is standing on.
+    if unit.tileX and unit.tileY then
+        local posKey = unit.tileX .. "," .. unit.tileY
+        if world.tileStatuses[posKey] then
+            local tileStatus = world.tileStatuses[posKey]
+            local blueprint = TileStatusBlueprints[tileStatus.type]
+            -- Apply Tall Grass Wit bonus
+            if blueprint and blueprint.witMultiplier then
+                unit.finalWitStat = math.floor(unit.finalWitStat * blueprint.witMultiplier)
+            end
+        end
+    end
+
+    -- 6. Ensure stats don't fall below a minimum (e.g., 0).
     for _, statName in ipairs(MODIFIABLE_STATS) do
         local finalStatName = "final" .. capitalize(statName)
         unit[finalStatName] = math.max(0, unit[finalStatName])

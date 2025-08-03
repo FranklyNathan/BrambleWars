@@ -3,6 +3,9 @@
 
 local EventBus = require("modules.event_bus")
 local EffectFactory = require("modules.effect_factory")
+local TileStatusBlueprints = require("data.tile_status_blueprints")
+local Grid = require("modules.grid")
+local WorldQueries = require("modules.world_queries")
 -- CombatActions is no longer required
 
 local StatusEffectManager = {}
@@ -45,6 +48,33 @@ end
 -- New function: Apply a status effect (moved from CombatActions)
 function StatusEffectManager.applyStatusEffect(target, effectData, world)
     StatusEffectManager.apply(target, effectData, world)
+end
+
+-- New function to handle setting a tile on fire and spreading it to adjacent flammable tiles.
+function StatusEffectManager.igniteTileAndSpread(tileX, tileY, world, duration)
+    local posKey = tileX .. "," .. tileY
+
+    -- Check if the tile is valid to be set on fire at all.
+    if not WorldQueries.isTileValidForGroundStatus(tileX, tileY, world) then
+        return
+    end
+
+    local existingStatus = world.tileStatuses[posKey]
+    local blueprint = existingStatus and TileStatusBlueprints[existingStatus.type]
+
+    -- Set the tile aflame. This overwrites the tall grass or whatever was there.
+    world.tileStatuses[posKey] = { type = "aflame", duration = duration }
+
+    -- Create a small burst of particles for visual feedback.
+    local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+    -- Use a modified shatter effect with fewer particles and fiery colors.
+    EffectFactory.createShatterEffect(world, pixelX, pixelY, Config.SQUARE_SIZE, {1, 0.5, 0, 1}, 15)
+
+    -- If the tile that was just replaced was flammable, flag it to start the spread.
+    if blueprint and blueprint.spreads_fire then
+        world.tileStatuses[posKey].is_spreading = true
+        world.tileStatuses[posKey].spread_timer = 0.2 -- A short delay before it spreads to neighbors.
+    end
 end
 
 -- Helper function to calculate the direction for careening effects based on the effect's center.
