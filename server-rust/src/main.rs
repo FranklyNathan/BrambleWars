@@ -1,10 +1,8 @@
+use BrambleWarsServer::bramble::{self, envelope::MessageType};
+use BrambleWarsServer::message_handlers::*;
 use prost::Message;
 use axum::extract::{ws::{self, WebSocket}, WebSocketUpgrade};
 use axum::{response::Response, routing::any, Router};
-
-pub mod bramble {
-    include!(concat!(env!("OUT_DIR"), "/bramble.rs"));
-}
 
 async fn handler(ws: WebSocketUpgrade) -> Response {
     dbg!("handling connection");
@@ -12,39 +10,29 @@ async fn handler(ws: WebSocketUpgrade) -> Response {
 }
 
 async fn handle_socket(mut socket: WebSocket) {
-    while let Some(msg) = socket.recv().await {
-        let msg = if let Ok(msg) = msg {
-            msg
-        } else {
+    while let Some(socket_msg) = socket.recv().await {
+        let Ok(encoded_msg) = socket_msg else {
             return;
         };
 
-        match msg {
-            ws::Message::Binary(ref msg) => {
-                match bramble::EchoMessage::decode(&msg[..]) {
-                    Ok(msg) => {
-                        println!("Received from client: {}", msg.message);
-                        let msg = bramble::EchoMessage {
-                            message: msg.message.to_string(),
-                        };
-
-                        let mut message_buf = Vec::new();
-                        msg.encode(&mut message_buf).unwrap();
-
-                        if socket.send(ws::Message::binary(message_buf)).await.is_err() {
+        match encoded_msg {
+            ws::Message::Binary(ref binary_msg) => {
+                let proto_msg = bramble::Envelope::decode(&binary_msg[..]).expect("Couldn't decode binary message");
+                match proto_msg.message_type {
+                    Some(MessageType::EchoMessage(request)) => {
+                        if echo_handler(&mut socket, request).await.is_err() {
                             return;
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Failed to decode protobuf message: {:?}", e);
-                    }
-                }
-           }
-            ws::Message::Close(ref msg) => println!("Socket Closed: {:?}", msg),
-            _ => println!("non text msg recieved"),
-        }
-
-
+                    None => eprint!("Empty message recieved"),
+                };
+            },
+            ws::Message::Close(ref encoded_msg) => println!("Socket Closed: {:?}", encoded_msg),
+            _ => {
+                eprintln!("non binary/close msg recieved, dropping client");
+                return;
+            },
+        };
     }
 }
 
