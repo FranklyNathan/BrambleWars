@@ -241,7 +241,7 @@ local CharacterBlueprints = {
         equippedWeapons = {[1] = "travelers_dagger"},
         isFlying = true,
         dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown,
-        passives = {"Aetherfall", "Elusive", "Devourer"},
+        passives = {"Aetherfall", "Elusive", "Necromantia", "Proliferate"},
         growths = {
             maxHp = 80,
             attackStat = 45,
@@ -252,6 +252,39 @@ local CharacterBlueprints = {
         },
         attacks = {
             "sever", "slipstep"
+        }
+    },
+
+    -- =============================================================================
+    -- == Neutral Characters
+    -- =============================================================================
+    shopkeep = {
+        displayName = "Shopkeep",
+        species = "Catfish",
+        originType = "marshborn",
+        class = "merchant",
+        maxHp = 70,
+        wispStat = 0,
+        portrait = "Default_Portrait.png",
+        attackStat = 1,
+        defenseStat = 1,
+        magicStat = 1,
+        resistanceStat = 10,
+        witStat = 10,
+        movement = 0, -- Cannot move
+        weight = 99, -- Cannot be shoved
+        equippedWeapons = {[1] = "travelers_dagger"},
+        dominantColor = {0.4, 0.3, 0.2}, -- Brown
+        passives = {},
+        growths = {}, -- Cannot level up
+        attacks = {},
+        lootValue = 0,
+        -- The shop's inventory is now a table of weapon keys to quantities.
+        shopInventory = {
+            vampiric_dagger = 1, vampiric_whip = 1, vampiric_lance = 1,
+            spiritburn_sword = 2, spiritburn_lance = 2, spiritburn_whip = 2, spiritburn_bow = 2,
+            spiritburn_staff = 2, spiritburn_tome = 2, spiritburn_dagger = 2,
+            blightblade = 1, blightbow = 1,
         }
     }
 }

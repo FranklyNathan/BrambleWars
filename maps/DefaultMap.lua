@@ -9,8 +9,8 @@ return {
   height = 22,
   tilewidth = 32,
   tileheight = 32,
-  nextlayerid = 14,
-  nextobjectid = 250,
+  nextlayerid = 15,
+  nextobjectid = 252,
   properties = {},
   tilesets = {
     {
@@ -1199,6 +1199,50 @@ return {
           y = 480,
           width = 32,
           height = 32,
+          rotation = 0,
+          visible = true,
+          properties = {}
+        }
+      }
+    },
+    {
+      type = "objectgroup",
+      draworder = "topdown",
+      id = 14,
+      name = "Shopkeep",
+      class = "",
+      visible = true,
+      opacity = 1,
+      offsetx = 0,
+      offsety = 0,
+      parallaxx = 1,
+      parallaxy = 1,
+      properties = {
+        ["isLogicLayer"] = true
+      },
+      objects = {
+        {
+          id = 250,
+          name = "Shopkeep",
+          type = "",
+          shape = "rectangle",
+          x = 96,
+          y = 0,
+          width = 32,
+          height = 32,
+          rotation = 0,
+          visible = true,
+          properties = {}
+        },
+        {
+          id = 251,
+          name = "",
+          type = "",
+          shape = "rectangle",
+          x = 1003,
+          y = 130,
+          width = 0,
+          height = 0,
           rotation = 0,
           visible = true,
           properties = {}

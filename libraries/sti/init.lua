@@ -891,7 +891,9 @@ end
 function Map:draw(tx, ty, sx, sy)
 	local current_canvas = lg.getCanvas()
 	lg.setCanvas(self.canvas)
-	lg.clear()
+	-- Clear the internal canvas to be fully transparent.
+	-- This allows the main game's background color to show through.
+	lg.clear(0, 0, 0, 0)
 
 	-- Scale map to 1.0 to draw onto canvas, this fixes tearing issues
 	-- Map is translated to correct position so the right section is drawn

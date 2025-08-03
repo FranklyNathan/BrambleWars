@@ -68,6 +68,14 @@ EventBus:register("unit_died", function(data)
 
     -- Handle killer-based passives like Necromantia and Devourer.
     if killer and killer.hp > 0 and victim.type ~= killer.type then
+        -- New: If a player kills an enemy, grant Nutmegs.
+        if killer.type == "player" and victim.type == "enemy" and victim.lootValue and victim.lootValue > 0 then
+            world.playerInventory.nutmegs = (world.playerInventory.nutmegs or 0) + victim.lootValue
+            local popupText = "+" .. victim.lootValue .. " Nutmegs"
+            -- Use a gold/yellow color for the popup, appearing over the defeated enemy.
+            EffectFactory.createDamagePopup(world, victim, popupText, false, {1, 0.8, 0.2, 1})
+        end
+
         -- Create a set for efficient lookups of the killer's passives.
         local killerPassivesList = WorldQueries.getUnitPassiveList(killer)
         local killerPassivesSet = {}
@@ -105,9 +113,6 @@ EventBus:register("unit_died", function(data)
 
         -- Check for Necromantia, which prevents the unit's final death.
         if killerPassivesSet.Necromantia then
-            -- 1. Prevent normal death processing by setting HP > 0.
-            victim.hp = 1
-
             -- 2. Remove from old team's passive list.
             PassiveSystem.remove_unit_from_passives(victim, world)
 
@@ -125,6 +130,7 @@ EventBus:register("unit_died", function(data)
             -- 5. Update AI component and reset state for revival.
             if victim.type == "enemy" then victim.components.ai = {} else victim.components.ai = nil end
             victim.hasActed = true -- Unit cannot act while reviving. This will be set to false when the animation finishes.
+            victim.lastDirection = "down" -- Revived units should always face down.
 
             -- Handle Proliferate. If the killer has it, the victim's passives are overridden.
             if killerPassivesSet.Proliferate then
@@ -138,14 +144,17 @@ EventBus:register("unit_died", function(data)
             -- 6. Add to new team's passive list and recalculate stats.
             PassiveSystem.add_unit_to_passives(victim, world)
 
-            -- New: Cut Max HP in half for the revived unit.
-            -- To prevent repeated halving, we store the pre-revival max HP once.
-            if not victim.necro_base_max_hp then
-                victim.necro_base_max_hp = victim.maxHp
+            -- New: Cut Max HP in half for the revived unit, but only the first time.
+            -- This prevents losing stat gains from level-ups on subsequent revivals.
+            if not victim.isUndead then
+                victim.maxHp = math.floor(victim.maxHp / 2)
+                victim.isUndead = true
             end
-            victim.maxHp = math.floor(victim.necro_base_max_hp / 2)
-
             StatSystem.recalculate_for_unit(victim, world)
+
+            -- New: Set the revived unit to full health (its new, halved max HP).
+            -- This prevents the unit from being considered "dead" and makes the health bar look correct during the animation.
+            victim.hp = victim.finalMaxHp
 
             -- 7. Add the reviving animation component.
             victim.components.reviving = {

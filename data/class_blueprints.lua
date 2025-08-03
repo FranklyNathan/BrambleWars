@@ -251,6 +251,17 @@ local ClassBlueprints = {
     -- Trickster Promotions
     illusionist = { name = "Illusionist", weaponTypes = {"whip"}, promotions = {} },
     harlequin = { name = "Harlequin", weaponTypes = {"whip"}, promotions = {} },
+
+    -- =============================================================================
+    -- == Special Classes
+    -- =============================================================================
+    merchant = {
+        name = "Merchant",
+        -- Merchants can use any weapon type.
+        weaponTypes = {"sword", "staff", "tome", "whip", "bow", "lance", "dagger"},
+        -- Merchants cannot promote.
+        promotions = {}
+    },
 }
 
 return ClassBlueprints

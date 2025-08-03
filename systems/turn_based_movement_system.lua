@@ -125,6 +125,15 @@ function TurnBasedMovementSystem.update(dt, world)
                         world.ui.playerTurnState = "action_menu"
 
                         local menuOptions = {}
+
+                        -- New: Check if the unit is adjacent to the Shopkeep and add "Shop" option first.
+                        if world.shopkeep and world.shopkeep.hp > 0 then
+                            local distance = math.abs(entity.tileX - world.shopkeep.tileX) + math.abs(entity.tileY - world.shopkeep.tileY)
+                            if distance == 1 then
+                                table.insert(menuOptions, {text = "Shop", key = "shop"})
+                            end
+                        end
+
                         local all_moves = WorldQueries.getUnitMoveList(entity)
                         -- Populate menu with attacks from the combined list.
                         for _, attackName in ipairs(all_moves) do

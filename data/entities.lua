@@ -25,6 +25,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
     square.lastDirection = "down" -- Default starting direction
     square.components = {} -- All components will be stored here
     square.hasActed = false -- For turn-based logic
+    square.components.move_is_committed = false -- New flag to prevent undoing a move.
 
     -- Set properties based on type/subType
     if square.type == "player" then
@@ -113,6 +114,7 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.movement = blueprint.movement or 5 -- Default movement range in tiles
         square.weight = blueprint.weight
         square.attacks = blueprint.attacks
+        square.lootValue = blueprint.lootValue or 0
         square.level = (options and options.level) or 1
         square.growths = blueprint.growths
         square.expReward = blueprint.expReward
@@ -141,6 +143,47 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
                     right = Assets.animations[spriteName].right:clone(),
                     up = Assets.animations[spriteName].up:clone()
                 },
+                current = "down",
+                spriteSheet = Assets.images[spriteName]
+            }
+        end
+    elseif square.type == "neutral" then
+        -- Neutral units like the Shopkeep use CharacterBlueprints.
+        square.playerType = subType -- e.g., "shopkeep"
+        local blueprint = CharacterBlueprints[subType]
+        square.color = {blueprint.dominantColor[1], blueprint.dominantColor[2], blueprint.dominantColor[3], 1}
+        square.species = blueprint.species
+        square.originType = blueprint.originType
+        square.maxHp = blueprint.maxHp
+        square.attackStat = blueprint.attackStat
+        square.defenseStat = blueprint.defenseStat
+        square.magicStat = blueprint.magicStat
+        square.resistanceStat = blueprint.resistanceStat
+        square.witStat = blueprint.witStat
+        square.maxWisp = blueprint.wispStat
+        square.movement = blueprint.movement
+        square.weight = blueprint.weight
+        square.equippedWeapons = {}
+        if blueprint.equippedWeapons then
+            for slot, weaponName in pairs(blueprint.equippedWeapons) do
+                square.equippedWeapons[slot] = weaponName
+            end
+        end
+        square.attacks = blueprint.attacks
+        square.displayName = blueprint.displayName
+        square.class = blueprint.class
+        square.portrait = blueprint.portrait or "Default_Portrait"
+        square.shopInventory = blueprint.shopInventory or {}
+
+        -- A mapping from the internal neutral type to the asset name.
+        local neutralSpriteMap = {
+            shopkeep = "Shopkeep"
+        }
+
+        local spriteName = neutralSpriteMap[subType]
+        if spriteName and Assets.animations[spriteName] then
+            square.components.animation = {
+                animations = {down = Assets.animations[spriteName].down:clone(), left = Assets.animations[spriteName].left:clone(), right = Assets.animations[spriteName].right:clone(), up = Assets.animations[spriteName].up:clone()},
                 current = "down",
                 spriteSheet = Assets.images[spriteName]
             }

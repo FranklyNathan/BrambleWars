@@ -14,6 +14,7 @@ local UnitInfoMenu = require("modules.unit_info_menu")
 local TileStatusBlueprints = require("data.tile_status_blueprints")
 local ExpBarRendererSystem = require("systems.exp_bar_renderer_system")
 local PromotionMenu = require("modules.promotion_menu")
+local ShopMenu = require("modules/shop_menu")
 
 local Renderer = {}
 
@@ -112,6 +113,8 @@ local function drawHealthBar(square, world)
         healthColor = {1, 0.6, 0, 1} -- Orange for obstacles
     elseif square.type == "enemy" then
         healthColor = {1, 0.2, 0.2, 1} -- Red for enemies
+    elseif square.type == "neutral" then
+        healthColor = {0.2, 0.8, 1, 1} -- Light blue for neutrals
     else -- player
         healthColor = {0.2, 1, 0.2, 1} -- Green for players
     end
@@ -549,6 +552,9 @@ local function draw_all_entities_and_effects(world)
     end
     for _, e in ipairs(world.enemies) do
         table.insert(drawOrder, e)
+    end
+    for _, n in ipairs(world.neutrals) do
+        table.insert(drawOrder, n)
     end
     for _, o in ipairs(world.obstacles) do
         table.insert(drawOrder, o)
@@ -1507,6 +1513,9 @@ local function draw_screen_space_ui(world)
 
     -- Draw Promotion Menu
     PromotionMenu.draw(world)
+
+    -- Draw Shop Menu
+    ShopMenu.draw(world)
 
     -- Draw Game Over Screen (this is a screen-space UI)
     if world.gameState == "game_over" then

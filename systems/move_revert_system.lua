@@ -76,6 +76,12 @@ local function on_player_state_changed(data)
     last_selected_unit = current_selected_unit
 end
 
+-- When a shop transaction is completed, the move is committed and cannot be undone.
+EventBus:register("shop_transaction_complete", function(data)
+    -- The data must contain the player unit that was shopping.
+    clear_pre_move_state(data.unit)
+end)
+
 EventBus:register("action_finalized", function(data) clear_pre_move_state(data.unit) end)
 EventBus:register("unit_died", function(data) clear_pre_move_state(data.victim) end)
 EventBus:register("player_state_changed", on_player_state_changed)

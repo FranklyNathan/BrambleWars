@@ -19,6 +19,7 @@ function World.new(gameMap)
     self.all_entities = {}
     self.players = {}
     self.enemies = {}
+    self.neutrals = {}
     self.projectiles = {}
     self.grapple_hooks = {}
     self.obstacles = {}
@@ -32,10 +33,12 @@ function World.new(gameMap)
     self.ascension_shadows = {}
     self.enemyPathfindingCache = {} -- Cache for AI pathfinding data for the current turn.
     self.tileStatuses = {} -- Stores temporary statuses on map tiles, like "aflame".
+    self.shopkeep = nil -- A direct reference to the shopkeeper entity for easy access.
 
     -- Player's global inventory
     self.playerInventory = {
-        weapons = {} -- A table where keys are weapon blueprint keys and values are the quantity.
+        weapons = {}, -- A table where keys are weapon blueprint keys and values are the quantity.
+        nutmegs = 0   -- The player's currency.
     }
 
     -- Core game state
@@ -119,6 +122,16 @@ function World.new(gameMap)
                 options = {},
                 selectedIndex = 1
             },
+            shop = {
+                active = false,
+                view = "main", -- "main", "buy", "sell", "confirm_buy", "confirm_sell", "insufficient_funds"
+                buyOptions = {},
+                sellOptions = {},
+                selectedIndex = 1,
+                itemToConfirm = nil, -- Stores the weapon key for confirmation
+                confirmMessage = "",
+                insufficientFundsMessage = ""
+            }
         },
 
         -- For the animated stat gains on level up
@@ -170,6 +183,7 @@ function World.new(gameMap)
             Necromantia = {},
             Proliferate = {},
             Frozenfoot = {},
+            DualWielder = {},
         },
         enemy = {
             -- Enemies can also have team-wide passives.
@@ -191,6 +205,29 @@ function World.new(gameMap)
             LastStand = {},
             Necromantia = {},
             Frozenfoot = {},
+            DualWielder = {},
+        },
+        neutral = {
+            Bloodrush = {},
+            HealingWinds = {},
+            Hustle = {},
+            Whiplash = {},
+            Aetherfall = {},
+            Captor = {},
+            Soulsnatcher = {},
+            Desperate = {},
+            Elusive = {},
+            Treacherous = {},
+            Thunderguard = {},
+            Unbound = {},
+            Combustive = {},
+            Infernal = {},
+            Vampirism = {},
+            LastStand = {},
+            Necromantia = {},
+            Proliferate = {},
+            Frozenfoot = {},
+            DualWielder = {},
         }
     }
 
@@ -235,6 +272,20 @@ function World.new(gameMap)
                 playerEntity.x, playerEntity.y = Grid.toPixels(tileX, tileY)
                 playerEntity.targetX, playerEntity.targetY = playerEntity.x, playerEntity.y
                 self:_add_entity(playerEntity)
+            end
+        end
+    end
+
+    -- Create and place the Shopkeep based on the map's "Shopkeep" object layer.
+    -- This assumes a blueprint named 'shopkeep' exists in one of the blueprint files.
+    if self.map.layers["Shopkeep"] then
+        for _, spawnPoint in ipairs(self.map.layers["Shopkeep"].objects) do
+            if spawnPoint.name == "Shopkeep" then
+                local tileX, tileY = Grid.toTile(spawnPoint.x, spawnPoint.y)
+                -- We create the shopkeep as a new "neutral" type.
+                local shopkeepEntity = EntityFactory.createSquare(tileX, tileY, "neutral", "shopkeep")
+                self:_add_entity(shopkeepEntity)
+                break -- Assume only one shopkeep
             end
         end
     end
@@ -486,6 +537,10 @@ function World:_add_entity(entity)
         table.insert(self.players, entity)
     elseif entity.type == "enemy" then
         table.insert(self.enemies, entity)
+    elseif entity.type == "neutral" then
+        table.insert(self.neutrals, entity)
+        -- If this is the shopkeep, store a direct reference.
+        if entity.playerType == "shopkeep" then self.shopkeep = entity end
     elseif entity.type == "projectile" then
         table.insert(self.projectiles, entity)
     elseif entity.type == "grapple_hook" then
@@ -505,6 +560,8 @@ function World:_remove_from_specific_list(entity)
         list = self.players
     elseif entity.type == "enemy" then
         list = self.enemies
+    elseif entity.type == "neutral" then
+        list = self.neutrals
     elseif entity.type == "projectile" then
         list = self.projectiles
     elseif entity.type == "grapple_hook" then

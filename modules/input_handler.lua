@@ -120,6 +120,9 @@ local function finalize_player_action(unit, world)
     -- The ActionFinalizationSystem will set hasActed = true when all animations are done.
     unit.components.action_in_progress = true
 
+    -- 1a. Reset the move commitment flag.
+    unit.components.move_is_committed = false
+
     -- 2. Reset all targeting states to clean up the UI.
     world.ui.targeting.cycle.active = false
     world.ui.targeting.cycle.targets = {}
@@ -450,8 +453,17 @@ local function handle_unit_selected_input(key, world)
 
         -- Allow move confirmation if a valid path exists, OR if the cursor is on the unit's start tile (to attack without moving).
         if (world.ui.pathing.movementPath and #world.ui.pathing.movementPath > 0) or cursorOnUnit then
-            -- If cursor is on the unit, the path is nil/empty. Assign an empty table `{}`
-            -- to trigger the movement system's completion logic immediately.
+            -- Save the unit's state before they move, so the action can be undone.
+            local unit = world.ui.selectedUnit
+            unit.components.pre_move_state = {
+                tileX = unit.tileX,
+                tileY = unit.tileY,
+                direction = unit.lastDirection,
+                hp = unit.hp,
+                frozenTiles = {} -- For the Frozenfoot passive to record its changes.
+            }
+
+            -- If cursor is on the unit, the path is nil/empty. Assign an empty table `{}` to trigger the movement system's completion logic immediately.
             world.ui.selectedUnit.components.movement_path = world.ui.pathing.movementPath or {}
 
             -- Create the destination effect: a descending cursor and a glowing tile.
@@ -506,12 +518,109 @@ local function handle_unit_selected_input(key, world)
     end
 end
 
+-- Helper function to populate the buy options list for the shop.
+local function repopulate_buy_options(world)
+    local menu = world.ui.menus.shop
+    local shopkeep = world.shopkeep
+    menu.buyOptions = {}
+
+    if shopkeep and shopkeep.shopInventory then
+        for weaponKey, quantity in pairs(shopkeep.shopInventory) do
+            if quantity > 0 then
+                table.insert(menu.buyOptions, weaponKey)
+            end
+        end
+        -- Sort the options alphabetically by display name for consistency.
+        table.sort(menu.buyOptions, function(a, b)
+            local nameA = (WeaponBlueprints[a] and WeaponBlueprints[a].name) or a
+            local nameB = (WeaponBlueprints[b] and WeaponBlueprints[b].name) or b
+            return nameA < nameB
+        end)
+    end
+end
+
+-- Helper function to populate the sell options list for the shop.
+local function repopulate_sell_options(world)
+    local shopMenu = world.ui.menus.shop
+    shopMenu.sellOptions = {}
+    local allEquipped = {}
+    -- Count all weapons currently equipped by the player's party.
+    for _, p in ipairs(world.players) do
+        if p.equippedWeapons then
+            for _, wKey in pairs(p.equippedWeapons) do
+                allEquipped[wKey] = (allEquipped[wKey] or 0) + 1
+            end
+        end
+    end
+
+    -- Compare inventory against equipped counts to find sellable items.
+    for weaponKey, totalQuantity in pairs(world.playerInventory.weapons) do
+        local equippedCount = allEquipped[weaponKey] or 0
+        if totalQuantity > equippedCount then
+            table.insert(shopMenu.sellOptions, weaponKey)
+        end
+    end
+    -- Sort the options alphabetically by display name for consistency.
+    table.sort(shopMenu.sellOptions, function(a, b)
+        local nameA = (WeaponBlueprints[a] and WeaponBlueprints[a].name) or a
+        local nameB = (WeaponBlueprints[b] and WeaponBlueprints[b].name) or b
+        return nameA < nameB
+    end)
+end
+
 -- This table maps special action menu keys to their handler functions. This approach
 -- is cleaner and more extensible than a large if/elseif block.
 local specialActionHandlers = {}
 
 specialActionHandlers.wait = function(unit, world)
     finalize_player_action(unit, world)
+end
+
+specialActionHandlers.shop = function(unit, world)
+    local shopMenu = world.ui.menus.shop
+    local shopkeep = world.shopkeep
+
+    if not shopkeep then return end -- Failsafe
+
+    shopMenu.active = true
+    shopMenu.view = "main" -- Start at the main shop screen (Buy/Sell/Exit)
+    shopMenu.selectedIndex = 1
+
+    -- Use the new helper functions to populate the lists.
+    repopulate_buy_options(world)
+    repopulate_sell_options(world)
+
+    -- Transition to the new shop menu state.
+    set_player_turn_state("shop_menu", world)
+    world.ui.menus.action.active = false -- Hide the action menu while shopping.
+end
+
+-- New helper function for vertical navigation within the shop menu.
+local function navigate_shop_menu_vertical(key, world)
+    local menu = world.ui.menus.shop
+    if not menu.active then return end
+
+    local options = {}
+    if menu.view == "main" then
+        options = {"Buy", "Sell", "Exit"}
+    elseif menu.view == "buy" then
+        options = menu.buyOptions
+    elseif menu.view == "sell" then
+        options = menu.sellOptions
+    else
+        return -- No vertical navigation in other views like confirmation popups.
+    end
+
+    if #options == 0 then return end
+
+    local oldIndex = menu.selectedIndex
+    if key == "w" then
+        menu.selectedIndex = (menu.selectedIndex - 2 + #options) % #options + 1
+    elseif key == "s" then
+        menu.selectedIndex = menu.selectedIndex % #options + 1
+    end
+
+    if oldIndex ~= menu.selectedIndex and Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
 end
 
 specialActionHandlers.rescue = function(unit, world)
@@ -590,12 +699,19 @@ local function handle_action_menu_input(key, world)
             Assets.sounds.back_out:stop()
             Assets.sounds.back_out:play()
         end
-
+ 
         local unit = menu.unit
+        -- New: Check if the move has been "committed" by an action like shopping.
+        if unit and unit.components.move_is_committed then
+            -- Play an "error" or "back" sound, but do not allow the undo.
+            -- The sound is already played above, so we just need to exit.
+            return
+        end
+
         -- Use the centralized pre_move_state to revert the unit. This now handles HP as well.
         if unit and unit.components.pre_move_state then
             local state = unit.components.pre_move_state
-
+ 
             -- New: Revert any tiles that were frozen by the Frozenfoot passive during this move.
             if state.frozenTiles and #state.frozenTiles > 0 then
                 for _, posKey in ipairs(state.frozenTiles) do
@@ -929,6 +1045,155 @@ local function handle_secondary_targeting_input(key, world)
     end
 end
 
+-- Handles input when the shop menu is open.
+local function handle_shop_menu_input(key, world)
+    local menu = world.ui.menus.shop
+    if not menu.active then return end
+
+    if menu.view == "main" then
+        local options = {"Buy", "Sell", "Exit"}
+        if key == "w" or key == "s" then
+            local oldIndex = menu.selectedIndex
+            if key == "w" then menu.selectedIndex = (menu.selectedIndex - 2 + #options) % #options + 1
+            else menu.selectedIndex = menu.selectedIndex % #options + 1 end
+            if oldIndex ~= menu.selectedIndex and Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+        elseif key == "j" then
+            if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+            if menu.selectedIndex == 1 then -- Buy
+                menu.view = "buy"; menu.selectedIndex = 1
+            elseif menu.selectedIndex == 2 then -- Sell
+                menu.view = "sell"; menu.selectedIndex = 1
+            elseif menu.selectedIndex == 3 then -- Exit
+                if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+                menu.active = false; set_player_turn_state("action_menu", world); world.ui.menus.action.active = true
+            end
+        elseif key == "k" then
+            if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+            menu.active = false; set_player_turn_state("action_menu", world); world.ui.menus.action.active = true
+        end
+    elseif menu.view == "buy" then
+        if #menu.buyOptions > 0 then
+            if key == "w" or key == "s" then
+                local oldIndex = menu.selectedIndex
+                if key == "w" then menu.selectedIndex = (menu.selectedIndex - 2 + #menu.buyOptions) % #menu.buyOptions + 1
+                else menu.selectedIndex = menu.selectedIndex % #menu.buyOptions + 1 end
+                if oldIndex ~= menu.selectedIndex and Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+            elseif key == "j" then
+                local weaponKey = menu.buyOptions[menu.selectedIndex]
+                local weapon = WeaponBlueprints[weaponKey]
+                if world.playerInventory.nutmegs >= weapon.value then
+                    if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+                    menu.view = "confirm_buy"; menu.itemToConfirm = weaponKey
+                    menu.confirmMessage = "Buy " .. weapon.name .. " for " .. weapon.value .. " Nutmegs?"
+                    menu.selectedIndex = 1 -- Default to "Yes"
+                else
+                    if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+                    menu.view = "insufficient_funds"; menu.insufficientFundsMessage = "Not enough Nutmegs!"
+                end
+            end
+        end
+        if key == "k" then
+            if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+            menu.view = "main"; menu.selectedIndex = 1
+        end
+    elseif menu.view == "sell" then
+        if #menu.sellOptions > 0 then
+            if key == "w" or key == "s" then
+                local oldIndex = menu.selectedIndex
+                if key == "w" then menu.selectedIndex = (menu.selectedIndex - 2 + #menu.sellOptions) % #menu.sellOptions + 1
+                else menu.selectedIndex = menu.selectedIndex % #menu.sellOptions + 1 end
+                if oldIndex ~= menu.selectedIndex and Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+            elseif key == "j" then
+                local weaponKey = menu.sellOptions[menu.selectedIndex]
+                local weapon = WeaponBlueprints[weaponKey]
+                local sellPrice = math.floor(weapon.value / 2)
+                if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+                menu.view = "confirm_sell"; menu.itemToConfirm = weaponKey
+                menu.confirmMessage = "Sell " .. weapon.name .. " for " .. sellPrice .. " Nutmegs?"
+                menu.selectedIndex = 1 -- Default to "Yes"
+            end
+        end
+        if key == "k" then
+            if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+            menu.view = "main"; menu.selectedIndex = 2
+        end
+    elseif menu.view == "confirm_buy" then
+        if key == "a" or key == "d" then
+            menu.selectedIndex = (menu.selectedIndex == 1) and 2 or 1
+            if Assets.sounds.cursor_move then Assets.sounds.cursor_move:stop(); Assets.sounds.cursor_move:play() end
+        elseif key == "j" then
+            if menu.selectedIndex == 1 then -- Yes
+                local weaponKey = menu.itemToConfirm
+                local weapon = WeaponBlueprints[weaponKey]
+                -- 1. Update player inventory and nutmegs.
+                world.playerInventory.nutmegs = world.playerInventory.nutmegs - weapon.value
+                world.playerInventory.weapons[weaponKey] = (world.playerInventory.weapons[weaponKey] or 0) + 1
+
+                -- 2. Update shopkeeper's inventory.
+                if world.shopkeep and world.shopkeep.shopInventory then
+                    world.shopkeep.shopInventory[weaponKey] = (world.shopkeep.shopInventory[weaponKey] or 0) - 1
+                end
+
+                -- 3. Commit the move and refresh UI lists.
+                local unit = world.ui.menus.action.unit
+                if unit then unit.components.move_is_committed = true end
+                repopulate_buy_options(world) -- Repopulate buy list after buying
+                repopulate_sell_options(world) -- Repopulate sell list after buying
+
+                if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+                menu.view = "buy"; menu.selectedIndex = 1
+            else -- No
+                if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+                menu.view = "buy"; menu.selectedIndex = 1
+            end
+        elseif key == "k" then
+            if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+            menu.view = "buy"; menu.selectedIndex = 1
+        end
+    elseif menu.view == "confirm_sell" then
+        if key == "a" or key == "d" then
+            menu.selectedIndex = (menu.selectedIndex == 1) and 2 or 1
+            if Assets.sounds.cursor_move then Assets.sounds.cursor_move:stop(); Assets.sounds.cursor_move:play() end
+        elseif key == "j" then
+            if menu.selectedIndex == 1 then -- Yes
+                local weaponKey = menu.itemToConfirm
+                local weapon = WeaponBlueprints[weaponKey]
+                -- 1. Update player inventory and nutmegs.
+                local sellPrice = math.floor(weapon.value / 2)
+                world.playerInventory.nutmegs = world.playerInventory.nutmegs + sellPrice
+                world.playerInventory.weapons[weaponKey] = world.playerInventory.weapons[weaponKey] - 1
+                if world.playerInventory.weapons[weaponKey] <= 0 then world.playerInventory.weapons[weaponKey] = nil end
+
+                -- 2. Update shopkeeper's inventory.
+                if world.shopkeep and world.shopkeep.shopInventory then
+                    world.shopkeep.shopInventory[weaponKey] = (world.shopkeep.shopInventory[weaponKey] or 0) + 1
+                end
+
+                -- 3. Commit the move and refresh UI lists.
+                local unit = world.ui.menus.action.unit
+                if unit then unit.components.move_is_committed = true end
+                repopulate_buy_options(world) -- Repopulate buy list after selling
+                if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+                repopulate_sell_options(world)
+                menu.view = "sell"
+                menu.selectedIndex = math.min(menu.selectedIndex, #menu.sellOptions)
+                if #menu.sellOptions == 0 then menu.selectedIndex = 1 end
+            else -- No
+                if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+                menu.view = "sell"; menu.selectedIndex = 1
+            end
+        elseif key == "k" then
+            if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+            menu.view = "sell"; menu.selectedIndex = 1
+        end
+    elseif menu.view == "insufficient_funds" then
+        if key == "j" or key == "k" then
+            if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+            menu.view = "buy"; menu.selectedIndex = 1
+        end
+    end
+end
+
 -- Handles input when the player is cycling through targets for an attack.
 local function handle_cycle_targeting_input(key, world)
     local cycle = world.ui.targeting.cycle
@@ -1227,6 +1492,7 @@ local playerStateInputHandlers = {
     unit_info_locked = handle_unit_info_locked_input,
     weapon_select = handle_weapon_select_input,
     map_menu = handle_map_menu_input,
+    shop_menu = handle_shop_menu_input,
     promotion_select = handle_promotion_select_input,
 }
 
@@ -1338,7 +1604,8 @@ function InputHandler.handle_continuous_input(dt, world)
                              state == "unit_selected" or
                              state == "ground_aiming" or
                              state == "enemy_range_display" or
-                             state == "unit_info_locked" or
+                             state == "unit_info_locked" or 
+                             state == "shop_menu" or
                              state == "action_menu" or state == "map_menu" or
                              state == "weapon_select" or state == "promotion_select"
 
@@ -1389,6 +1656,13 @@ function InputHandler.handle_continuous_input(dt, world)
                     if keyToMove then
                         move_unit_info_selection(keyToMove, world)
                     end
+                elseif state == "shop_menu" then
+                    -- For the shop menu, only vertical navigation is continuous.
+                    local keyToMove = nil
+                    if dy < 0 then keyToMove = "w"
+                    elseif dy > 0 then keyToMove = "s"
+                    end
+                    if keyToMove then navigate_shop_menu_vertical(keyToMove, world) end
                 elseif state == "ground_aiming" then
                     move_ground_aim_cursor(dx, dy, world)
                 elseif state == "action_menu" or state == "map_menu" or state == "weapon_select" or state == "promotion_select" then
@@ -1411,7 +1685,8 @@ function InputHandler.handle_continuous_input(dt, world)
 
                         if menu then navigate_vertical_menu(keyToMove, menu, eventName, world) end
                     end
-                else
+                -- Only move the map cursor in specific states.
+                elseif state == "free_roam" or state == "unit_selected" or state == "enemy_range_display" then
                     move_cursor(dx, dy, world, true)
                 end
                 cursor.timer = cursor.timer + cursor.repeatDelay -- Add to prevent timer drift

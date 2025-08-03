@@ -33,10 +33,11 @@ function Assets.load()
     Assets.images.Biblo = loadImage("assets/PlayerUnits/Biblo.png")
     Assets.images.Mortimer = loadImage("assets/PlayerUnits/Mortimer.png")
     Assets.images.Ollo = loadImage("assets/PlayerUnits/Ollo.png")
+    Assets.images.Shopkeep = loadImage("assets/Shopkeep.png")
     Assets.images.Cedric = loadImage("assets/PlayerUnits/Cedric.png")
     Assets.images.Brawler = loadImage("assets/brawler.png")
     Assets.images.Archer = loadImage("assets/archer.png")
-    Assets.images.Flag = loadImage("assets/tree.png") -- For Sceptile's attack
+    Assets.images.Flag = loadImage("assets/tree.png")
     Assets.images.Punter = loadImage("assets/punter.png")
     Assets.images.BearTrap = loadImage("assets/beartrap.png")
     Assets.images.Aflame = loadImage("assets/Aflame.png") -- For the new tile status
@@ -162,6 +163,15 @@ function Assets.load()
         left  = anim8.newAnimation(gDupe('1-4', 2), animSpeed),
         right = anim8.newAnimation(gDupe('1-4', 3), animSpeed),
         up    = anim8.newAnimation(gDupe('1-4', 4), animSpeed)
+    }
+
+    -- Grid and animations for Shopkeep
+    local gShopkeep = anim8.newGrid(frameWidth, frameHeight, Assets.images.Shopkeep:getWidth(), Assets.images.Shopkeep:getHeight())
+    Assets.animations.Shopkeep = {
+        down  = anim8.newAnimation(gShopkeep('1-4', 1), animSpeed),
+        left  = anim8.newAnimation(gShopkeep('1-4', 2), animSpeed),
+        right = anim8.newAnimation(gShopkeep('1-4', 3), animSpeed),
+        up    = anim8.newAnimation(gShopkeep('1-4', 4), animSpeed)
     }
 
     -- Grid and animations for Brawler

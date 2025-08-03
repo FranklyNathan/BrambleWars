@@ -59,6 +59,9 @@ function AttackResolutionSystem.update(dt, world)
             if effect.targetType == "enemy" then
                 -- Player is attacking. Default targets are enemies and obstacles.
                 for _, unit in ipairs(world.enemies) do table.insert(targets, unit) end
+                -- Neutrals can also be targeted by player attacks.
+                for _, unit in ipairs(world.neutrals) do table.insert(targets, unit) end
+
                 for _, obstacle in ipairs(world.obstacles) do
                     if obstacle.hp and obstacle.hp > 0 then
                         table.insert(targets, obstacle)
@@ -96,6 +99,12 @@ function AttackResolutionSystem.update(dt, world)
                                       target.y < effect.y + effect.height and target.y + targetHeight > effect.y
 
                     if collision then
+                        -- New: Special check for Combustive. A unit cannot damage itself with its own explosion.
+                        -- This prevents Necromantia-revived units from instantly dying to their own on-death effect.
+                        if effect.attackName == "combustive_explosion" and effect.attacker == target then
+                            goto continue_target_loop -- Skip to the next target in the list.
+                        end
+
                         if effect.isHeal then
                             CombatActions.applyDirectHeal(target, effect.power)
                             -- Handle special properties on successful heal.
@@ -286,6 +295,7 @@ function AttackResolutionSystem.update(dt, world)
                     end
                 end
             end
+            ::continue_target_loop::
 
             effect.effectApplied = true -- Mark as processed
         end

@@ -16,6 +16,7 @@ local EnemyBlueprints = {
         movement = 5,
         weight = 5,
         equippedWeapons = {[1] = "travelers_sword"},
+        lootValue = 10,
         dominantColor = {0.7, 0.3, 0.2}, -- Rusty Red
         expReward = 20,
         growths = {
@@ -43,6 +44,7 @@ local EnemyBlueprints = {
         movement = 4,
         weight = 4,
         equippedWeapons = {[1] = "travelers_bow"},
+        lootValue = 15,
         dominantColor = {0.3, 0.5, 0.2}, -- Muted Green
         expReward = 20,
         growths = {
@@ -70,6 +72,7 @@ local EnemyBlueprints = {
         movement = 5,
         weight = 7,
         equippedWeapons = {[1] = "travelers_lance"},
+        lootValue = 20,
         dominantColor = {0.5, 0.5, 0.6}, -- Slate Blue
         expReward = 30,
         growths = {

@@ -54,6 +54,9 @@ function WorldQueries.getUnitAt(tileX, tileY, excludeSquare, world)
     for _, enemy in ipairs(world.enemies) do
         if is_valid_unit_at(enemy, tileX, tileY, excludeSquare) then return enemy end
     end
+    for _, neutral in ipairs(world.neutrals) do
+        if is_valid_unit_at(neutral, tileX, tileY, excludeSquare) then return neutral end
+    end
     return nil
 end
 
@@ -215,6 +218,10 @@ local function getPotentialTargets(attacker, attackData, world)
 
     if affects == "enemies" then
         for _, unit in ipairs(targetEnemies) do table.insert(potentialTargets, unit) end
+        -- Players can also target neutral units with damaging attacks.
+        if attacker.type == "player" then
+            for _, unit in ipairs(world.neutrals) do table.insert(potentialTargets, unit) end
+        end
         addDestructibleObstacles(potentialTargets)
         -- If treacherous, also add allies to the list of potential targets for damaging moves.
         if WorldQueries.hasTreacherous(attacker, world) then
@@ -229,6 +236,8 @@ local function getPotentialTargets(attacker, attackData, world)
     elseif affects == "all" then
         for _, unit in ipairs(targetEnemies) do table.insert(potentialTargets, unit) end
         for _, unit in ipairs(targetAllies) do table.insert(potentialTargets, unit) end
+        -- "all" should also include neutrals.
+        for _, unit in ipairs(world.neutrals) do table.insert(potentialTargets, unit) end
         addDestructibleObstacles(potentialTargets)
     end
     return potentialTargets
@@ -728,7 +737,14 @@ function WorldQueries.getUnitMoveList(unit)
     end
 
     -- 3. Add moves from the character's innate blueprint list.
-    local blueprint = (unit.type == "player") and CharacterBlueprints[unit.playerType] or EnemyBlueprints[unit.enemyType]
+    local blueprint
+    if unit.type == "player" then
+        blueprint = CharacterBlueprints[unit.playerType]
+    elseif unit.type == "enemy" then
+        blueprint = EnemyBlueprints[unit.enemyType]
+    elseif unit.type == "neutral" then
+        blueprint = CharacterBlueprints[unit.playerType]
+    end
     if blueprint and blueprint.attacks then
         for _, attackName in ipairs(blueprint.attacks) do
             if not move_exists[attackName] then table.insert(all_moves, attackName); move_exists[attackName] = true end
@@ -754,7 +770,14 @@ function WorldQueries.getUnitPassiveList(unit)
     local passive_exists = {} -- Use a set to track existing passives and prevent duplicates
 
     -- 1. Get passives from the character/enemy blueprint.
-    local blueprint = (unit.type == "player") and CharacterBlueprints[unit.playerType] or EnemyBlueprints[unit.enemyType]
+    local blueprint
+    if unit.type == "player" then
+        blueprint = CharacterBlueprints[unit.playerType]
+    elseif unit.type == "enemy" then
+        blueprint = EnemyBlueprints[unit.enemyType]
+    elseif unit.type == "neutral" then
+        blueprint = CharacterBlueprints[unit.playerType]
+    end
     if blueprint and blueprint.passives then
         for _, passiveName in ipairs(blueprint.passives) do
             if not passive_exists[passiveName] then table.insert(all_passives, passiveName); passive_exists[passiveName] = true end
