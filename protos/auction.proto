@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package bramble;
+
+message Envelope {
+  oneof MessageType {
+    EchoMessage echo_message = 1;
+  }
+}
+
+message EchoMessage {
+  string message = 1;
+}
+
+

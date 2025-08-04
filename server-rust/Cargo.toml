@@ -1,0 +1,13 @@
+[package]
+name = "BrambleWarsServer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = {version = "0.8.4", features = ["ws", "macros"]}
+tokio = { version = "1.47.0", features = ["full"] }
+futures = "0.3.31"
+prost = "0.14.1"
+
+[build-dependencies]
+prost-build = "0.14.1"
