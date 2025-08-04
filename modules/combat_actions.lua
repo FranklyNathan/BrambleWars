@@ -41,7 +41,17 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
         if options.createPopup ~= false then
             EffectFactory.createDamagePopup(world, target, roundedDamage, isCrit)
         end
-        target.components.shake = { timer = 0.2, intensity = 2 }
+        -- Add a shake effect. Make it more intense for critical hits.
+        if isCrit then
+            -- Determine shake direction based on unit's facing direction
+            local shakeDirection = "horizontal" -- Default for up/down
+            if target.lastDirection == "left" or target.lastDirection == "right" then
+                shakeDirection = "vertical"
+            end
+            target.components.shake = { timer = 0.3, intensity = 2, direction = shakeDirection } -- Longer and more intense shake for crits.
+        else
+            target.components.shake = { timer = 0.2, intensity = 1 } -- Standard shake for normal hits.
+        end
         target.components.damage_tint = { timer = 0.3, initialTimer = 0.3 } -- Add red tint effect
 
         -- Add the pending_damage component for the health bar animation.
@@ -108,6 +118,10 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
                     Assets.sounds.tree_break:play()
                 end
             else
+                -- Play the death sound effect for a lethal combat hit.
+                if Assets.sounds.unit_death then
+                    Assets.sounds.unit_death:play()
+                end
                 -- A unit died. Announce the death to any interested systems (quests, passives, etc.)
                 EventBus:dispatch("unit_died", { victim = target, killer = attacker, world = world, reason = {type = "combat"} })
             end

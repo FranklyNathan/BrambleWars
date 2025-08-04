@@ -157,9 +157,9 @@ function UnitInfoMenu.draw(world)
             end
 
             -- Helper to draw a single full-width slice, now with icon and level-up awareness.
-            local function drawFullSlice(text, value, key, isHeader, icon)
+            local function drawFullSlice(text, value, key, isHeader, icon, absoluteIndex, scrollIndicatorDirection)
                 currentSliceIndex = currentSliceIndex + 1
-                local isSelected = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == currentSliceIndex
+                local isSelected = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == (absoluteIndex or currentSliceIndex)
 
                 local canAfford = true
                 -- Check if the key corresponds to an attack and if the unit can afford it.
@@ -178,6 +178,7 @@ function UnitInfoMenu.draw(world)
                 else
                     love.graphics.setColor(0.2, 0.2, 0.1, 0.9) -- Dark brown/grey
                 end
+
                 love.graphics.rectangle("fill", menuX, yOffset, menuWidth, sliceHeight)
 
                 local displayValue = value
@@ -193,6 +194,7 @@ function UnitInfoMenu.draw(world)
                     love.graphics.printf(text, menuX, textY, menuWidth, "center")
                 else
                     local textX = menuX + 10
+
                     -- Draw icon if it exists
                     -- Set the color for the icon and text first.
                     if showPlusOne then
@@ -215,6 +217,30 @@ function UnitInfoMenu.draw(world)
                     end
 
                     love.graphics.print(text, textX, textY)
+
+                    if scrollIndicatorDirection then
+                        local textWidth = font:getWidth(text)
+                        local arrowCenterX = textX + textWidth + 8 -- Position it 8px after the text
+                        local arrowCenterY = yOffset + sliceHeight / 2
+                        local triSize = 4
+                        local p1x, p1y, p2x, p2y, p3x, p3y
+
+                        -- Set color for the arrow
+                        if isSelected then love.graphics.setColor(0, 0, 0, 1)
+                        elseif not canAfford then love.graphics.setColor(0.5, 0.5, 0.5, 1)
+                        else love.graphics.setColor(1, 1, 1, 1) end
+
+                        if scrollIndicatorDirection == "down" then
+                            p1x, p1y = arrowCenterX - triSize, arrowCenterY - triSize / 2
+                            p2x, p2y = arrowCenterX + triSize, arrowCenterY - triSize / 2
+                            p3x, p3y = arrowCenterX, arrowCenterY + triSize / 2
+                        elseif scrollIndicatorDirection == "up" then
+                            p1x, p1y = arrowCenterX - triSize, arrowCenterY + triSize / 2
+                            p2x, p2y = arrowCenterX + triSize, arrowCenterY + triSize / 2
+                            p3x, p3y = arrowCenterX, arrowCenterY - triSize / 2
+                        end
+                        love.graphics.polygon("fill", p1x, p1y, p2x, p2y, p3x, p3y)
+                    end
 
                     -- Set color for the stat value (e.g., "25/25")
                     if displayValue then
@@ -244,6 +270,7 @@ function UnitInfoMenu.draw(world)
                         drawLevelUpBonus(key, startX + valueWidth, textY)
                     end
                 end
+
                 yOffset = yOffset + sliceHeight
             end
 
@@ -349,6 +376,55 @@ function UnitInfoMenu.draw(world)
                 yOffset = yOffset + sliceHeight
             end
 
+ -- NEW: Handle EXP Slice animation and drawing
+            local expAnim = menu.expSliceAnimation
+            if expAnim and expAnim.currentHeight > 0 then
+                -- The slice grows from the bottom of the name slice.
+                -- The background for the slice.
+                love.graphics.setColor(0.2, 0.2, 0.1, 0.9)
+                -- Use a scissor to clip the drawing as it grows.
+                love.graphics.setScissor(menuX, yOffset, menuWidth, expAnim.currentHeight)
+                love.graphics.rectangle("fill", menuX, yOffset, menuWidth, sliceHeight)
+
+                -- Draw the EXP bar inside the slice.
+                local barWidth = menuWidth - 74 -- Give some padding
+                local barHeight = 8
+                local barX = menuX + 10
+                local barY = yOffset + (sliceHeight - barHeight) / 2
+
+                -- Black background for the bar
+                love.graphics.setColor(0, 0, 0, 1)
+                love.graphics.rectangle("fill", barX, barY, barWidth, barHeight)
+
+                -- White fill for the EXP progress
+                local expRatio = (unit.exp or 0) / (unit.maxExp or 100)
+                local fillWidth = barWidth * expRatio
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.rectangle("fill", barX, barY, fillWidth, barHeight)
+
+                -- Draw black ticks every 20 EXP
+                love.graphics.setColor(0, 0, 0, 1)
+                local maxExp = unit.maxExp or 100
+                for tickExp = 20, maxExp - 1, 20 do
+                    local tickRatio = tickExp / maxExp
+                    local tickX = barX + math.floor(barWidth * tickRatio)
+                    love.graphics.line(tickX, barY, tickX, barY + barHeight)
+                end
+
+                -- Draw the EXP text
+                love.graphics.setColor(1, 1, 1, 1) -- Reset color to white for the text
+                local expText = (unit.exp or 0) .. " Exp"
+                local textX = barX + barWidth + 8
+                local textY = yOffset + (sliceHeight - font:getHeight()) / 2
+                love.graphics.print(expText, textX, textY)
+
+                -- Reset scissor
+                love.graphics.setScissor()
+
+                -- Push down all subsequent slices
+                yOffset = yOffset + expAnim.currentHeight
+            end
+
             -- 2. Draw Class
             do
                 local speciesText = unit.species or ""
@@ -432,14 +508,41 @@ function UnitInfoMenu.draw(world)
             love.graphics.setColor(0, 0, 0, 0.3)
             love.graphics.rectangle("fill", menuX, yOffset, menuWidth, 2)
             yOffset = yOffset + 2
-            for _, attackName in ipairs(moveList) do
+
+            local MAX_VISIBLE_MOVES = 5
+            local moveListScrollOffset = menu.moveListScrollOffset or 0
+
+            local numVisibleMoves = math.min(MAX_VISIBLE_MOVES, #moveList - moveListScrollOffset)
+
+            -- We need to know the absolute start index of the moves list to calculate selection correctly.
+            -- This is based on the number of slices that came before it.
+            local moves_start_index = 2 + numWeaponSlots + 8 + #passiveList + 1
+
+            for i = 1, numVisibleMoves do
+                local isFirstVisibleMove = (i == 1)
+                local isLastVisibleMove = (i == numVisibleMoves)
+                local canScrollUp = (moveListScrollOffset > 0)
+                local canScrollDown = (#moveList > MAX_VISIBLE_MOVES) and ((moveListScrollOffset + MAX_VISIBLE_MOVES) < #moveList)
+
+                local scrollIndicator = nil
+                if isFirstVisibleMove and canScrollUp then scrollIndicator = "up"
+                elseif isLastVisibleMove and canScrollDown then scrollIndicator = "down" end
+
+                local moveIndexInFullList = i + moveListScrollOffset
+                local attackName = moveList[moveIndexInFullList]
                 local attackData = AttackBlueprints[attackName]
                 if attackData then
                     local formattedName = formatAttackName(attackName)
                     local wispString = (attackData.wispCost and attackData.wispCost > 0) and string.rep("♦", attackData.wispCost) or ""
-                    drawFullSlice(formattedName, wispString, attackName, false)
+                    local absoluteIndex = moves_start_index + moveIndexInFullList - 1
+                    drawFullSlice(formattedName, wispString, attackName, false, nil, absoluteIndex, scrollIndicator)
                 end
             end
+
+            -- After drawing the visible moves, we must manually update the slice index counter
+            -- to what it would be if all moves were drawn, so that subsequent slices (like "Carrying")
+            -- have the correct index for selection.
+            currentSliceIndex = moves_start_index + #moveList - 1
 
             -- 8. Draw carried unit info if it exists
             if unit.carriedUnit then

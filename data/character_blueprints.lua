@@ -47,13 +47,13 @@ local CharacterBlueprints = {
         defenseStat = 4,
         magicStat = 8,
         resistanceStat = 8,
-        witStat = 96, -- For testing with high crit chance
+        witStat = 76, -- For testing with high crit chance
         movement = 11,
         weight = 13,
         equippedWeapons = {[1] = "travelers_staff"},
         isFlying = true,
         dominantColor = {1.0, 0.6, 0.8}, -- Biblo: Light Pink
-        passives = {"HealingWinds", "Hustle", "Captor", "Unburdened", "SilverTongue"},
+        passives = {"HealingWinds", "Hustle", "Captor", "Unburdened"},
         growths = {
             maxHp = 70,
             attackStat = 15,

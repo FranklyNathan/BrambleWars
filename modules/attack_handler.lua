@@ -2,6 +2,7 @@
 -- This module is responsible for dispatching player attacks.
 
 local UnitAttacks = require("data.unit_attacks")
+local Assets = require("modules.assets")
 local AttackBlueprints = require("data.attack_blueprints")
 
 local AttackHandler = {}
@@ -35,6 +36,13 @@ function AttackHandler.execute(square, attackName, world)
     if square.wisp < cost then
         -- TODO: Add a sound effect for "not enough mana"
         return false
+    end
+
+    -- New: Play a sound for support moves.
+    if attackData.useType == "support" then
+        if Assets.sounds.heal then
+            Assets.sounds.heal:play()
+        end
     end
 
     local attackInstanceId = nextAttackInstanceId

@@ -6,6 +6,7 @@ local EventBus = require("modules.event_bus")
 local PromotionSystem = require("systems.promotion_system")
 local StatSystem = require("systems.stat_system")
 local LevelUpSystem = require("systems.level_up_system")
+local Assets = require("modules.assets")
 
 local LevelUpDisplaySystem = {}
 
@@ -40,6 +41,12 @@ local STAT_DISPLAY_ORDER = {
 -- @param world (table): The main game world table.
 function LevelUpDisplaySystem.start(unit, gains, world)
     if LevelUpDisplaySystem.active then return end -- Don't start a new one if one is in progress
+
+    -- Play the level up sound effect.
+    if Assets.sounds.level_up then
+        Assets.sounds.level_up:stop()
+        Assets.sounds.level_up:play()
+    end
 
     -- Set up the system's internal state
     LevelUpDisplaySystem.active = true
@@ -118,6 +125,12 @@ function LevelUpDisplaySystem.update(dt, world)
             -- Reveal the next stat, storing its start time for the pop animation.
             local statName = table.remove(anim.statsToReveal, 1)
             anim.statsShown[statName] = { startTime = love.timer.getTime() }
+
+            -- Play the stat increase sound effect.
+            if Assets.sounds.stat_up then
+                Assets.sounds.stat_up:stop(); Assets.sounds.stat_up:play()
+            end
+
             LevelUpDisplaySystem.timer = LevelUpDisplaySystem.STAT_REVEAL_DELAY
         else
             -- All stats have been revealed, move to the holding phase

@@ -28,7 +28,7 @@ local EnemyBlueprints = {
             witStat = 20,
         },
         attacks = {"sever"},
-        passives = {"Combustive", "Desperate", "Ephemeral"}
+        passives = {"Desperate", "Unbound"}
     },
     archer = {
         originType = "cavernborn",

@@ -7,6 +7,7 @@ local EffectFactory = require("modules.effect_factory")
 local RescueHandler = require("modules.rescue_handler")
 local PassiveSystem = require("systems.passive_system") -- For team-swapping logic
 local StatSystem = require("systems.stat_system") -- To recalculate stats on revival
+local Assets = require("modules.assets")
 local CombatActions = require("modules.combat_actions")
 local PassiveBlueprints = require("data/passive_blueprints")
 

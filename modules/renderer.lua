@@ -336,8 +336,16 @@ local function draw_entity(entity, world, is_active_player)
     love.graphics.push()
     -- Check for the 'shake' component
     if entity.components.shake then
-        local offsetX = math.random(-entity.components.shake.intensity, entity.components.shake.intensity)
-        local offsetY = math.random(-entity.components.shake.intensity, entity.components.shake.intensity)
+        local shake = entity.components.shake
+        local offsetX, offsetY = 0, 0
+        if shake.direction == "horizontal" then
+            offsetX = math.random(-shake.intensity, shake.intensity)
+        elseif shake.direction == "vertical" then
+            offsetY = math.random(-shake.intensity, shake.intensity)
+        else -- Fallback for non-directional shakes (like the non-crit one)
+            offsetX = math.random(-shake.intensity, shake.intensity)
+            offsetY = math.random(-shake.intensity, shake.intensity)
+        end
         love.graphics.translate(offsetX, offsetY)
     end
 
