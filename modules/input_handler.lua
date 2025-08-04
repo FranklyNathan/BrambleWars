@@ -15,6 +15,7 @@ local EffectFactory = require("modules.effect_factory")
 local TakeHandler = require("modules.take_handler")
 local WeaponBlueprints = require("data.weapon_blueprints")
 local ClassBlueprints = require("data.class_blueprints")
+local MainMenu = require("modules.main_menu")
 local PromotionSystem = require("systems.promotion_system")
 
 local InputHandler = {}
@@ -1274,6 +1275,31 @@ local function handle_burrow_teleport_input(key, world)
     end
 end
 
+-- Handles input on the main menu screen.
+local function handle_main_menu_input(key)
+    local menu = MainMenu.state
+    if not menu or not menu.options or #menu.options == 0 then return end
+
+    if key == "w" or key == "s" then
+        local oldIndex = menu.selectedIndex
+        if key == "w" then
+            menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
+        elseif key == "s" then
+            menu.selectedIndex = menu.selectedIndex % #menu.options + 1
+        end
+        if oldIndex ~= menu.selectedIndex and Assets.sounds.menu_scroll then
+            Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play()
+        end
+    elseif key == "j" then
+        local selectedOption = menu.options[menu.selectedIndex]
+        if selectedOption.key == "play" then
+            return "start_game"
+        elseif selectedOption.key == "draft" then
+            return "draft_mode"
+        end
+    end
+end
+
 -- Handles input when the player is cycling through targets for an attack.
 local function handle_cycle_targeting_input(key, world)
     local cycle = world.ui.targeting.cycle
@@ -1554,6 +1580,19 @@ local function handle_promotion_select_input(key, world)
     end
 end
 
+-- Handles input on the draft screen.
+local function handle_draft_mode_input(key)
+    if key == "k" then -- Escape is handled globally
+        if Assets.sounds.back_out then
+            Assets.sounds.back_out:stop(); Assets.sounds.back_out:play()
+        end
+        return "main_menu"
+    end
+end
+
+-- This is the table for top-level game states.
+local stateHandlers = {}
+
 -- A dispatch table for player state input handlers. This is more scalable than a long if/elseif chain.
 local playerStateInputHandlers = {
     free_roam = handle_free_roam_input,
@@ -1575,15 +1614,8 @@ local playerStateInputHandlers = {
     shop_menu = handle_shop_menu_input,
     promotion_select = handle_promotion_select_input,
     burrow_teleport_selecting = handle_burrow_teleport_input,
+    draft_mode = handle_draft_mode_input,
 }
-
-
-
---------------------------------------------------------------------------------
--- STATE-SPECIFIC HANDLERS
---------------------------------------------------------------------------------
-
-local stateHandlers = {}
 
 -- Handles all input during active gameplay.
 stateHandlers.gameplay = function(key, world)
@@ -1626,6 +1658,11 @@ stateHandlers.gameplay = function(key, world)
     end
 end
 
+-- NEW: Add handler for main menu
+stateHandlers.main_menu = function(key, world) -- world is nil here
+    return handle_main_menu_input(key)
+end
+
 -- Handles input on the game over screen.
 stateHandlers.game_over = function(key, world)
     if key == "escape" then
@@ -1660,16 +1697,18 @@ function InputHandler.handle_key_press(key, currentGameState, world)
             return "gameplay" -- Switch back to gameplay
         elseif currentGameState == "gameplay" then
             return "paused" -- Switch to the paused state
+        elseif currentGameState == "draft_mode" then
+            return "main_menu"
         end
     end
 
     -- Find the correct handler for the current state and call it.
     local handler = stateHandlers[currentGameState]
-    if handler then
+    if handler then        
         -- The handler can return a new state string to trigger a change.
         local newState = handler(key, world)
         if newState then
-            return newState
+            return newState        
         end
     end
 
@@ -1679,6 +1718,9 @@ end
 
 -- This function handles continuous key-down checks for cursor movement.
 function InputHandler.handle_continuous_input(dt, world)
+    -- Add a guard clause for nil world, which will be the case in the main menu.
+    if not world then return end
+
     -- This function should only run during the player's turn in specific states.
     local state = world.ui.playerTurnState
     local movement_allowed = state == "free_roam" or

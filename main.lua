@@ -45,9 +45,12 @@ local InputHandler = require("modules.input_handler")
 local EnvironmentHazardSystem = require("systems.environment_hazard_system")
 local TileStatusSystem = require("systems.tile_status_system")
 local TileHazardSystem = require("systems.tile_hazard_system")
+local MainMenu = require("modules.main_menu")
+local DraftScreen = require("modules.draft_screen")
 local AnimationEffectsSystem = require("systems.animation_effects_system")
 
 world = nil -- Will be initialized in love.load after assets are loaded
+gameState = "booting" -- A temporary state to prevent errors before love.load finishes
 
 local canvas
 local scale = 1
@@ -104,14 +107,15 @@ function resetGame()
         error("FATAL: Map loaded, but it is not a valid map object (missing width/tilewidth). File: '" .. mapPath .. "'.")
     end
     world = World.new(gameMap)
+    gameState = "gameplay" -- Set the state to gameplay after the world is created.
 end
 
 function love.load()
     -- Load all game assets (images, sounds, animations). This must be done before creating the world.
     Assets.load()
 
-    -- The world must be created AFTER assets are loaded, so entities can get their sprites and animations.
-    resetGame()
+    -- We no longer call resetGame() here. It will be called when the player clicks "Play".
+    gameState = "main_menu"
 
     -- Load the custom font. Replace with your actual font file and its native size.
     -- For pixel fonts, using the intended size (e.g., 8, 16) is crucial for sharpness.
@@ -126,8 +130,11 @@ function love.load()
 end
 
 function love.update(dt)
-    -- Only update game logic if not paused
-    if world.gameState == "gameplay" then
+    -- Only update game logic if the state is 'gameplay' and the world exists.
+    if gameState == "gameplay" then
+        -- Failsafe in case update is called before world is ready.
+        if not world then return end
+
         -- Handle continuous input for things like holding down keys for cursor movement.
         InputHandler.handle_continuous_input(dt, world)
 
@@ -158,14 +165,19 @@ end
 -- It's used to handle single, discrete actions.
 function love.keypressed(key, scancode, isrepeat)
     -- We only care about the initial press, not repeats, for this handler.
-    if not isrepeat then
-        local newState = InputHandler.handle_key_press(key, world.gameState, world)
+    if not isrepeat then        
+        -- Pass the global gameState, not the one inside the world object.
+        local newState = InputHandler.handle_key_press(key, gameState, world)
         if newState == "reset" then
             -- The input handler signaled a game reset.
             resetGame()
+        elseif newState == "start_game" then
+            resetGame() -- This will create the world and set gameState to "gameplay"
         else
             -- Otherwise, update the game state as normal.
-            world.gameState = newState
+            if newState then
+                gameState = newState
+            end
         end
     end
 end
@@ -185,8 +197,16 @@ function love.draw()
     -- 1. Draw the entire game world to the off-screen canvas at its native resolution.
     love.graphics.setCanvas(canvas)
 
-    -- This draws the map, entities, health bars, etc.
-    Renderer.draw(world)
+    if gameState == "main_menu" then
+        -- Draw the main menu, which doesn't need a world object.
+        MainMenu.draw()
+    elseif gameState == "draft_mode" then
+        -- Draw the draft screen.
+        DraftScreen.draw()
+    elseif world then -- Only draw the game world if it exists
+        -- This draws the map, entities, health bars, etc.
+        Renderer.draw(world)
+    end
 
     love.graphics.setCanvas()
 
