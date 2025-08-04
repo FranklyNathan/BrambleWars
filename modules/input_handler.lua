@@ -1090,10 +1090,12 @@ local function handle_shop_menu_input(key, world)
             elseif key == "j" then
                 local weaponKey = menu.buyOptions[menu.selectedIndex]
                 local weapon = WeaponBlueprints[weaponKey]
-                if world.playerInventory.nutmegs >= weapon.value then
+                local shoppingUnit = world.ui.menus.action.unit
+                local price = WorldQueries.getPurchasePrice(shoppingUnit, weaponKey, world)
+                if world.playerInventory.nutmegs >= price then
                     if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
                     menu.view = "confirm_buy"; menu.itemToConfirm = weaponKey
-                    menu.confirmMessage = "Buy " .. weapon.name .. " for " .. weapon.value .. " Nutmegs?"
+                    menu.confirmMessage = "Buy " .. weapon.name .. " for " .. price .. " Nutmegs?"
                     menu.selectedIndex = 1 -- Default to "Yes"
                 else
                     if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
@@ -1133,9 +1135,10 @@ local function handle_shop_menu_input(key, world)
         elseif key == "j" then
             if menu.selectedIndex == 1 then -- Yes
                 local weaponKey = menu.itemToConfirm
-                local weapon = WeaponBlueprints[weaponKey]
+                local shoppingUnit = world.ui.menus.action.unit
+                local price = WorldQueries.getPurchasePrice(shoppingUnit, weaponKey, world)
                 -- 1. Update player inventory and nutmegs.
-                world.playerInventory.nutmegs = world.playerInventory.nutmegs - weapon.value
+                world.playerInventory.nutmegs = world.playerInventory.nutmegs - price
                 world.playerInventory.weapons[weaponKey] = (world.playerInventory.weapons[weaponKey] or 0) + 1
 
                 -- 2. Update shopkeeper's inventory.

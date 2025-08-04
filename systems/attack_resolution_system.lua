@@ -124,7 +124,22 @@ function AttackResolutionSystem.update(dt, world)
 
                                     local critChance = CombatFormulas.calculateCritChance(effect.attacker, target, attackData.CritChance or 0)
                                     local isCrit = (love.math.random() < critChance) or effect.critOverride
+                                    
+                                    -- Check for Silver Tongue passive on the attacker.
+                                    if isCrit and not effect.isHeal and WorldQueries.areUnitsHostile(effect.attacker, target) and WorldQueries.hasPassive(effect.attacker, "SilverTongue", world) then
+                                        -- Silver Tongue triggers! Use the new helper to convert the target.
+                                        CombatActions.convertUnitAllegiance(target, effect.attacker, world, {
+                                            popupText = "Converted!",
+                                            popupColor = {0.2, 0.8, 1.0, 1} -- Cyan text
+                                        })
+                                        goto continue_target_loop -- Skip the rest of the attack logic for this target.
+                                    end
+
                                     local damage = CombatFormulas.calculateFinalDamage(effect.attacker, target, attackData, isCrit, effect.attackName, world)
+
+                                    -- Check if the target will be killed and revived by Necromantia to prevent a counter-attack.
+                                    local isKill = (target.hp - damage <= 0)
+                                    local willBeRevived = isKill and WorldQueries.hasPassive(effect.attacker, "Necromantia", world)
 
                                     -- New: Handle Spiritburn weapon property (Wisp deduction)
                                     -- This happens *after* damage is calculated, so the formula sees the wisp.
@@ -190,6 +205,20 @@ function AttackResolutionSystem.update(dt, world)
                                         end
                                     end
 
+                                -- New: Check for Blustering passive on the attacker.
+                                if WorldQueries.hasPassive(effect.attacker, "Blustering", world) then
+                                    -- Check if the attack used was the attacker's basic attack.
+                                    local attackerMoves = WorldQueries.getUnitMoveList(effect.attacker)
+                                    if #attackerMoves > 0 and attackerMoves[1] == effect.attackName then
+                                        -- It is the basic attack. Apply Careen 1.
+                                        local careenDirection = Grid.getDirection(effect.attacker.tileX, effect.attacker.tileY, target.tileX, target.tileY)
+                                        local statusToApply = {
+                                            type = "careening", force = 1, direction = careenDirection, attacker = effect.attacker
+                                        }
+                                        StatusEffectManager.applyStatusEffect(target, statusToApply, world)
+                                    end
+                                end
+
                                     -- Check for Soulsnatcher passive on the attacker.
                                     local soulsnatcher_providers = world.teamPassives[effect.attacker.type].Soulsnatcher
                                     if soulsnatcher_providers and #soulsnatcher_providers > 0 then
@@ -243,8 +272,8 @@ function AttackResolutionSystem.update(dt, world)
                                     -- New: Check for counter-attacks right after a successful hit.
                                     local isCounter = effect.specialProperties and effect.specialProperties.isCounterAttack
                                     local isAetherfall = effect.specialProperties and effect.specialProperties.isAetherfallAttack
-                                    -- A unit cannot counter-attack if it is stunned, already airborne, or if the incoming attack is the one that *causes* it to become airborne.
-                                    if not isCounter and not isAetherfall and target.hp and target.hp > 0 and not target.statusEffects.stunned and not target.statusEffects.airborne and not (effect.statusEffect and effect.statusEffect.type == "airborne") then
+                                    -- A unit cannot counter-attack if it is stunned, airborne, killed and revived, or if the attack itself is a reaction.
+                                    if not isCounter and not isAetherfall and not willBeRevived and target.hp > 0 and not target.statusEffects.stunned and not target.statusEffects.airborne and not (effect.statusEffect and effect.statusEffect.type == "airborne") then
                                         local defender_moves = WorldQueries.getUnitMoveList(target)
                                         if #defender_moves > 0 then
                                             local basicAttackName = defender_moves[1] -- The first move is always the basic attack.

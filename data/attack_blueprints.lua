@@ -493,4 +493,17 @@ AttackBlueprints.combustive_explosion = {
     description = "The fiery explosion from a dying unit."
 }
 
+AttackBlueprints.wall_impact = {
+    name = "Wall Impact",
+    power = 5,
+    wispCost = 0,
+    Accuracy = 100,
+    useType = "utility",
+    targeting_style = "none",
+    patternType = "eruption_aoe", -- Use the same visual pattern as Eruption.
+    drawsTile = true,
+    deals_true_damage = true,
+    description = "Damage from being knocked into a wall."
+}
+
 return AttackBlueprints

@@ -10,13 +10,17 @@ local PassiveBlueprints = {
         name = "Bloodrush",
         description = "If this unit defeats an enemy, their turn is refreshed, allowing them to act again."
     },
+    Blustering = {
+        name = "Blustering",
+        description = "This unit's basic attacks inflict Careen 1."
+    },
     Captor = {
         name = "Captor",
         description = "Allows this unit to rescue adjacent enemies."
     },
     Combustive = {
         name = "Combustive",
-        description = "Explodes upon death, dealing 10 damage to all units within 1 range.",
+        description = "Explodes upon death, dealing 10 damage to all units within range.",
         trigger = "on_death", -- The event that triggers this passive.
         on_death_effect = { -- The effect to create when triggered.
             type = "ripple",
@@ -26,7 +30,7 @@ local PassiveBlueprints = {
     },
     Desperate = {
         name = "Desperate",
-        description = "Increases damage dealt as HP decreases. The lower the HP, the higher the damage."
+        description = "Increases damage dealt as HP decreases."
     },
     Devourer = {
         name = "Devourer",
@@ -73,9 +77,21 @@ local PassiveBlueprints = {
         name = "Necromantia",
         description = "When this unit kills an enemy, the slain foe is revived to fight on your team.",
     },
+    Oblivious = {
+        name = "Oblivious",
+        description = "When this unit does combat, it ignores stat changes from both units' weapons."
+    },
     Proliferate = {
         name = "Proliferate",
         description = "When this unit revives an enemy, the revived unit inherits this unit's passives."
+    },
+    Pristine = {
+        name = "Pristine",
+        description = "Unit takes half damage while at full HP."
+    },
+    SilverTongue = {
+        name = "Silver Tongue",
+        description = "Critical hits change unit allegiance. Shop prices are reduced by 10%."
     },
     Soulsnatcher = {
         name = "Soulsnatcher",

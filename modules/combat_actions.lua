@@ -6,6 +6,8 @@ local EventBus = require("modules.event_bus")
 local EffectFactory = require("modules.effect_factory")
 local Grid = require("modules.grid")
 local Assets = require("modules.assets")
+local PassiveSystem = require("systems.passive_system")
+local StatSystem = require("systems.stat_system")
 
 local CombatActions = {}
 
@@ -158,4 +160,70 @@ function CombatActions.grantExp(unit, amount, world)
     -- The level up check and UI update will be handled by another system after combat resolves.
 end
 
+--- Changes a unit's team allegiance and handles all related state changes.
+-- @param unitToConvert (table): The unit whose team is changing.
+-- @param newTeamOwner (table): A unit on the team the target is converting to.
+-- @param world (table): The game world.
+-- @param options (table): An optional table for customization.
+--   - popupText (string): Text for the visual popup (e.g., "Converted!").
+--   - popupColor (table): The color for the popup text.
+--   - onConvert (function): A callback function to run special logic *before* the final stat recalculation.
+--     It receives (unitToConvert, newTeamOwner, world) as arguments.
+--   - skipDefaultHeal (boolean): If true, the unit will not be fully healed after conversion.
+function CombatActions.convertUnitAllegiance(unitToConvert, newTeamOwner, world, options)
+    options = options or {}
+
+    -- 1. Remove from old team's passive list.
+    PassiveSystem.remove_unit_from_passives(unitToConvert, world)
+
+    -- 2. Remove from old team's unit list.
+    local oldTeamList
+    if unitToConvert.type == "player" then oldTeamList = world.players
+    elseif unitToConvert.type == "enemy" then oldTeamList = world.enemies
+    elseif unitToConvert.type == "neutral" then oldTeamList = world.neutrals
+    end
+
+    if oldTeamList then
+        for i = #oldTeamList, 1, -1 do
+            if oldTeamList[i] == unitToConvert then table.remove(oldTeamList, i); break; end
+        end
+    end
+
+    -- 3. Switch team type and add to new team list.
+    unitToConvert.type = newTeamOwner.type
+    local newTeamList = (unitToConvert.type == "player") and world.players or world.enemies
+    table.insert(newTeamList, unitToConvert)
+
+    -- 4. Update AI component and reset state for conversion.
+    if unitToConvert.type == "enemy" then unitToConvert.components.ai = {} else unitToConvert.components.ai = nil end
+    -- A converted unit gets a fresh start on its new team and can act this turn,
+    -- even if it had already acted. This applies to both revival (Necromantia)
+    -- and mid-combat conversion (Silver Tongue).
+    unitToConvert.hasActed = false
+    unitToConvert.lastDirection = "down" -- Face down.
+
+    -- 5. Clear status effects.
+    unitToConvert.statusEffects = {}
+
+    -- 6. Run optional onConvert callback for special logic (like Necromantia's HP reduction).
+    if options.onConvert then
+        options.onConvert(unitToConvert, newTeamOwner, world)
+    end
+
+    -- 7. Add to new team's passive list and recalculate stats.
+    PassiveSystem.add_unit_to_passives(unitToConvert, world)
+    StatSystem.recalculate_for_unit(unitToConvert, world)
+
+    -- 8. Fully heal the unit to its new max stats, unless skipped.
+    if not options.skipDefaultHeal then
+        unitToConvert.hp = unitToConvert.finalMaxHp
+        unitToConvert.wisp = unitToConvert.finalMaxWisp
+    end
+
+    -- 9. Create a visual effect.
+    if options.popupText then
+        EffectFactory.createDamagePopup(world, unitToConvert, options.popupText, false, options.popupColor)
+    end
+end
+    
 return CombatActions

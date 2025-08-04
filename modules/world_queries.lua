@@ -695,6 +695,7 @@ function WorldQueries.isActionOngoing(world)
     for _, entity in ipairs(world.all_entities) do
         -- Check for animations like lunges, careening, or any entity that is currently moving towards a target pixel.
         if entity.components.lunge or
+           entity.components.reviving or
            entity.components.pending_damage or
            (entity.statusEffects and entity.statusEffects.careening) or
            (entity.targetX and (math.abs(entity.x - entity.targetX) > 0.5 or math.abs(entity.y - entity.targetY) > 0.5)) then
@@ -893,6 +894,22 @@ function WorldQueries.countAdjacentAllies(unit, world)
         end
     end
     return count
+end
+
+--- Gets the purchase price of a weapon for a specific unit, applying discounts.
+-- @param unit (table): The unit buying the item. Can be nil.
+-- @param weaponKey (string): The key of the weapon in WeaponBlueprints.
+-- @param world (table): The game world.
+-- @return (number): The final purchase price.
+function WorldQueries.getPurchasePrice(unit, weaponKey, world)
+    local weapon = WeaponBlueprints[weaponKey]
+    if not weapon then return math.huge end
+
+    local price = weapon.value
+    if unit and WorldQueries.hasPassive(unit, "SilverTongue", world) then
+        price = math.floor(price * 0.9) -- 10% discount
+    end
+    return price
 end
 
 return WorldQueries

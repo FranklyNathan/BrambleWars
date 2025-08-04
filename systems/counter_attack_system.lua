@@ -1,6 +1,7 @@
 -- systems\counter_attack_system.lua
 -- This system processes delayed counter-attacks to ensure they trigger after the initial attack animation.
 
+local AttackPatterns = require("modules.attack_patterns")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
 local AttackBlueprints = require("data.attack_blueprints")
@@ -18,6 +19,28 @@ function CounterAttackSystem.update(dt, world)
         if counter.delay <= 0 and counter.defender.hp > 0 and not (counter.defender.components and counter.defender.components.pending_damage) then
             local defender = counter.defender
             local attacker = counter.attacker
+
+            -- New: Re-validate range before executing the counter-attack.
+            -- This handles cases where the defender was moved (e.g., by Careen) after the counter was queued.
+            local basicAttackData = AttackBlueprints[counter.attackName]
+            local pattern = basicAttackData and AttackPatterns[basicAttackData.patternType]
+            local inRange = false
+            if pattern and type(pattern) == "table" then
+                local dx = attacker.tileX - defender.tileX
+                local dy = attacker.tileY - defender.tileY
+                for _, p_coord in ipairs(pattern) do
+                    if p_coord.dx == dx and p_coord.dy == dy then
+                        inRange = true
+                        break
+                    end
+                end
+            end
+            if not inRange then
+                -- The unit was pushed out of range. The counter-attack is cancelled.
+                -- We must remove it from the pending list to prevent the game from locking.
+                table.remove(world.pendingCounters, i)
+                goto continue_counter_loop -- Skip to the next counter in the list.
+            end
 
             -- Make the defender (counter-attacker) face the original attacker.
             local dx_face, dy_face = attacker.tileX - defender.tileX, attacker.tileY - defender.tileY
@@ -50,6 +73,7 @@ function CounterAttackSystem.update(dt, world)
 
             -- Remove the counter from the pending list.
             table.remove(world.pendingCounters, i)
+            ::continue_counter_loop::
         end
     end
 end

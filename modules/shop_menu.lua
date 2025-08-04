@@ -2,6 +2,7 @@
 -- Contains the drawing logic for the shop menu UI.
 
 local Assets = require("modules.assets")
+local WorldQueries = require("modules.world_queries")
 local WeaponBlueprints = require("data.weapon_blueprints")
 local Config = require("config")
 
@@ -111,7 +112,13 @@ function ShopMenu.draw(world)
         for i, weaponKey in ipairs(options) do
             local weapon = WeaponBlueprints[weaponKey]
             if weapon then
-                local price = (menu.view == "buy") and weapon.value or math.floor(weapon.value / 2)
+                local price
+                if menu.view == "buy" then
+                    local shoppingUnit = world.ui.menus.action.unit
+                    price = WorldQueries.getPurchasePrice(shoppingUnit, weaponKey, world)
+                else -- "sell"
+                    price = math.floor(weapon.value / 2)
+                end
                 local priceText = price .. " N"
                 local icon = Assets.getWeaponIcon(weapon.type)
                 local itemCount = 0

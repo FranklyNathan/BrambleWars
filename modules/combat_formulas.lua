@@ -57,12 +57,46 @@ function CombatFormulas.calculateBaseDamage(attacker, defender, attackData, atta
         return attackData.power or 0
     end
 
+    -- New: Check for Oblivious passive
+    local isObliviousCombat = false
+    if world then
+        isObliviousCombat = WorldQueries.hasPassive(attacker, "Oblivious", world) or WorldQueries.hasPassive(defender, "Oblivious", world)
+    end
+
+    local attackerWeaponBonuses = { attackStat = 0, magicStat = 0 }
+    local defenderWeaponBonuses = { defenseStat = 0, resistanceStat = 0 }
+
+    if isObliviousCombat then
+        -- This local helper function calculates the total stat bonuses from a unit's equipped weapons.
+        local function getWeaponStatBonuses(unit)
+            local bonuses = { attackStat = 0, magicStat = 0, defenseStat = 0, resistanceStat = 0 }
+            if unit.equippedWeapons then
+                -- Lazily require WeaponBlueprints here to avoid potential top-level circular dependencies.
+                local WeaponBlueprints = require("data.weapon_blueprints")
+                for _, weaponName in ipairs(unit.equippedWeapons) do
+                    local weapon = WeaponBlueprints[weaponName]
+                    if weapon and weapon.stats then
+                        for statName, bonus in pairs(weapon.stats) do
+                            if bonuses[statName] ~= nil then
+                                bonuses[statName] = bonuses[statName] + bonus
+                            end
+                        end
+                    end
+                end
+            end
+            return bonuses
+        end
+
+        attackerWeaponBonuses = getWeaponStatBonuses(attacker)
+        defenderWeaponBonuses = getWeaponStatBonuses(defender)
+    end
+
     print("--- Damage Calculation: " .. (attackName or "Unknown") .. " ---")
     print("Attacker: " .. (attacker.displayName or attacker.enemyType) .. ", Defender: " .. (defender.displayName or defender.enemyType or "Obstacle"))
 
     -- Determine the origin type for the attack. Prioritize the attack's own type, fall back to the attacker's type.
     local attackOriginType = attackData.originType or attacker.originType
-    local statUsed = (attackData.useType == "physical") and attacker.finalAttackStat or attacker.finalMagicStat
+    local statUsed = (attackData.useType == "physical") and ((attacker.finalAttackStat or 0) - attackerWeaponBonuses.attackStat) or ((attacker.finalMagicStat or 0) - attackerWeaponBonuses.magicStat)
     local power = attackData.power or 0
     local effectiveness = CombatFormulas.calculateTypeEffectiveness(attackOriginType, defender.originType)
 
@@ -78,16 +112,16 @@ function CombatFormulas.calculateBaseDamage(attacker, defender, attackData, atta
     local defenseStatName = ""
     -- Calculate damage dealt by a physical attack.
     if attackData.useType == "physical" then
-        defenseStatUsed = defender.finalDefenseStat or 0
+        defenseStatUsed = (defender.finalDefenseStat or 0) - defenderWeaponBonuses.defenseStat
         defenseStatName = "Defense"
         rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's defense.
     elseif attackData.useType == "magical" then
-        defenseStatUsed = defender.finalResistanceStat or 0
+        defenseStatUsed = (defender.finalResistanceStat or 0) - defenderWeaponBonuses.resistanceStat
         defenseStatName = "Resistance"
         rawDamage = math.max(0, adjustedPower - defenseStatUsed) -- Subtract defender's resistance.
     elseif attackData.useType == "utility" and power > 0 then
         -- Utility moves with power use physical stats by default.
-        defenseStatUsed = defender.finalDefenseStat or 0
+        defenseStatUsed = (defender.finalDefenseStat or 0) - defenderWeaponBonuses.defenseStat
         defenseStatName = "Defense"
         rawDamage = math.max(0, adjustedPower - defenseStatUsed)
     end
@@ -187,6 +221,14 @@ function CombatFormulas.calculateFinalDamage(attacker, defender, attackData, isC
         end
     end
 
+    -- New: Check for Pristine passive on the DEFENDER.
+    -- This is applied after all attacker bonuses.
+    if world and WorldQueries.hasPassive(defender, "Pristine", world) then
+        if defender.hp >= defender.finalMaxHp then
+            damage = damage * 0.5
+        end
+    end
+
     return damage
 end
 
@@ -213,7 +255,8 @@ function CombatFormulas.calculateExpGain(attacker, defender, isKill, world)
     if not defender.expReward then return 0 end
 
     print("--- EXP Calculation ---")
-    print("Attacker: " .. attacker.displayName .. ", Defender: " .. defender.enemyType)
+    -- Make the print statement safer by providing fallbacks, preventing crashes for converted units.
+    print("Attacker: " .. (attacker.displayName or attacker.enemyType or "Unknown") .. ", Defender: " .. (defender.displayName or defender.enemyType or "Unknown"))
 
     local baseExp = 30
     local levelDifference = defender.level - attacker.level

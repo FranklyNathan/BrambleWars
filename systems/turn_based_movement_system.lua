@@ -73,11 +73,14 @@ function TurnBasedMovementSystem.update(dt, world)
                     -- Check if the tile is water (base check, ignoring frozen status)
                     if WorldQueries.isTileWater_Base(entity.tileX, entity.tileY, world) then
                         local posKey = entity.tileX .. "," .. entity.tileY
-                        world.tileStatuses[posKey] = { type = "frozen" }
-                        -- If this is a player unit making a move, record the change for undo.
-                        if entity.type == "player" and entity.components.pre_move_state then
-                            -- Add the key to the list of tiles frozen during this move.
-                            table.insert(entity.components.pre_move_state.frozenTiles, posKey)
+                        -- Only freeze the tile and record it for undo if it's not already frozen.
+                        if not (world.tileStatuses[posKey] and world.tileStatuses[posKey].type == "frozen") then
+                            world.tileStatuses[posKey] = { type = "frozen" }
+                            -- If this is a player unit making a move, record the change for undo.
+                            if entity.type == "player" and entity.components.pre_move_state then
+                                -- Add the key to the list of tiles frozen during this move.
+                                table.insert(entity.components.pre_move_state.frozenTiles, posKey)
+                            end
                         end
                     end
                 end

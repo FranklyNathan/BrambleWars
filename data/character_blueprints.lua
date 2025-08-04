@@ -22,7 +22,7 @@ local CharacterBlueprints = {
         equippedWeapons = {[1] = "travelers_sword"},
         canSwim = true,
         dominantColor = {0.5, 0.2, 0.8}, -- Clementine: Purple
-        passives = {"DualWielder", "Desperate", "Treacherous", "Unbound", "Vampirism", "Frozenfoot", "Unburdened"},
+        passives = {"DualWielder", "Desperate", "Treacherous", "Vampirism", "Frozenfoot", "Unburdened"},
         growths = {
             maxHp = 90,
             attackStat = 50,
@@ -47,13 +47,13 @@ local CharacterBlueprints = {
         defenseStat = 4,
         magicStat = 8,
         resistanceStat = 8,
-        witStat = 6,
+        witStat = 96, -- For testing with high crit chance
         movement = 11,
         weight = 13,
         equippedWeapons = {[1] = "travelers_staff"},
         isFlying = true,
         dominantColor = {1.0, 0.6, 0.8}, -- Biblo: Light Pink
-        passives = {"HealingWinds", "Hustle", "Captor", "Unburdened", "Ephemeral"},
+        passives = {"HealingWinds", "Hustle", "Captor", "Unburdened", "SilverTongue"},
         growths = {
             maxHp = 70,
             attackStat = 15,
@@ -88,8 +88,8 @@ local CharacterBlueprints = {
         weight = 9, -- Very Heavy
         equippedWeapons = {[1] = "travelers_tome"},
         canSwim = true,
-        dominantColor = {0.6, 0.9, 0.6}, -- Winthrop: Pale Green
-        passives = {"Thunderguard"},
+        dominantColor = {0.6, 0.9, 0.6}, -- Winthrop: Pale Green,
+        passives = {"Thunderguard", "Pristine"},
         growths = {
             maxHp = 80,
             attackStat = 40,
@@ -149,7 +149,7 @@ local CharacterBlueprints = {
         weight = 7, -- Medium-Heavy
         equippedWeapons = {[1] = "travelers_whip"},
         dominantColor = {1.0, 0.8, 0.1}, -- Cedric: Electric Yellow,
-        passives = {"Whiplash", "Captor", "Infernal"},
+        passives = {"Captor", "Infernal"},
         growths = {
             maxHp = 85,
             attackStat = 55,
@@ -239,9 +239,9 @@ local CharacterBlueprints = {
         movement = 8,
         weight = 5, -- Medium-Light
         equippedWeapons = {[1] = "travelers_dagger"},
-        isFlying = true,
+        isFlying = true, 
         dominantColor = {0.8, 0.7, 0.4}, -- Dupe: Sandy Brown,
-        passives = {"Aetherfall", "Elusive", "Necromantia", "Proliferate"},
+        passives = {"Aetherfall", "Elusive", "Necromantia", "Proliferate", "Blustering"},
         growths = {
             maxHp = 80,
             attackStat = 45,

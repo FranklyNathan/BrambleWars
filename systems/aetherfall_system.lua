@@ -17,9 +17,9 @@ local function find_aetherfall_units(world, teamType)
     return world.teamPassives[teamType].Aetherfall
 end
 
--- Helper to find all empty tiles adjacent to a target.
-local function find_adjacent_open_tiles(target, world, excludeUnit)
-    local openTiles = {}
+-- Helper to find valid attack directions around a target.
+local function find_adjacent_attack_directions(target, world, excludeUnit)
+    local openDirections = {}
     -- The order is important for consistent attack visuals: Left, Right, Top, Bottom.
     local neighbors = {
         {dx = -1, dy = 0}, -- Left
@@ -33,10 +33,10 @@ local function find_adjacent_open_tiles(target, world, excludeUnit)
         if checkX >= 0 and checkX < world.map.width and
            checkY >= 0 and checkY < world.map.height and
            not WorldQueries.isTileOccupied(checkX, checkY, excludeUnit, world) then
-            table.insert(openTiles, {tileX = checkX, tileY = checkY})
+            table.insert(openDirections, move) -- Insert the direction vector {dx, dy}
         end
     end
-    return openTiles
+    return openDirections
 end
 
 -- This function contains the core logic for triggering the passive.
@@ -50,22 +50,28 @@ local function check_and_trigger_aetherfall(airborne_target, attacker, world)
     end
 
     for _, reactor in ipairs(potential_reactors) do
+        -- Get the reactor's basic attack. This is always the first move in their list.
+        local moveList = WorldQueries.getUnitMoveList(reactor)
+        local basicAttackName = moveList and moveList[1]
+
         -- Check all conditions for this unit
         local distance = math.abs(reactor.tileX - airborne_target.tileX) + math.abs(reactor.tileY - airborne_target.tileY)
         local canReact = not reactor.hasActed and
                          distance <= 16 and
-                         not reactor.components.aetherfall_attack -- Don't trigger if already attacking
+                         not reactor.components.aetherfall_attack and -- Don't trigger if already attacking
+                         basicAttackName -- The unit must have a basic attack to react.
 
         if canReact then
-            local openTiles = find_adjacent_open_tiles(airborne_target, world, reactor)
-            if #openTiles > 0 then
+            local openDirections = find_adjacent_attack_directions(airborne_target, world, reactor)
+            if #openDirections > 0 then
                 -- Trigger the attack!
                 reactor.components.aetherfall_attack = {
                     target = airborne_target,
-                    hitsRemaining = #openTiles,
-                    usedLocations = {}, -- Keep track of tiles we've attacked from.
+                    attackDirections = openDirections, -- Store the initial list of valid directions.
+                    nextDirectionIndex = 1,
                     hitTimer = 0.6, -- Wait for the airborne animation to reach its peak.
-                    hitDelay = 0.2 -- Time between subsequent hits
+                    hitDelay = 0.2, -- Time between subsequent hits.
+                    attackName = basicAttackName -- Store the attack to use.
                 }
                 -- One unit reacts, that's enough.
                 break
@@ -97,84 +103,74 @@ function AetherfallSystem.update(dt, world)
             local attack = unit.components.aetherfall_attack
             attack.hitTimer = attack.hitTimer - dt
 
-            if attack.hitTimer <= 0 then
-                if attack.hitsRemaining > 0 then
-                    local target = attack.target
-                    if not target or target.hp <= 0 then
-                        -- Target died mid-combo, end the attack immediately.
-                        unit.components.aetherfall_attack = nil
-                    else
-                        -- Recalculate open tiles for every hit to handle units moving mid-combo.
-                        -- We exclude the attacker so its own tile is considered a valid teleport spot.
-                        local openTiles = find_adjacent_open_tiles(target, world, unit)
-
-                        -- Find the next available, unused tile to attack from.
-                        local warpTile = nil
-                        for _, tile in ipairs(openTiles) do
-                            local tileKey = tile.tileX .. "," .. tile.tileY
-                            if not attack.usedLocations[tileKey] then
-                                warpTile = tile
-                                break
-                            end
-                        end
-                        
-                        -- If a valid, unused tile was found, proceed with the attack.
-                        if warpTile then
-                            -- Mark this location as used for this combo.
-                            attack.usedLocations[warpTile.tileX .. "," .. warpTile.tileY] = true
-                            -- Teleport the unit
-                            unit.tileX, unit.tileY = warpTile.tileX, warpTile.tileY
-                            unit.x, unit.y = Grid.toPixels(warpTile.tileX, warpTile.tileY)
-                            EventBus:dispatch("unit_tile_changed", { unit = unit, world = world })
-                            unit.targetX, unit.targetY = unit.x, unit.y
-
-                            -- Make the unit face the target
-                            local dx, dy = target.tileX - unit.tileX, target.tileY - unit.tileY
-                            if math.abs(dx) > math.abs(dy) then unit.lastDirection = (dx > 0) and "right" or "left"
-                            else unit.lastDirection = (dy > 0) and "down" or "up" end
-
-                            -- Add the lunge component for the visual effect.
-                            unit.components.lunge = { timer = 0.2, initialTimer = 0.2, direction = unit.lastDirection }
-
-                            -- Execute a "Sever" attack.
-                            local targetType = (unit.type == "player") and "enemy" or "player"
-                            local specialProperties = {
-                                isAetherfallAttack = true -- Flag to prevent counter-attacks.
-                            }
-                            EffectFactory.addAttackEffect(world, {
-                                attacker = unit,
-                                attackName = "sever",
-                                x = target.x,
-                                y = target.y,
-                                width = target.size,
-                                height = target.size,
-                                color = {1, 0, 0, 1},
-                                targetType = targetType,
-                                specialProperties = specialProperties
-                            })
-                        end
-
-                        -- Update state for the next hit regardless of whether we attacked.
-                        attack.hitsRemaining = attack.hitsRemaining - 1
-                        attack.hitTimer = attack.hitDelay
-                    end
-                end
-
-                -- Re-check component existence before checking hitsRemaining, as it might have been nilled above.
-                if unit.components.aetherfall_attack and unit.components.aetherfall_attack.hitsRemaining <= 0 then
-                   -- Attack is over. End the airborne status on the target.
-                    StatusEffectManager.remove(attack.target, "airborne", world)
-                    -- Clean up the component. The unit's turn is NOT consumed.
+            if attack.hitTimer <= 0 and attack.nextDirectionIndex <= #attack.attackDirections then
+                local target = attack.target
+                if not target or target.hp <= 0 then
+                    -- Target died mid-combo, end the attack immediately.
                     unit.components.aetherfall_attack = nil
+                else
+                    -- Get the next direction from the pre-calculated list.
+                    local direction = attack.attackDirections[attack.nextDirectionIndex]
+                    
+                    -- Calculate the warp tile based on the target's CURRENT position.
+                    local warpTileX = target.tileX + direction.dx
+                    local warpTileY = target.tileY + direction.dy
 
-                    -- After a reactive move like Aetherfall, the unit's "start of turn" position
-                    -- is now its new location. This ensures that if the player moves and then
-					-- cancels, the unit returns to this new spot, not its original one.
-					if attack.target.statusEffects.airborne then
-						attack.target.statusEffects.airborne.aetherfall_controlled = false
-					end
+                    -- Re-validate that the tile is still open before warping.
+                    -- This handles cases where another unit moves into the spot.
+                    if not WorldQueries.isTileOccupied(warpTileX, warpTileY, unit, world) then
+                        -- Teleport the unit
+                        unit.tileX, unit.tileY = warpTileX, warpTileY
+                        unit.x, unit.y = Grid.toPixels(warpTileX, warpTileY)
+                        EventBus:dispatch("unit_tile_changed", { unit = unit, world = world })
+                        unit.targetX, unit.targetY = unit.x, unit.y
 
+                        -- Make the unit face the target
+                        local dx, dy = target.tileX - unit.tileX, target.tileY - unit.tileY
+                        if math.abs(dx) > math.abs(dy) then unit.lastDirection = (dx > 0) and "right" or "left"
+                        else unit.lastDirection = (dy > 0) and "down" or "up" end
+
+                        -- Add the lunge component for the visual effect.
+                        unit.components.lunge = { timer = 0.2, initialTimer = 0.2, direction = unit.lastDirection }
+
+                        -- Execute the unit's basic attack.
+                        local targetType = (unit.type == "player") and "enemy" or "player"
+                        local specialProperties = {
+                            isAetherfallAttack = true -- Flag to prevent counter-attacks.
+                        }
+                        EffectFactory.addAttackEffect(world, {
+                            attacker = unit,
+                            attackName = attack.attackName,
+                            x = target.x,
+                            y = target.y,
+                            width = target.size,
+                            height = target.size,
+                            color = {1, 0, 0, 1},
+                            targetType = targetType,
+                            specialProperties = specialProperties
+                        })
+                    end
+
+                    -- Update state for the next hit regardless of whether we attacked.
+                    attack.nextDirectionIndex = attack.nextDirectionIndex + 1
+                    attack.hitTimer = attack.hitDelay
                 end
+            end
+
+            -- Re-check component existence before checking index, as it might have been nilled above.
+            if unit.components.aetherfall_attack and unit.components.aetherfall_attack.nextDirectionIndex > #unit.components.aetherfall_attack.attackDirections then
+               -- Attack is over. End the airborne status on the target.
+                StatusEffectManager.remove(attack.target, "airborne", world)
+                -- Clean up the component. The unit's turn is NOT consumed.
+                unit.components.aetherfall_attack = nil
+
+                -- After a reactive move like Aetherfall, the unit's "start of turn" position
+                -- is now its new location. This ensures that if the player moves and then
+                -- cancels, the unit returns to this new spot, not its original one.
+                if attack.target.statusEffects.airborne then
+                    attack.target.statusEffects.airborne.aetherfall_controlled = false
+                end
+
             end
         end
     end

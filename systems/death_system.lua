@@ -7,6 +7,7 @@ local EffectFactory = require("modules.effect_factory")
 local RescueHandler = require("modules.rescue_handler")
 local PassiveSystem = require("systems.passive_system") -- For team-swapping logic
 local StatSystem = require("systems.stat_system") -- To recalculate stats on revival
+local CombatActions = require("modules.combat_actions")
 local PassiveBlueprints = require("data/passive_blueprints")
 
 local DeathSystem = {}
@@ -107,57 +108,32 @@ EventBus:register("unit_died", function(data)
 
         -- Check for Necromantia, which prevents the unit's final death.
         if killerPassivesSet.Necromantia then
-            -- 2. Remove from old team's passive list.
-            PassiveSystem.remove_unit_from_passives(victim, world)
+            -- Use the new helper function to handle the conversion.
+            CombatActions.convertUnitAllegiance(victim, killer, world, {
+                popupText = "Revived!",
+                popupColor = {0.8, 0.2, 0.8, 1}, -- Magenta text
+                skipDefaultHeal = false, -- We want the default full heal.
+                onConvert = function(unitToConvert, newTeamOwner, wrld)
+                    -- This function runs *before* stat recalculation and healing.
+                    -- It contains all the Necromantia-specific logic.
 
-            -- 3. Remove from old team's unit list.
-            local oldTeamList = (victim.type == "player") and world.players or world.enemies
-            for i = #oldTeamList, 1, -1 do
-                if oldTeamList[i] == victim then table.remove(oldTeamList, i); break; end
-            end
+                    -- Handle Proliferate. If the killer has it, the victim's passives are overridden.
+                    if killerPassivesSet.Proliferate then
+                        unitToConvert.overriddenPassives = WorldQueries.getUnitPassiveList(newTeamOwner)
+                    else
+                        unitToConvert.overriddenPassives = nil -- Ensure any previous override is cleared.
+                    end
 
-            -- 4. Switch team type and add to new team list.
-            victim.type = killer.type
-            local newTeamList = (victim.type == "player") and world.players or world.enemies
-            table.insert(newTeamList, victim)
+                    -- Cut Max HP in half for the revived unit, but only the first time.
+                    if not unitToConvert.isUndead then
+                        unitToConvert.maxHp = math.floor(unitToConvert.maxHp / 2)
+                        unitToConvert.isUndead = true
+                    end
 
-            -- 5. Update AI component and reset state for revival.
-            if victim.type == "enemy" then victim.components.ai = {} else victim.components.ai = nil end
-            victim.hasActed = true -- Unit cannot act while reviving. This will be set to false when the animation finishes.
-            victim.lastDirection = "down" -- Revived units should always face down.
-
-            -- Handle Proliferate. If the killer has it, the victim's passives are overridden.
-            if killerPassivesSet.Proliferate then
-                victim.overriddenPassives = WorldQueries.getUnitPassiveList(killer)
-            else
-                victim.overriddenPassives = nil -- Ensure any previous override is cleared.
-            end
-
-            victim.statusEffects = {} -- Clear all status effects.
-            
-            -- 6. Add to new team's passive list and recalculate stats.
-            PassiveSystem.add_unit_to_passives(victim, world)
-
-            -- New: Cut Max HP in half for the revived unit, but only the first time.
-            -- This prevents losing stat gains from level-ups on subsequent revivals.
-            if not victim.isUndead then
-                victim.maxHp = math.floor(victim.maxHp / 2)
-                victim.isUndead = true
-            end
-            StatSystem.recalculate_for_unit(victim, world)
-
-            -- New: Set the revived unit to full health (its new, halved max HP).
-            -- This prevents the unit from being considered "dead" and makes the health bar look correct during the animation.
-            victim.hp = victim.finalMaxHp
-
-            -- 7. Add the reviving animation component.
-            victim.components.reviving = {
-                timer = 1.0, -- Duration of the animation in seconds
-                initialTimer = 1.0
-            }
-
-            -- 8. Create a visual effect and skip normal death processing.
-            EffectFactory.createDamagePopup(world, victim, "Revived!", false, {0.8, 0.2, 0.8, 1}) -- Magenta text
+                    -- Add the reviving animation component.
+                    unitToConvert.components.reviving = { timer = 1.0, initialTimer = 1.0 }
+                end
+            })
             return
         end
     end
