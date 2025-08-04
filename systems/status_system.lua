@@ -3,6 +3,7 @@
 
 local EventBus = require("modules.event_bus")
 local StatusEffectManager = require("modules.status_effect_manager")
+local WorldQueries = require("modules.world_queries")
 local Assets = require("modules.assets")
 
 local StatusSystem = {}
@@ -14,6 +15,16 @@ local function process_turn_end(entity, world)
     -- Reset any turn-specific components.
     if entity.components and entity.components.total_movement_used_this_turn then
         entity.components.total_movement_used_this_turn = nil
+    end
+
+    -- New: Check for Ephemeral passive. This happens before other status ticks.
+    if WorldQueries.hasPassive(entity, "Ephemeral", world) then
+        -- This unit has Ephemeral. Kill it.
+        entity.hp = 0
+        -- The reason is important so other systems (like Necromantia) can potentially ignore it.
+        EventBus:dispatch("unit_died", { victim = entity, killer = nil, world = world, reason = {type = "ephemeral"} })
+        -- Stop processing other effects for this now-dead unit.
+        return
     end
 
     for effectType, effectData in pairs(entity.statusEffects) do

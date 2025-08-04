@@ -184,6 +184,8 @@ function World.new(gameMap)
             Proliferate = {},
             Frozenfoot = {},
             DualWielder = {},
+            Unburdened = {},
+            Ephemeral = {},
         },
         enemy = {
             -- Enemies can also have team-wide passives.
@@ -206,6 +208,8 @@ function World.new(gameMap)
             Necromantia = {},
             Frozenfoot = {},
             DualWielder = {},
+            Ephemeral = {},
+            Unburdened = {},
         },
         neutral = {
             Bloodrush = {},
@@ -228,6 +232,8 @@ function World.new(gameMap)
             Proliferate = {},
             Frozenfoot = {},
             DualWielder = {},
+            Ephemeral = {},
+            Unburdened = {},
         }
     }
 

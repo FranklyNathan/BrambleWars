@@ -336,7 +336,7 @@ local AttackBlueprints = {
     aegis = {
         name = "Aegis",
         power = 0,
-        wispCost = 4,
+        wispCost = 2,
         useType = "utility",
         targeting_style = "no_target",
         statusEffect = {type = "invincible", duration = 1.5},

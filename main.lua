@@ -130,6 +130,12 @@ function love.load()
 end
 
 function love.update(dt)
+    -- Synchronize main gameState with world.gameState if world exists
+    -- This handles cases where a system changes the state internally (e.g., game over).
+    if world and world.gameState ~= gameState then
+        gameState = world.gameState
+    end
+
     -- Only update game logic if the state is 'gameplay' and the world exists.
     if gameState == "gameplay" then
         -- Failsafe in case update is called before world is ready.
@@ -177,6 +183,10 @@ function love.keypressed(key, scancode, isrepeat)
             -- Otherwise, update the game state as normal.
             if newState then
                 gameState = newState
+                -- Also update the world's internal state if it exists
+                if world then
+                    world.gameState = newState
+                end
             end
         end
     end

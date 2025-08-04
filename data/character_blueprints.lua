@@ -22,7 +22,7 @@ local CharacterBlueprints = {
         equippedWeapons = {[1] = "travelers_sword"},
         canSwim = true,
         dominantColor = {0.5, 0.2, 0.8}, -- Clementine: Purple
-        passives = {"DualWielder", "Desperate", "Treacherous", "Unbound", "Vampirism", "Frozenfoot"},
+        passives = {"DualWielder", "Desperate", "Treacherous", "Unbound", "Vampirism", "Frozenfoot", "Unburdened"},
         growths = {
             maxHp = 90,
             attackStat = 50,
@@ -53,7 +53,7 @@ local CharacterBlueprints = {
         equippedWeapons = {[1] = "travelers_staff"},
         isFlying = true,
         dominantColor = {1.0, 0.6, 0.8}, -- Biblo: Light Pink
-        passives = {"HealingWinds", "Hustle", "Captor"},
+        passives = {"HealingWinds", "Hustle", "Captor", "Unburdened", "Ephemeral"},
         growths = {
             maxHp = 70,
             attackStat = 15,

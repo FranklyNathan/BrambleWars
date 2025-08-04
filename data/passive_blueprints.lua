@@ -40,6 +40,10 @@ local PassiveBlueprints = {
         name = "Elusive",
         description = "Allows this unit to move through tiles occupied by enemies."
     },
+    Ephemeral = {
+        name = "Ephemeral",
+        description = "This unit dies at the end of the turn."
+    },
     Frozenfoot = {
         name = "Frozenfoot",
         description = "Can walk on water, freezing it. Immune to breaking ice."
@@ -83,6 +87,10 @@ local PassiveBlueprints = {
     Unbound = {
         name = "Unbound",
         description = "Deals 1.5x damage while at 0 Wisp."
+    },
+    Unburdened = {
+        name = "Unburdened",
+        description = "Grants +3 Movement when no weapon is equipped."
     },
     Vampirism = {
         name = "Vampirism",

@@ -7,6 +7,7 @@
 local EventBus = require("modules.event_bus")
 local WeaponBlueprints = require("data.weapon_blueprints")
 local TileStatusBlueprints = require("data.tile_status_blueprints")
+local WorldQueries = require("modules.world_queries")
 
 local StatSystem = {}
 
@@ -82,6 +83,14 @@ function StatSystem.recalculate_for_unit(unit, world)
                 unit.finalMagicStat = unit.finalMagicStat + INFERNAL_BONUS
                 unit.finalResistanceStat = unit.finalResistanceStat + INFERNAL_BONUS
             end
+        end
+    end
+
+    -- 4.5. Apply modifiers from other conditional passives (like Unburdened).
+    if unit.type and WorldQueries.hasPassive(unit, "Unburdened", world) then
+        -- If the unit has the "Unburdened" passive and no weapon is equipped, grant a movement bonus.
+        if not WorldQueries.isUnitArmed(unit) then
+            unit.finalMovement = unit.finalMovement + 3
         end
     end
 

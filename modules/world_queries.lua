@@ -3,7 +3,6 @@
 
 local Grid = require("modules.grid")
 local AttackPatterns = require("modules.attack_patterns")
-local LevelUpDisplaySystem = require("systems.level_up_display_system")
 local AttackBlueprints = require("data.attack_blueprints")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
@@ -168,15 +167,15 @@ end
 -- A helper function to get a unit's final movement range, accounting for status effects.
 -- This should be used by the pathfinding system when calculating reachable tiles.
 function WorldQueries.getUnitMovement(unit)
-    if not unit or not unit.movement then return 0 end
+    if not unit or not unit.finalMovement then return 0 end
 
     -- New: Check for a movement override first. This is used by abilities like Burrow.
     if unit.components and unit.components.movement_override then
         return unit.components.movement_override.amount
     end
 
-    -- Start with the unit's base movement.
-    local finalMovement = unit.movement
+    -- Start with the unit's final, calculated movement stat.
+    local finalMovement = unit.finalMovement
 
     -- Apply status effect penalties.
     if unit and unit.statusEffects and unit.statusEffects.paralyzed then
@@ -194,6 +193,21 @@ function WorldQueries.hasPassive(unit, passiveName, world)
     end
     for _, provider in ipairs(world.teamPassives[unit.type][passiveName]) do
         if provider == unit then return true end
+    end
+    return false
+end
+
+--- Checks if a unit has at least one weapon equipped.
+-- @param unit (table) The unit to check.
+-- @return (boolean) True if the unit has a weapon, false otherwise.
+function WorldQueries.isUnitArmed(unit)
+    if not unit or not unit.equippedWeapons then
+        return false
+    end
+    for _, weaponKey in pairs(unit.equippedWeapons) do
+        if weaponKey then
+            return true -- Found a weapon, no need to check further.
+        end
     end
     return false
 end
@@ -657,6 +671,9 @@ end
 -- Checks if any major game action (attack, movement, animation) is currently in progress.
 -- This is used to lock UI elements and delay turn finalization.
 function WorldQueries.isActionOngoing(world)
+    -- Lazily require to break circular dependency with level_up_display_system
+    local LevelUpDisplaySystem = require("systems.level_up_display_system")
+
     -- An action is considered ongoing if there are active global effects...
     -- Check if the level up display sequence is active.
     if LevelUpDisplaySystem.active then return true end
