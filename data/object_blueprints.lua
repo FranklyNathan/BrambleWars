@@ -27,6 +27,20 @@ local ObjectBlueprints = {
         isTrap = true,
         trapDamage = 5,
         trapStatus = {type = "stunned", duration = 1}
+    },
+    molehill = {
+        displayName = "Molehill",
+        objectType = "molehill",
+        maxHp = 10,
+        defenseStat = 0,
+        resistanceStat = 0,
+        witStat = 0, -- Needed for hit calculations
+        weight = 1, -- Very light, doesn't block shoves
+        isImpassable = false, -- Units can move through this tile.
+        isTeleportTarget = true, -- Can be targeted by Burrow.
+        attacks = {},
+        sprite = Assets.images.Molehill,
+        isObstacle = true -- So it's treated as an obstacle by the world.
     }
 }
 

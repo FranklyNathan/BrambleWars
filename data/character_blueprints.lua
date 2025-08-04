@@ -48,7 +48,7 @@ local CharacterBlueprints = {
         magicStat = 8,
         resistanceStat = 8,
         witStat = 6,
-        movement = 10,
+        movement = 11,
         weight = 13,
         equippedWeapons = {[1] = "travelers_staff"},
         isFlying = true,
@@ -159,7 +159,7 @@ local CharacterBlueprints = {
             witStat = 45,
         },
         attacks = {
-            "uppercut", "quick_step", "disarm"
+            "uppercut", "quick_step", "disarm", "burrow"
         }
     },
     ollo = {

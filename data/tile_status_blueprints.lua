@@ -6,7 +6,7 @@ local TileStatusBlueprints = {
         name = "Aflame",
         damage = 3,
         description = "Deals damage to any non-flying unit that steps on this tile.",
-        renderLayer = "foreground"
+        renderLayer = "background"
     },
     frozen = {
         name = "Frozen",

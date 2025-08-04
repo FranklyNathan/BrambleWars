@@ -16,7 +16,13 @@ local PassiveBlueprints = {
     },
     Combustive = {
         name = "Combustive",
-        description = "Explodes upon death, dealing 10 damage to all units within 1 range."
+        description = "Explodes upon death, dealing 10 damage to all units within 1 range.",
+        trigger = "on_death", -- The event that triggers this passive.
+        on_death_effect = { -- The effect to create when triggered.
+            type = "ripple",
+            attackName = "combustive_explosion",
+            targetType = "all"
+        }
     },
     Desperate = {
         name = "Desperate",

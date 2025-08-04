@@ -41,7 +41,6 @@ local function is_valid_unit_at(unit, tileX, tileY, excludeUnit)
     return unit ~= excludeUnit and
            unit.hp > 0 and
            not (unit.components and unit.components.ascended) and
-           not (unit.components and unit.components.reviving) and
            unit.tileX == tileX and
            unit.tileY == tileY
 end
@@ -122,8 +121,10 @@ function WorldQueries.isTileLandable(tileX, tileY, unit, world)
 
     local obstacle = WorldQueries.getObstacleAt(tileX, tileY, world)
     if obstacle then
-        -- Cannot land on any obstacle, impassable or not.
-        return false
+        -- Allow landing on molehills and traps, but not other obstacles.
+        if obstacle.objectType ~= "molehill" and not obstacle.isTrap then
+            return false
+        end
     end
 
     if WorldQueries.isTileWater(tileX, tileY, world) then
@@ -169,6 +170,11 @@ end
 function WorldQueries.getUnitMovement(unit)
     if not unit or not unit.movement then return 0 end
 
+    -- New: Check for a movement override first. This is used by abilities like Burrow.
+    if unit.components and unit.components.movement_override then
+        return unit.components.movement_override.amount
+    end
+
     -- Start with the unit's base movement.
     local finalMovement = unit.movement
 
@@ -192,6 +198,23 @@ function WorldQueries.hasPassive(unit, passiveName, world)
     return false
 end
 
+--- Checks if two units are hostile to each other.
+-- Hostility rules:
+-- - Player vs Enemy: Hostile
+-- - Player vs Neutral: Hostile
+-- - Enemy vs Neutral: Hostile
+-- - Same team (Player vs Player, etc.): Not hostile
+-- - Neutral vs Neutral: Not hostile
+-- @param unit1 (table) The first unit.
+-- @param unit2 (table) The second unit.
+-- @return (boolean) True if the units are hostile.
+function WorldQueries.areUnitsHostile(unit1, unit2)
+    if not unit1 or not unit2 or not unit1.type or not unit2.type then return false end
+    if unit1.type == unit2.type then return false end -- Same team is never hostile.
+    if unit1.type == "neutral" and unit2.type == "neutral" then return false end -- Neutrals don't fight each other.
+    return true -- All other cross-team interactions are hostile.
+end
+
 -- Helper to check for Treacherous passive
 function WorldQueries.hasTreacherous(unit, world)
     return WorldQueries.hasPassive(unit, "Treacherous", world)
@@ -201,10 +224,6 @@ local function getPotentialTargets(attacker, attackData, world)
     local potentialTargets = {}
     -- Default to affecting allies for support, enemies for damage. Use 'useType' for consistency.
     local affects = attackData.affects or (attackData.useType == "support" and "allies" or "enemies")
-
-    -- Correctly determine the target list based on the attacker's perspective.
-    local targetEnemies = (attacker.type == "player") and world.enemies or world.players
-    local targetAllies = (attacker.type == "player") and world.players or world.enemies
 
     -- A helper to add destructible obstacles to a target list.
     local function addDestructibleObstacles(list)
@@ -217,14 +236,16 @@ local function getPotentialTargets(attacker, attackData, world)
     end
 
     if affects == "enemies" then
-        for _, unit in ipairs(targetEnemies) do table.insert(potentialTargets, unit) end
-        -- Players can also target neutral units with damaging attacks.
-        if attacker.type == "player" then
-            for _, unit in ipairs(world.neutrals) do table.insert(potentialTargets, unit) end
+        -- Find all units hostile to the attacker.
+        for _, unit in ipairs(world.all_entities) do
+            if unit.type and WorldQueries.areUnitsHostile(attacker, unit) then
+                table.insert(potentialTargets, unit)
+            end
         end
         addDestructibleObstacles(potentialTargets)
         -- If treacherous, also add allies to the list of potential targets for damaging moves.
         if WorldQueries.hasTreacherous(attacker, world) then
+            local targetAllies = (attacker.type == "player") and world.players or world.enemies
             for _, unit in ipairs(targetAllies) do
                 if unit ~= attacker then -- Can't target self
                     table.insert(potentialTargets, unit)
@@ -232,12 +253,15 @@ local function getPotentialTargets(attacker, attackData, world)
             end
         end
     elseif affects == "allies" then
+        local targetAllies = (attacker.type == "player") and world.players or world.enemies
         for _, unit in ipairs(targetAllies) do table.insert(potentialTargets, unit) end
     elseif affects == "all" then
-        for _, unit in ipairs(targetEnemies) do table.insert(potentialTargets, unit) end
-        for _, unit in ipairs(targetAllies) do table.insert(potentialTargets, unit) end
-        -- "all" should also include neutrals.
-        for _, unit in ipairs(world.neutrals) do table.insert(potentialTargets, unit) end
+        -- "all" includes every unit type except the attacker itself.
+        for _, unit in ipairs(world.all_entities) do
+            if unit.type and unit ~= attacker then
+                table.insert(potentialTargets, unit)
+            end
+        end
         addDestructibleObstacles(potentialTargets)
     end
     return potentialTargets
@@ -482,7 +506,7 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
         local tauntData = attacker.statusEffects.taunted
         local taunter = tauntData.attacker
 
-        if taunter and taunter.hp > 0 then
+            if taunter and taunter.hp > 0 and WorldQueries.areUnitsHostile(attacker, taunter) then
             -- The unit is taunted. They can only target the taunter.
             -- We need to check if the taunter is a valid target for the selected attack.
             -- To do this, we can run the normal targeting logic but only check against the taunter.

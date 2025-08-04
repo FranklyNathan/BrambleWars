@@ -52,8 +52,11 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
 
                         local canPass, canLand = false, false
 
-                        if obstacle then
-                            if obstacle.isTrap then
+                        if obstacle then                            
+                            if obstacle.objectType == "molehill" then
+                                canPass = true
+                                canLand = not occupyingUnit
+                            elseif obstacle.isTrap then
                                 -- Can always land on traps. The trigger happens on landing.
                                 -- Flying units are immune to the trigger, but can still land.
                                 canPass = true

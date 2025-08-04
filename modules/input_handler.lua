@@ -1194,6 +1194,86 @@ local function handle_shop_menu_input(key, world)
     end
 end
 
+-- Handles input when the player is selecting a molehill to teleport to.
+local function handle_burrow_teleport_input(key, world)
+    local molehillSelect = world.ui.targeting.molehill_select
+    if not molehillSelect or not molehillSelect.active then return end
+
+    local indexChanged = false
+    if key == "a" or key == "d" then
+        if key == "a" then
+            molehillSelect.selectedIndex = molehillSelect.selectedIndex - 1
+            if molehillSelect.selectedIndex < 1 then molehillSelect.selectedIndex = #molehillSelect.targets end
+        else -- "d"
+            molehillSelect.selectedIndex = molehillSelect.selectedIndex + 1
+            if molehillSelect.selectedIndex > #molehillSelect.targets then molehillSelect.selectedIndex = 1 end
+        end
+        indexChanged = true
+    elseif key == "j" then -- Confirm teleport
+        -- 1. Find the burrowed unit. There should only be one.
+        local burrowedUnit = nil
+        for _, unit in ipairs(world.all_entities) do
+            if unit.components.burrowed then
+                burrowedUnit = unit
+                break
+            end
+        end
+
+        if not burrowedUnit then
+            -- Failsafe: if no unit is burrowed, cancel the action.
+            molehillSelect.active = false
+            set_player_turn_state("free_roam", world)
+            return
+        end
+
+        -- 2. Get the destination molehill tile.
+        local destination = molehillSelect.targets[molehillSelect.selectedIndex]
+        if not destination then return end
+
+        -- 3. Store movement used so far this turn.
+        -- We look at the pathing data that was calculated when the unit was first selected.
+        local pathingData = world.ui.pathing
+        local currentTileKey = burrowedUnit.tileX .. "," .. burrowedUnit.tileY
+        local cost = 0
+        if pathingData and pathingData.cost_so_far and pathingData.cost_so_far[currentTileKey] then
+            cost = pathingData.cost_so_far[currentTileKey]
+        end
+        -- This needs to be cumulative across the entire turn, in case Burrow is used multiple times.
+        burrowedUnit.components.total_movement_used_this_turn = (burrowedUnit.components.total_movement_used_this_turn or 0) + cost
+
+        -- 4. Teleport the unit.
+        local destPixelX, destPixelY = Grid.toPixels(destination.tileX, destination.tileY)
+        burrowedUnit.x, burrowedUnit.y = destPixelX, destPixelY
+        burrowedUnit.targetX, burrowedUnit.targetY = destPixelX, destPixelY
+        burrowedUnit.tileX, burrowedUnit.tileY = destination.tileX, destination.tileY
+        EventBus:dispatch("unit_tile_changed", { unit = burrowedUnit, world = world })
+
+        -- 5. Change unit's state from burrowed to reviving.
+        burrowedUnit.components.burrowed = nil
+        burrowedUnit.components.reviving = { timer = 0.5, initialTimer = 0.5, source = "burrow" }
+
+        -- 6. Clean up the UI state.
+        molehillSelect.active = false
+        molehillSelect.targets = {}
+        
+        if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+
+    elseif key == "k" then -- Cancel Burrow
+        -- The action is already "spent". Pop the unit back out and end their turn.
+        -- We'll need to add a small case to animation_effects_system to handle this.
+        finalize_player_action(world.ui.menus.action.unit, world)
+    end
+
+    if indexChanged then
+        if Assets.sounds.cursor_move then Assets.sounds.cursor_move:stop(); Assets.sounds.cursor_move:play() end
+        local newTarget = molehillSelect.targets[molehillSelect.selectedIndex]
+        if newTarget then
+            world.ui.mapCursorTile.x, world.ui.mapCursorTile.y = newTarget.tileX, newTarget.tileY
+            EventBus:dispatch("cursor_moved", { tileX = newTarget.tileX, tileY = newTarget.tileY, world = world })
+        end
+    end
+end
+
 -- Handles input when the player is cycling through targets for an attack.
 local function handle_cycle_targeting_input(key, world)
     local cycle = world.ui.targeting.cycle
@@ -1494,6 +1574,7 @@ local playerStateInputHandlers = {
     map_menu = handle_map_menu_input,
     shop_menu = handle_shop_menu_input,
     promotion_select = handle_promotion_select_input,
+    burrow_teleport_selecting = handle_burrow_teleport_input,
 }
 
 

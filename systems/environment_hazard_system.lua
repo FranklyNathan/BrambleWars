@@ -42,7 +42,7 @@ local function check_hazards_for_unit(unit, world)
                 end
                 
                 unit.hp = 0
-                unit.components.sinking = { timer = 1.5, initialTimer = 1.5 }
+                unit.components.sinking = { timer = 1.5, initialTimer = 1.5, source = "drown" }
                 EventBus:dispatch("unit_died", { victim = unit, killer = nil, world = world, reason = {type = "drown"} })
             end
         end

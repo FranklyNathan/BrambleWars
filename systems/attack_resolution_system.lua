@@ -55,37 +55,29 @@ function AttackResolutionSystem.update(dt, world)
             end
 
             local targets = {}
-            -- Build a list of potential targets for this effect.
-            if effect.targetType == "enemy" then
-                -- Player is attacking. Default targets are enemies and obstacles.
-                for _, unit in ipairs(world.enemies) do table.insert(targets, unit) end
-                -- Neutrals can also be targeted by player attacks.
-                for _, unit in ipairs(world.neutrals) do table.insert(targets, unit) end
-
-                for _, obstacle in ipairs(world.obstacles) do
-                    if obstacle.hp and obstacle.hp > 0 then
-                        table.insert(targets, obstacle)
+            -- Build a list of potential targets for this effect using the new centralized hostility check.
+            if effect.targetType ~= "none" and effect.targetType ~= "all" then
+                for _, unit in ipairs(world.all_entities) do
+                    if unit.type and WorldQueries.areUnitsHostile(effect.attacker, unit) then
+                        table.insert(targets, unit)
                     end
-                end
-                -- If the attacker is treacherous, they can also target their allies.
-                if WorldQueries.hasTreacherous(effect.attacker, world) then
-                    for _, unit in ipairs(world.players) do table.insert(targets, unit) end
-                end
-            elseif effect.targetType == "player" then
-                -- Enemy is attacking. Default targets are players and obstacles.
-                for _, unit in ipairs(world.players) do table.insert(targets, unit) end
-                for _, obstacle in ipairs(world.obstacles) do
-                    if obstacle.hp and obstacle.hp > 0 then
-                        table.insert(targets, obstacle)
-                    end
-                end
-                -- If the attacker is treacherous, they can also target their allies.
-                if WorldQueries.hasTreacherous(effect.attacker, world) then
-                    for _, unit in ipairs(world.enemies) do table.insert(targets, unit) end
                 end
             elseif effect.targetType == "all" then
                 -- For effects targeting everyone, use the master list.
                 for _, unit in ipairs(world.all_entities) do table.insert(targets, unit) end
+            end
+
+            -- Add destructible obstacles to any damaging effect.
+            if not effect.isHeal then
+                for _, obstacle in ipairs(world.obstacles) do
+                    if obstacle.hp and obstacle.hp > 0 then table.insert(targets, obstacle) end
+                end
+            end
+
+            -- If the attacker is treacherous, they can also target their allies with damaging moves.
+            if not effect.isHeal and WorldQueries.hasTreacherous(effect.attacker, world) then
+                local allies = (effect.attacker.type == "player") and world.players or world.enemies
+                for _, unit in ipairs(allies) do table.insert(targets, unit) end
             end
 
             for _, target in ipairs(targets) do

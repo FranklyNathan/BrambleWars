@@ -28,6 +28,12 @@ function ActionFinalizationSystem.update(dt, world)
                     -- No level up occurred. Finalize the action immediately.
                     entity.hasActed = true
                     entity.components.action_in_progress = nil -- Clean up the flag.
+
+                    -- New: Clean up temporary movement override after the action.
+                    if entity.components.movement_override then
+                        entity.components.movement_override = nil
+                    end
+
                     -- Fire an event specifically for this unit so other systems can react.
                     EventBus:dispatch("action_finalized", { unit = entity, world = world })
                 else

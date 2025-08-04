@@ -586,7 +586,7 @@ local function draw_all_entities_and_effects(world)
             end
         else -- It's a character
             -- Do not draw ascended units, unless they are currently animating their ascent.
-            if not (entity.components and entity.components.ascended) or (entity.components and entity.components.ascending_animation) then
+            if not (entity.components and (entity.components.ascended or entity.components.burrowed)) or (entity.components and entity.components.ascending_animation) then
                 local is_active = (entity.type == "player" and entity == world.ui.selectedUnit)
                 draw_entity(entity, world, is_active) -- Pass world to draw_entity
             end
@@ -904,7 +904,8 @@ local function draw_world_space_ui(world)
            world.ui.playerTurnState == "rescue_targeting" or world.ui.playerTurnState == "drop_targeting" or
            world.ui.playerTurnState == "shove_targeting" or world.ui.playerTurnState == "take_targeting" or
            world.ui.playerTurnState == "secondary_targeting" or -- For Bodyguard
-           world.ui.playerTurnState == "tile_cycling" -- For Homecoming
+           world.ui.playerTurnState == "tile_cycling" or -- For Homecoming
+           world.ui.playerTurnState == "burrow_teleport_selecting" -- For Burrow
            then
             -- Animate the cursor's line width for a "lock in" effect
             local target_cursor_line_width = 2 -- Normal thickness

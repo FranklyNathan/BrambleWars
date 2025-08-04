@@ -18,7 +18,7 @@ local function find_aetherfall_units(world, teamType)
 end
 
 -- Helper to find all empty tiles adjacent to a target.
-local function find_adjacent_open_tiles(target, world)
+local function find_adjacent_open_tiles(target, world, excludeUnit)
     local openTiles = {}
     -- The order is important for consistent attack visuals: Left, Right, Top, Bottom.
     local neighbors = {
@@ -32,7 +32,7 @@ local function find_adjacent_open_tiles(target, world)
         -- Check if the tile is within map bounds AND is not occupied.
         if checkX >= 0 and checkX < world.map.width and
            checkY >= 0 and checkY < world.map.height and
-           not WorldQueries.isTileOccupied(checkX, checkY, nil, world) then
+           not WorldQueries.isTileOccupied(checkX, checkY, excludeUnit, world) then
             table.insert(openTiles, {tileX = checkX, tileY = checkY})
         end
     end
@@ -40,10 +40,16 @@ local function find_adjacent_open_tiles(target, world)
 end
 
 -- This function contains the core logic for triggering the passive.
-local function check_and_trigger_aetherfall(airborne_target, reacting_team_type, world)
-    local reacting_units = find_aetherfall_units(world, reacting_team_type)
+local function check_and_trigger_aetherfall(airborne_target, attacker, world)
+    -- Find all units that are hostile to the attacker and have the Aetherfall passive.
+    local potential_reactors = {}
+    for _, unit in ipairs(world.all_entities) do
+        if unit.type and WorldQueries.areUnitsHostile(unit, airborne_target) and WorldQueries.hasPassive(unit, "Aetherfall", world) then
+            table.insert(potential_reactors, unit)
+        end
+    end
 
-    for _, reactor in ipairs(reacting_units) do
+    for _, reactor in ipairs(potential_reactors) do
         -- Check all conditions for this unit
         local distance = math.abs(reactor.tileX - airborne_target.tileX) + math.abs(reactor.tileY - airborne_target.tileY)
         local canReact = not reactor.hasActed and
@@ -51,13 +57,13 @@ local function check_and_trigger_aetherfall(airborne_target, reacting_team_type,
                          not reactor.components.aetherfall_attack -- Don't trigger if already attacking
 
         if canReact then
-            local openTiles = find_adjacent_open_tiles(airborne_target, world)
+            local openTiles = find_adjacent_open_tiles(airborne_target, world, reactor)
             if #openTiles > 0 then
                 -- Trigger the attack!
                 reactor.components.aetherfall_attack = {
                     target = airborne_target,
-                    hitLocations = openTiles,
                     hitsRemaining = #openTiles,
+                    usedLocations = {}, -- Keep track of tiles we've attacked from.
                     hitTimer = 0.6, -- Wait for the airborne animation to reach its peak.
                     hitDelay = 0.2 -- Time between subsequent hits
                 }
@@ -73,20 +79,15 @@ EventBus:register("status_applied", function(data)
     local world = data.world
     local target = data.target
     local effect = data.effect
+    local attacker = effect.attacker
 
     -- Condition 1: Was the 'airborne' status applied?
-    if not world or effect.type ~= "airborne" then
+    if not world or effect.type ~= "airborne" or not attacker then
         return
     end
 
-    -- Condition 2: Determine which team should react.
-    if target.type == "enemy" then
-        -- An enemy became airborne, check if the player team can react.
-        check_and_trigger_aetherfall(target, "player", world)
-    elseif target.type == "player" then
-        -- A player became airborne, check if the enemy team can react.
-        check_and_trigger_aetherfall(target, "enemy", world)
-    end
+    -- Condition 2: Check for any hostile units with Aetherfall that can react.
+    check_and_trigger_aetherfall(target, attacker, world)
 end)
 
 function AetherfallSystem.update(dt, world)
@@ -103,13 +104,24 @@ function AetherfallSystem.update(dt, world)
                         -- Target died mid-combo, end the attack immediately.
                         unit.components.aetherfall_attack = nil
                     else
-                        -- Get the next location to warp to.
-                        local locationIndex = #attack.hitLocations - attack.hitsRemaining + 1
-                        local warpTile = attack.hitLocations[locationIndex]
+                        -- Recalculate open tiles for every hit to handle units moving mid-combo.
+                        -- We exclude the attacker so its own tile is considered a valid teleport spot.
+                        local openTiles = find_adjacent_open_tiles(target, world, unit)
+
+                        -- Find the next available, unused tile to attack from.
+                        local warpTile = nil
+                        for _, tile in ipairs(openTiles) do
+                            local tileKey = tile.tileX .. "," .. tile.tileY
+                            if not attack.usedLocations[tileKey] then
+                                warpTile = tile
+                                break
+                            end
+                        end
                         
-                        -- Check if the tile is still open before warping. This prevents finishing on an occupied tile.
-                        if not WorldQueries.isTileOccupied(warpTile.tileX, warpTile.tileY, nil, world) then
-                            -- The tile is open. Proceed with the attack.
+                        -- If a valid, unused tile was found, proceed with the attack.
+                        if warpTile then
+                            -- Mark this location as used for this combo.
+                            attack.usedLocations[warpTile.tileX .. "," .. warpTile.tileY] = true
                             -- Teleport the unit
                             unit.tileX, unit.tileY = warpTile.tileX, warpTile.tileY
                             unit.x, unit.y = Grid.toPixels(warpTile.tileX, warpTile.tileY)

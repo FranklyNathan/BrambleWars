@@ -11,6 +11,11 @@ local StatusSystem = {}
 local function process_turn_end(entity, world)
     if not entity.statusEffects then return end
 
+    -- Reset any turn-specific components.
+    if entity.components and entity.components.total_movement_used_this_turn then
+        entity.components.total_movement_used_this_turn = nil
+    end
+
     for effectType, effectData in pairs(entity.statusEffects) do
         local effectDef = Assets.status_effects[effectType]
         if effectDef and effectDef.tick then

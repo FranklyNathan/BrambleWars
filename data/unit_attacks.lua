@@ -721,6 +721,42 @@ UnitAttacks.sow_seeds = function(attacker, world, attackInstanceId)
     return grassPlanted -- Succeeds if at least one patch of grass was planted.
 end
 
+UnitAttacks.burrow = function(attacker, world, attackInstanceId)
+    -- 1. Check if there's already an object on the attacker's tile.
+    -- We can't create a molehill if something is already there.
+    if WorldQueries.getObstacleAt(attacker.tileX, attacker.tileY, world) then
+        -- TODO: Add a "Can't do that here" sound/effect later.
+        return false -- Attack fails.
+    end
+
+    -- 2. Create the new Molehill object. This logic is similar to Grovecall.
+    local blueprint = ObjectBlueprints.molehill
+    if not blueprint then return false end -- Failsafe
+
+    local newObstacle = {}
+    for k, v in pairs(blueprint) do newObstacle[k] = v end
+
+    -- Set position and state
+    newObstacle.x, newObstacle.y = Grid.toPixels(attacker.tileX, attacker.tileY)
+    newObstacle.tileX, newObstacle.tileY = attacker.tileX, attacker.tileY
+    newObstacle.width, newObstacle.height, newObstacle.size = Config.SQUARE_SIZE, Config.SQUARE_SIZE, Config.SQUARE_SIZE
+    newObstacle.isObstacle = true
+    newObstacle.hp = newObstacle.maxHp
+    newObstacle.statusEffects = {}
+    newObstacle.components = {}
+    newObstacle.sprite = Assets.images.Molehill
+
+    world:queue_add_entity(newObstacle)
+
+    -- 3. Add the 'sinking' animation component to the attacker.
+    -- This will make the unit visually sink into the ground. We'll implement the system for this later.
+    attacker.components.sinking = { timer = 0.5, initialTimer = 0.5, source = "burrow" }
+
+    -- 4. The move consumes the unit's action.
+    attacker.components.action_in_progress = true
+    return true
+end
+
 UnitAttacks.ascension = function(attacker, world, attackInstanceId)
     -- 1. Get the target tile from the ground aiming cursor.
     local targetTileX, targetTileY = world.ui.mapCursorTile.x, world.ui.mapCursorTile.y

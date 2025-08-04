@@ -173,10 +173,18 @@ local function findBestPlayerAttackAction(enemy, reachableTiles, world)
     local bestAction = nil
     local bestScore = -1 -- Kills will have a score > 1000
 
+    -- Build a list of all units that are hostile to the acting enemy.
+    -- This correctly includes players and neutrals.
+    local hostile_units = {}
+    for _, unit in ipairs(world.all_entities) do
+        if unit.type and WorldQueries.areUnitsHostile(enemy, unit) then
+            table.insert(hostile_units, unit)
+        end
+    end
+
     local all_moves = WorldQueries.getUnitMoveList(enemy)
 
-    -- Check every player unit to find the best possible target.
-    for _, targetPlayer in ipairs(world.players) do
+    for _, targetPlayer in ipairs(hostile_units) do
         if targetPlayer.hp > 0 then
             for _, attackName in ipairs(all_moves) do
                 local attackData = AttackBlueprints[attackName]

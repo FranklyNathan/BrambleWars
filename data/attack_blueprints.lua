@@ -410,6 +410,15 @@ local AttackBlueprints = {
         drawsTile = true,
         description = "Creates a patch of Tall Grass in a '+' shape around the user."
     },
+    burrow = {
+        name = "Burrow",
+        power = 0,
+        wispCost = 1,
+        useType = "utility",
+        targeting_style = "no_target", -- The first part of the move has no target.
+        description = "Create a Molehill, then teleport to a Molehill on the map, refreshing your turn.",
+        createsDangerZone = false -- This is a utility/movement ability.
+    },
     ascension = {
         name = "Ascension",
         power = 0,

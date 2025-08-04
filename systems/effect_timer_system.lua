@@ -68,19 +68,6 @@ function EffectTimerSystem.update(dt, world)
             end
         end
 
-        -- New: Handle reviving animation for Necromantia
-        if s.components.reviving then
-            local reviving = s.components.reviving
-            reviving.timer = math.max(0, reviving.timer - dt)
-            if reviving.timer == 0 then
-                -- Animation is finished. Finalize the revival.
-                s.hp = s.finalMaxHp
-                s.wisp = s.finalMaxWisp
-                s.hasActed = false -- Now the unit can act.
-                s.components.reviving = nil
-            end
-        end
-
         -- Update selection_flash timer
         if s.components.selection_flash then
             s.components.selection_flash.timer = s.components.selection_flash.timer + dt
@@ -186,18 +173,6 @@ function EffectTimerSystem.update(dt, world)
                 if effect.duration <= 0 then
                     s.statusEffects.airborne = nil
                 end
-            end
-        end
-    end
-
-    -- Update any existing sinking animations.
-    for _, entity in ipairs(world.all_entities) do
-        if entity.components and entity.components.sinking then
-            local sinking = entity.components.sinking
-            sinking.timer = math.max(0, sinking.timer - dt)
-            if sinking.timer == 0 then
-                entity.isMarkedForDeletion = true
-                entity.components.sinking = nil
             end
         end
     end

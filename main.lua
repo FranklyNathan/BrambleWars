@@ -45,6 +45,7 @@ local InputHandler = require("modules.input_handler")
 local EnvironmentHazardSystem = require("systems.environment_hazard_system")
 local TileStatusSystem = require("systems.tile_status_system")
 local TileHazardSystem = require("systems.tile_hazard_system")
+local AnimationEffectsSystem = require("systems.animation_effects_system")
 
 world = nil -- Will be initialized in love.load after assets are loaded
 
@@ -58,6 +59,7 @@ local update_systems = {
     -- 1. State and timer updates (timers, visual state changes)
     EffectTimerSystem,
     LevelUpDisplaySystem,
+    AnimationEffectsSystem,
 
     -- 2. Movement and Animation (physical state updates)
     TurnBasedMovementSystem,

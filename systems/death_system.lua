@@ -7,6 +7,7 @@ local EffectFactory = require("modules.effect_factory")
 local RescueHandler = require("modules.rescue_handler")
 local PassiveSystem = require("systems.passive_system") -- For team-swapping logic
 local StatSystem = require("systems.stat_system") -- To recalculate stats on revival
+local PassiveBlueprints = require("data/passive_blueprints")
 
 local DeathSystem = {}
 
@@ -42,27 +43,20 @@ EventBus:register("unit_died", function(data)
         set_player_turn_state("free_roam", world)
     end
 
-    -- Check for on-death passives like Combustive. This should happen BEFORE revival checks.
+    -- Check for on-death passives. This should happen BEFORE revival checks.
     if victim and world and reason.type ~= "drown" then
-        -- We must check the unit's blueprint/weapon directly, because the "unit_died" event
-        -- may have already removed the unit from the teamPassives cache.
         local passives = WorldQueries.getUnitPassiveList(victim)
-        local victimHasCombustive = false
-        for _, passiveName in ipairs(passives) do
-            if passiveName == "Combustive" then
-                victimHasCombustive = true
-                break
-            end
-        end
 
-        if victimHasCombustive and not victim.components.has_exploded then
-            -- The 'attacker' for the explosion should always be the unit that exploded,
-            -- so any resulting kills or effects are attributed to it.
-            local explosionAttacker = victim
-            -- Add a flag to prevent this unit from exploding more than once.
-            victim.components.has_exploded = true
-            -- Trigger the explosion ripple effect.
-            EffectFactory.createRippleEffect(world, explosionAttacker, "combustive_explosion", victim.x + victim.size / 2, victim.y + victim.size / 2, 1, "all")
+        for _, passiveName in ipairs(passives) do
+            local passiveData = PassiveBlueprints[passiveName]
+            if passiveData and passiveData.trigger == "on_death" and not victim.components.has_exploded then
+                local effectData = passiveData.on_death_effect
+                if effectData and effectData.type == "ripple" then
+                    -- The 'attacker' for the explosion should always be the unit that exploded.
+                    victim.components.has_exploded = true -- Prevent multiple explosions.
+                    EffectFactory.createRippleEffect(world, victim, effectData.attackName, victim.x + victim.size / 2, victim.y + victim.size / 2, 1, effectData.targetType)
+                end
+            end
         end
     end
 

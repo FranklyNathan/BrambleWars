@@ -43,6 +43,7 @@ function Assets.load()
     Assets.images.Aflame = loadImage("assets/Aflame.png") -- For the new tile status
     Assets.images.Frozen = loadImage("assets/Frozen.png") -- For the new tile status
     Assets.images.TallGrass = loadImage("assets/TallGrass.png")
+    Assets.images.Molehill = loadImage("assets/Molehill.png")
 
 
     -- Load portraits
