@@ -41,6 +41,7 @@ function Assets.load()
     Assets.images.Punter = loadImage("assets/punter.png")
     Assets.images.BearTrap = loadImage("assets/beartrap.png")
     Assets.images.Aflame = loadImage("assets/Aflame.png") -- For the new tile status
+    Assets.images.Tadpole = loadImage("assets/PlayerUnits/Tadpole.png")
     Assets.images.Frozen = loadImage("assets/Frozen.png") -- For the new tile status
     Assets.images.TallGrass = loadImage("assets/TallGrass.png")
     Assets.images.Molehill = loadImage("assets/Molehill.png")
@@ -201,6 +202,17 @@ function Assets.load()
         right = anim8.newAnimation(gPunter('1-4', 3), animSpeed),
         up    = anim8.newAnimation(gPunter('1-4', 4), animSpeed)
     }
+
+    -- Grid and animations for Tadpole
+    if Assets.images.Tadpole then
+        local gTadpole = anim8.newGrid(frameWidth, frameHeight, Assets.images.Tadpole:getWidth(), Assets.images.Tadpole:getHeight())
+        Assets.animations.Tadpole = {
+            down  = anim8.newAnimation(gTadpole('1-4', 1), animSpeed),
+            left  = anim8.newAnimation(gTadpole('1-4', 2), animSpeed),
+            right = anim8.newAnimation(gTadpole('1-4', 3), animSpeed),
+            up    = anim8.newAnimation(gTadpole('1-4', 4), animSpeed)
+        }
+    end
 
     local function load_data_files(path)
         local data = {}

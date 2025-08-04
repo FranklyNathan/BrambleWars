@@ -375,7 +375,7 @@ function UnitInfoMenu.draw(world)
             do
                 for i = 1, numWeaponSlots do
                     local weaponKey = unit.equippedWeapons and unit.equippedWeapons[i]
-                    local weaponName = "Empty Slot"
+                    local weaponName = "Unarmed"
                     local weaponIcon = nil
                     local sliceKey = "weapon" .. i -- e.g., "weapon1", "weapon2"
 

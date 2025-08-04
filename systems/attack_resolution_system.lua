@@ -212,7 +212,7 @@ function AttackResolutionSystem.update(dt, world)
                                     -- Grant experience for the hit or kill.
                                     if effect.attacker.type == "player" and target.type == "enemy" then
                                         local isKill = (target.hp - damage <= 0)
-                                        local expGained = CombatFormulas.calculateExpGain(effect.attacker, target, isKill)
+                                        local expGained = CombatFormulas.calculateExpGain(effect.attacker, target, isKill, world)
 
                                         -- If the kill was from a reaction, flag the attacker so their turn isn't consumed by a level-up/promotion.
                                         if isKill and effect.specialProperties and effect.specialProperties.isAetherfallAttack then

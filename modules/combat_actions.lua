@@ -65,7 +65,7 @@ function CombatActions.applyDirectDamage(world, target, damageAmount, isCrit, at
             end
 
             if targetHasThunderguard then
-                local range = 4
+                local range = 2
                 -- Apply paralysis to all enemy units in range.
                 for _, unit in ipairs(world.all_entities) do
                     if unit ~= target and unit.hp and unit.hp > 0 and unit.type and unit.type ~= target.type then

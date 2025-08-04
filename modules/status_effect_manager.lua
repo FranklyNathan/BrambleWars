@@ -6,13 +6,26 @@ local EffectFactory = require("modules.effect_factory")
 local TileStatusBlueprints = require("data.tile_status_blueprints")
 local Grid = require("modules.grid")
 local WorldQueries = require("modules.world_queries")
--- CombatActions is no longer required
+local Assets = require("modules.assets")
 
 local StatusEffectManager = {}
 
 
 -- Apply a status effect to a target.
 function StatusEffectManager.apply(target, effectData, world)
+    local effectType = effectData.type
+    local blueprint = Assets.status_effects[effectType]
+
+    -- If a blueprint exists, merge its properties into the effectData.
+    -- The properties in effectData (like duration, attacker) will override blueprint defaults.
+    if blueprint then
+        for k, v in pairs(blueprint) do
+            if effectData[k] == nil then
+                effectData[k] = v
+            end
+        end
+    end
+
     -- If totalDuration isn't specified, set it to the initial duration.
     -- This is crucial for animations that depend on the original duration.
     if effectData.duration and not effectData.totalDuration then
@@ -20,7 +33,7 @@ function StatusEffectManager.apply(target, effectData, world)
     end
 
     -- Apply effect.
-    target.statusEffects[effectData.type] = effectData
+    target.statusEffects[effectType] = effectData
     effectData.target = target
 
     EventBus:dispatch("status_applied", {target = target, effect = effectData, world = world})

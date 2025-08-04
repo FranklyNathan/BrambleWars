@@ -185,6 +185,7 @@ function World.new(gameMap)
             Frozenfoot = {},
             DualWielder = {},
             Unburdened = {},
+            FastLearner = {},
             Ephemeral = {},
         },
         enemy = {
@@ -210,6 +211,7 @@ function World.new(gameMap)
             DualWielder = {},
             Ephemeral = {},
             Unburdened = {},
+            FastLearner = {},
         },
         neutral = {
             Bloodrush = {},
@@ -234,6 +236,7 @@ function World.new(gameMap)
             DualWielder = {},
             Ephemeral = {},
             Unburdened = {},
+            FastLearner = {},
         }
     }
 

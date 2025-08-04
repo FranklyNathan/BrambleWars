@@ -92,6 +92,19 @@ local AttackBlueprints = {
         description = "A standard dagger attack."
     },
 
+    haste = {
+        name = "Haste",
+        power = 0,
+        wispCost = 1,
+        Accuracy = 100,
+        useType = "support",
+        targeting_style = "cycle_target",
+        affects = "allies",
+        patternType = "standard_melee",
+        statusEffect = {type = "hastened", duration = 1},
+        drawsTile = true,
+        description = "Grants an adjacent ally +3 Movement for one turn."
+    },
     -- Damaging Melee Attacks
     venom_stab = {
         name = "Venom Stab",

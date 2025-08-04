@@ -64,6 +64,31 @@ local function execute_cycle_target_heal_attack(attacker, world, attackInstanceI
     return true -- Turn is consumed.
 end
 
+-- Helper for cycle_target attacks that apply a status effect.
+local function execute_cycle_target_status_attack(attacker, world, attackInstanceId)
+    local target = get_and_face_cycle_target(attacker, world)
+    if not target then return false end
+
+    local attackName = world.ui.targeting.selectedAttackName
+    local attackData = AttackBlueprints[attackName]
+    if not attackData or not attackData.statusEffect then return false end
+
+    -- Apply the status effect.
+    local statusToApply = {
+        type = attackData.statusEffect.type,
+        duration = attackData.statusEffect.duration,
+        attacker = attacker
+    }
+    StatusEffectManager.applyStatusEffect(target, statusToApply, world)
+
+    -- Create a visual effect on the target tile.
+    EffectFactory.addAttackEffect(world, {
+        attacker = attacker, attackName = attackName, x = target.x, y = target.y,
+        width = target.size, height = target.size, color = {0.2, 0.8, 1.0, 0.7}, -- Cyan for a buff
+        targetType = "none", specialProperties = { attackInstanceId = attackInstanceId }
+    })
+    return true
+end
 -- Helper for cycle_target attacks that fire a projectile.
 local function executeCycleTargetProjectileAttack(attacker, attackName, world, isPiercing, attackInstanceId)
     local target = get_and_face_cycle_target(attacker, world)
@@ -133,6 +158,7 @@ UnitAttacks.loose = generic_cycle_target_damage_attack
 UnitAttacks.bonk = generic_cycle_target_damage_attack
 UnitAttacks.harm = generic_cycle_target_damage_attack
 UnitAttacks.stab = generic_cycle_target_damage_attack
+UnitAttacks.haste = execute_cycle_target_status_attack
 
 UnitAttacks.sever = generic_cycle_target_damage_attack
 UnitAttacks.venom_stab = generic_cycle_target_damage_attack

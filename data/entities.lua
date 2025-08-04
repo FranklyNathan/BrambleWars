@@ -7,6 +7,7 @@ local Grid = require("modules.grid")
 local Config = require("config")
 local CharacterBlueprints = require("data.character_blueprints")
 local EnemyBlueprints = require("data.enemy_blueprints")
+local SummonBlueprints = require("data/summon_blueprints")
 local LevelUpSystem = require("systems.level_up_system")
 
 local EntityFactory = {}
@@ -31,6 +32,9 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
     if square.type == "player" then
         square.playerType = subType -- e.g., "drapionsquare"
         local blueprint = CharacterBlueprints[subType]
+        if not blueprint then
+            blueprint = SummonBlueprints[subType]
+        end
         -- The 'color' property is now used for effects like the death shatter.
         -- We'll set it to the character's dominant color for visual consistency.
         square.color = {blueprint.dominantColor[1], blueprint.dominantColor[2], blueprint.dominantColor[3], 1}
@@ -64,19 +68,32 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.growths = blueprint.growths
         square.portrait = blueprint.portrait or "Default_Portrait"
 
-        -- A mapping from the internal player type to the asset name for scalability.
-        local playerSpriteMap = {
-            clementine = "Clementine",
-            biblo = "Biblo",
-            winthrop = "Winthrop",
-            mortimer = "Mortimer",
-            cedric = "Cedric",
-            ollo = "Ollo",
-            plop = "Plop",
-            dupe = "Dupe"
-        }
+        -- A shallow copy is sufficient here since passive names are strings.
+        square.passives = {}
+        if blueprint.passives then
+            for _, passiveName in ipairs(blueprint.passives) do
+                table.insert(square.passives, passiveName)
+            end
+        end
 
-        local spriteName = playerSpriteMap[subType]
+        local spriteName
+        if blueprint.sprite then
+            spriteName = blueprint.sprite
+        else
+            -- A mapping from the internal player type to the asset name for scalability.
+            local playerSpriteMap = {
+                clementine = "Clementine",
+                biblo = "Biblo",
+                winthrop = "Winthrop",
+                mortimer = "Mortimer",
+                cedric = "Cedric",
+                ollo = "Ollo",
+                plop = "Plop",
+                dupe = "Dupe"
+            }
+            spriteName = playerSpriteMap[subType]
+        end
+
         if spriteName and Assets.animations[spriteName] then
             square.components.animation = {
                 animations = {
@@ -94,6 +111,9 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
     elseif square.type == "enemy" then
         square.enemyType = subType -- e.g., "standard"
         local blueprint = EnemyBlueprints[subType]
+        if not blueprint then
+            blueprint = SummonBlueprints[subType]
+        end
         square.color = {blueprint.dominantColor[1], blueprint.dominantColor[2], blueprint.dominantColor[3], 1}
         square.originType = blueprint.originType
         square.maxHp = blueprint.maxHp
@@ -120,6 +140,14 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.expReward = blueprint.expReward
         square.portrait = blueprint.portrait or "Default_Portrait"
 
+        -- A shallow copy is sufficient here since passive names are strings.
+        square.passives = {}
+        if blueprint.passives then
+            for _, passiveName in ipairs(blueprint.passives) do
+                table.insert(square.passives, passiveName)
+            end
+        end
+
         -- Apply level-up stat gains for enemies starting at > Lvl 1
         if square.level > 1 then
             for i = 2, square.level do
@@ -127,14 +155,19 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
             end
         end
 
-        -- Add animation component for enemies
-        local enemySpriteMap = {
-            brawler = "Brawler",
-            archer = "Archer",
-            punter = "Punter"
-        }
+        local spriteName
+        if blueprint.sprite then
+            spriteName = blueprint.sprite
+        else
+            -- Add animation component for enemies
+            local enemySpriteMap = {
+                brawler = "Brawler",
+                archer = "Archer",
+                punter = "Punter"
+            }
+            spriteName = enemySpriteMap[subType]
+        end
 
-        local spriteName = enemySpriteMap[subType]
         if spriteName and Assets.animations[spriteName] then
             square.components.animation = {
                 animations = {
@@ -173,6 +206,12 @@ function EntityFactory.createSquare(startTileX, startTileY, type, subType, optio
         square.displayName = blueprint.displayName
         square.class = blueprint.class
         square.portrait = blueprint.portrait or "Default_Portrait"
+        square.passives = {}
+        if blueprint.passives then
+            for _, passiveName in ipairs(blueprint.passives) do
+                table.insert(square.passives, passiveName)
+            end
+        end
         square.shopInventory = blueprint.shopInventory or {}
 
         -- A mapping from the internal neutral type to the asset name.

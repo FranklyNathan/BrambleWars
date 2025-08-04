@@ -44,6 +44,11 @@ local PassiveBlueprints = {
         name = "Ephemeral",
         description = "This unit dies at the end of the turn."
     },
+    FastLearner = {
+        name = "Fast Learner",
+        description = "Gains 1.25x experience from combat.",
+        exp_multiplier = 1.25
+    },
     Frozenfoot = {
         name = "Frozenfoot",
         description = "Can walk on water, freezing it. Immune to breaking ice."
@@ -75,6 +80,10 @@ local PassiveBlueprints = {
     Soulsnatcher = {
         name = "Soulsnatcher",
         description = "When this unit damages an enemy with an attack, they steal 1 Wisp from the target."
+    },
+    Spawnstride = {
+        name = "Spawnstride",
+        description = "Spawns a Tadpole on each empty tile this unit moves over."
     },
     Thunderguard = {
         name = "Thunderguard",

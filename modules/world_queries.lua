@@ -801,8 +801,6 @@ end
 function WorldQueries.getUnitPassiveList(unit)
     if not unit then return {} end
 
-    -- If passives are overridden (e.g., by Necromantia + Proliferate),
-    -- return that list directly. It is the single source of truth.
     if unit.overriddenPassives then
         return unit.overriddenPassives
     end
@@ -810,18 +808,14 @@ function WorldQueries.getUnitPassiveList(unit)
     local all_passives = {}
     local passive_exists = {} -- Use a set to track existing passives and prevent duplicates
 
-    -- 1. Get passives from the character/enemy blueprint.
-    local blueprint
-    if unit.type == "player" then
-        blueprint = CharacterBlueprints[unit.playerType]
-    elseif unit.type == "enemy" then
-        blueprint = EnemyBlueprints[unit.enemyType]
-    elseif unit.type == "neutral" then
-        blueprint = CharacterBlueprints[unit.playerType]
-    end
-    if blueprint and blueprint.passives then
-        for _, passiveName in ipairs(blueprint.passives) do
-            if not passive_exists[passiveName] then table.insert(all_passives, passiveName); passive_exists[passiveName] = true end
+    -- 1. Get passives from the unit's own passives table.
+    -- This is populated by the EntityFactory from the correct blueprint (character, enemy, or summon).
+    if unit.passives then
+        for _, passiveName in ipairs(unit.passives) do
+            if not passive_exists[passiveName] then
+                table.insert(all_passives, passiveName)
+                passive_exists[passiveName] = true
+            end
         end
     end
 
@@ -831,7 +825,9 @@ function WorldQueries.getUnitPassiveList(unit)
             local weapon = WeaponBlueprints[weaponName]
             if weapon and weapon.grants_passives then
                 for _, passiveName in ipairs(weapon.grants_passives) do
-                    if not passive_exists[passiveName] then table.insert(all_passives, passiveName); passive_exists[passiveName] = true end
+                    if not passive_exists[passiveName] then
+                        table.insert(all_passives, passiveName); passive_exists[passiveName] = true
+                    end
                 end
             end
         end

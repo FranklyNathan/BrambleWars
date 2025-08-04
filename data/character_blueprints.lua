@@ -68,7 +68,7 @@ local CharacterBlueprints = {
             -- Ranged & Special Attacks
             "phantom_step", "shockwave", "quick_step", "grovecall", "trap_set", "ascension", "hookshot", "homecoming", "kindle",
             -- Support Attacks
-            "mend", "invigoration"
+            "mend", "invigoration", "haste"
         }
     },
     winthrop = {
@@ -205,12 +205,12 @@ local CharacterBlueprints = {
         magicStat = 5,
         resistanceStat = 4,
         witStat = 8,
-        movement = 6,
+        movement = 2,
         weight = 6, -- Medium
         equippedWeapons = {[1] = "travelers_lance"},
         canSwim = true,
-        dominantColor = {0.1, 0.8, 0.3}, -- Plop: Leaf Green
-        passives = {},
+        dominantColor = {0.1, 0.8, 0.3}, -- Plop: Leaf Green,
+        passives = {"Spawnstride"},
         growths = {
             maxHp = 75,
             attackStat = 50,

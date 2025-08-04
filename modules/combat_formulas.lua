@@ -1,6 +1,8 @@
 -- combat_formulas.lua
 -- Contains pure functions for calculating combat-related values.
 
+local WorldQueries = require("modules.world_queries")
+local PassiveBlueprints = require("data/passive_blueprints")
 local CombatFormulas = {}
 
 local typeEffectivenessTable = {
@@ -201,7 +203,7 @@ end
 -- Calculates the amount of EXP a unit gains from combat.
 -- Formula: 20 + (Enemy Level - Player Level) * (expReward / modifier)
 -- The modifier is 100 for a hit, and 10 for a kill.
-function CombatFormulas.calculateExpGain(attacker, defender, isKill)
+function CombatFormulas.calculateExpGain(attacker, defender, isKill, world)
     -- Only players gain EXP from fighting enemies.
     if attacker.type ~= "player" or defender.type ~= "enemy" then
         return 0
@@ -210,15 +212,32 @@ function CombatFormulas.calculateExpGain(attacker, defender, isKill)
     -- Failsafe if defender has no expReward defined.
     if not defender.expReward then return 0 end
 
+    print("--- EXP Calculation ---")
+    print("Attacker: " .. attacker.displayName .. ", Defender: " .. defender.enemyType)
+
     local baseExp = 30
     local levelDifference = defender.level - attacker.level
     local rewardDivisor = isKill and 10 or 100
 
     local expGained = (baseExp + levelDifference) * (defender.expReward / rewardDivisor)
+    print(string.format("  Base EXP: %d, Level Diff: %d, Kill: %s, Reward Divisor: %d", baseExp, levelDifference, tostring(isKill), rewardDivisor))
+    print(string.format("  Initial EXP Gained (un-multiplied): %.2f", expGained))
+
+    -- New: Check for Fast Learner passive
+    if world and WorldQueries.hasPassive(attacker, "FastLearner", world) then
+        local passiveData = PassiveBlueprints.FastLearner
+        if passiveData and passiveData.exp_multiplier then
+            expGained = expGained * passiveData.exp_multiplier
+            print(string.format("  Fast Learner passive found! Applying x%.2f multiplier.", passiveData.exp_multiplier))
+        end
+    end
 
     -- EXP gain should not be negative. If the player is a much higher level,
     -- they get a minimum amount of EXP (e.g., 1).
-    return math.max(1, math.floor(expGained))
+    local finalExp = math.max(1, math.floor(expGained))
+    print(string.format("  Final EXP Gained (floored): %d", finalExp))
+    print("-----------------------")
+    return finalExp
 end
 
 return CombatFormulas

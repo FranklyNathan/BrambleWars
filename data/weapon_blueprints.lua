@@ -176,6 +176,78 @@ local WeaponBlueprints = {
             magicStat = -3,
             maxWisp = -1
         }
+    },
+
+    -- New Wisdom Weapons
+    wisdoms_blade = {
+        name = "Wisdom's Blade",
+        type = "sword",
+        value = 300,
+        description = "A blade that seems to sharpen the mind of its wielder, accelerating their learning.",
+        stats = {
+            attackStat = 1
+        },
+        grants_passives = {"FastLearner"}
+    },
+    tome_of_wisdom = {
+        name = "Tome of Wisdom",
+        type = "tome",
+        value = 300,
+        description = "A tome that seems to sharpen the mind of its wielder, accelerating their learning.",
+        stats = {
+            magicStat = 1
+        },
+        grants_passives = {"FastLearner"}
+    },
+    wisdoms_lance = {
+        name = "Wisdom's Lance",
+        type = "lance",
+        value = 300,
+        description = "A lance that seems to sharpen the mind of its wielder, accelerating their learning.",
+        stats = {
+            attackStat = 1
+        },
+        grants_passives = {"FastLearner"}
+    },
+    wisdoms_bow = {
+        name = "Wisdom's Bow",
+        type = "bow",
+        value = 300,
+        description = "A bow that seems to sharpen the mind of its wielder, accelerating their learning.",
+        stats = {
+            attackStat = 1
+        },
+        grants_passives = {"FastLearner"}
+    },
+    wisdoms_dagger = {
+        name = "Wisdom's Dagger",
+        type = "dagger",
+        value = 300,
+        description = "A dagger that seems to sharpen the mind of its wielder, accelerating their learning.",
+        stats = {
+            attackStat = 1
+        },
+        grants_passives = {"FastLearner"}
+    },
+    wisdoms_whip = {
+        name = "Wisdom's Whip",
+        type = "whip",
+        value = 300,
+        description = "A whip that seems to sharpen the mind of its wielder, accelerating their learning.",
+        stats = {
+            attackStat = 1
+        },
+        grants_passives = {"FastLearner"}
+    },
+    wisdoms_staff = {
+        name = "Wisdom's Staff",
+        type = "staff",
+        value = 300,
+        description = "A staff that seems to sharpen the mind of its wielder, accelerating their learning.",
+        stats = {
+            magicStat = 1
+        },
+        grants_passives = {"FastLearner"}
     }
 }
 

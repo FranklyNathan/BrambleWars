@@ -46,6 +46,27 @@ function TurnBasedMovementSystem.update(dt, world)
                 -- Update the logical tile position to match.
                 entity.tileX, entity.tileY = Grid.toTile(entity.x, entity.y)
 
+                -- New: Spawnstride passive logic.
+                -- This tile is one the unit has just "walked over".
+                -- We check if the movement path is not yet empty, which means this is not the final destination tile.
+                if WorldQueries.hasPassive(entity, "Spawnstride", world) and entity.components.pre_move_state and #entity.components.movement_path > 0 then
+                    -- Check if the current tile is the starting tile of the move. We don't want to spawn there.
+                    local is_start_tile = (entity.tileX == entity.components.pre_move_state.tileX and entity.tileY == entity.components.pre_move_state.tileY)
+
+                    if not is_start_tile then
+                        -- Check if the tile is empty before spawning (excluding the unit itself).
+                        if not WorldQueries.isTileOccupied(entity.tileX, entity.tileY, entity, world) then
+                            -- Spawn a tadpole of the same team as the spawner.
+                            local tadpole = EntityFactory.createSquare(entity.tileX, entity.tileY, entity.type, "tadpole")
+                            world:queue_add_entity(tadpole)
+                            -- Track the spawned tadpole so it can be removed on undo.
+                            if entity.components.pre_move_state then
+                                table.insert(entity.components.pre_move_state.spawned_tadpoles, tadpole)
+                            end
+                        end
+                    end
+                end
+
                 -- Check for Frozenfoot passive
                 -- This must happen before dispatching unit_tile_changed to prevent drowning.
                 if WorldQueries.hasPassive(entity, "Frozenfoot", world) then

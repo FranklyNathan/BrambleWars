@@ -461,7 +461,8 @@ local function handle_unit_selected_input(key, world)
                 tileY = unit.tileY,
                 direction = unit.lastDirection,
                 hp = unit.hp,
-                frozenTiles = {} -- For the Frozenfoot passive to record its changes.
+                frozenTiles = {}, -- For the Frozenfoot passive to record its changes.
+                spawned_tadpoles = {} -- For the new Spawnstride passive.
             }
 
             -- If cursor is on the unit, the path is nil/empty. Assign an empty table `{}` to trigger the movement system's completion logic immediately.
@@ -718,6 +719,13 @@ local function handle_action_menu_input(key, world)
                 for _, posKey in ipairs(state.frozenTiles) do
                     -- Setting the status to nil reverts it to its base state (water).
                     world.tileStatuses[posKey] = nil
+                end
+            end
+
+            -- New: Remove any tadpoles spawned by the Spawnstride passive during this move.
+            if state.spawned_tadpoles and #state.spawned_tadpoles > 0 then
+                for _, tadpole in ipairs(state.spawned_tadpoles) do
+                    tadpole.isMarkedForDeletion = true
                 end
             end
 
