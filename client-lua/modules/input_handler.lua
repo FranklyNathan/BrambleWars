@@ -1375,6 +1375,7 @@ local function handle_main_menu_input(key)
         if selectedOption.key == "play" then
             return "start_game"
         elseif selectedOption.key == "draft" then
+            require('tests.websocket_tests')
             return "draft_mode"
         end
     end
