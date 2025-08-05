@@ -9,6 +9,7 @@ local StatusEffectManager = require("modules.status_effect_manager")
 local EntityFactory = require("data.entities")
 local ObjectBlueprints = require("data.object_blueprints")
 local WeaponBlueprints = require("data.weapon_blueprints")
+local InputHelpers = require("modules.input_helpers")
 
 local World = {}
 World.__index = World
@@ -102,7 +103,7 @@ function World.new(gameMap)
                 rippleSourceUnit = nil,
                 isLocked = false, -- For the new locked-in inspection mode
                 selectedIndex = 1,
-                expSliceAnimation = { active = false, timer = 0, duration = 0.2, currentHeight = 0 },
+                detailsAnimation = { active = false, timer = 0, duration = 0.2, currentHeight = 0 },
                 moveListScrollOffset = 0
             },
             weaponSelect = {
@@ -148,7 +149,7 @@ function World.new(gameMap)
         -- For the animated EXP bar
         expGainAnimation = {
             active = false,
-            state = "idle", -- "filling", "shrinking"
+            state = "idle", -- "idle", "filling" (bar is filling), "shrinking" (bar is shrinking away)
             unit = nil,
             expStart = 0,
             expCurrentDisplay = 0,
@@ -507,8 +508,8 @@ function World:endTurn()
         end
         -- Announce that the enemy's turn has ended.
         EventBus:dispatch("enemy_turn_ended", {world = self})
-        self.turn = "player"
-        self.ui.playerTurnState = "free_roam"
+        self.turn = "player" 
+        InputHelpers.set_player_turn_state("free_roam", self)
         -- Reset enemy state so they are no longer greyed out.
         for _, enemy in ipairs(self.enemies) do
            enemy.hasActed = false

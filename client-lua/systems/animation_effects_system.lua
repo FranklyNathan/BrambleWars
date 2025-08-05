@@ -6,6 +6,7 @@
 local WorldQueries = require("modules.world_queries")
 local EventBus = require("modules.event_bus")
 local Grid = require("modules.grid")
+local InputHelpers = require("modules.input_helpers")
 
 local AnimationEffectsSystem = {}
 
@@ -53,7 +54,7 @@ function AnimationEffectsSystem.update(dt, world)
                         molehillSelect.selectedIndex = 1
                         
                         -- Set the state and snap the cursor to the first target.
-                        set_player_turn_state("burrow_teleport_selecting", world)
+                        InputHelpers.set_player_turn_state("burrow_teleport_selecting", world)
                         local firstTarget = molehillSelect.targets[1]
                         world.ui.mapCursorTile.x = firstTarget.tileX
                         world.ui.mapCursorTile.y = firstTarget.tileY
@@ -88,7 +89,7 @@ function AnimationEffectsSystem.update(dt, world)
                     local totalMovementUsed = entity.components.total_movement_used_this_turn or 0
                     entity.components.movement_override = { amount = totalMovement - totalMovementUsed }
                     
-                    set_player_turn_state("free_roam", world)
+                    InputHelpers.set_player_turn_state("free_roam", world)
                 else
                     -- For other sources like Necromancy, the unit is simply revived
                     -- and can act on its next turn. The death_system already set its HP.

@@ -10,6 +10,7 @@ local CombatActions = require("modules.combat_actions")
 local EventBus = require("modules.event_bus")
 local StatusEffectManager = require("modules.status_effect_manager")
 local Assets = require("modules.assets")
+local InputHelpers = require("modules.input_helpers")
 
 local TurnBasedMovementSystem = {}
 
@@ -112,8 +113,8 @@ function TurnBasedMovementSystem.update(dt, world)
                             world.ui.pathing.moveDestinationEffect = nil
                             -- The unit's turn is over. Return to the free roam state so the player
                             -- can select another unit or end their turn. This prevents the game from
-                            -- getting stuck in the 'unit_moving' state.
-                            world.ui.playerTurnState = "free_roam"
+                            -- getting stuck in the 'unit_moving' state. 
+                            InputHelpers.set_player_turn_state("free_roam", world)
                         end
                         -- Stop all further movement for this unit by removing the component.
                         entity.components.movement_path = nil
@@ -146,7 +147,7 @@ function TurnBasedMovementSystem.update(dt, world)
                     -- Only player units trigger state changes upon finishing a move.
                     if entity.type == "player" then -- Player finished moving
                         -- Movement is done, open the action menu.
-                        world.ui.playerTurnState = "action_menu"
+                        InputHelpers.set_player_turn_state("action_menu", world)
 
                         local menuOptions = {}
 

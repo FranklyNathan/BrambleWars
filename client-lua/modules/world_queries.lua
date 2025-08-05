@@ -98,12 +98,21 @@ function WorldQueries.isTileWater_Base(tileX, tileY, world)
     return tile ~= nil
 end
 
+function WorldQueries.isTileMud(tileX, tileY, world)
+    local mudLayer = world.map.layers["Mud"]
+    if not mudLayer then return false end
+    -- Tiled data is 1-based, our grid is 0-based.
+    local tile = mudLayer.data[tileY + 1] and mudLayer.data[tileY + 1][tileX + 1]
+    return tile ~= nil
+end
+
 -- A new helper to check if a tile is valid for a ground-based status (Aflame, Tall Grass, etc.)
 function WorldQueries.isTileValidForGroundStatus(tileX, tileY, world)
     -- Cannot be placed on water (frozen or not)
     if WorldQueries.isTileWater_Base(tileX, tileY, world) then
         return false
     end
+    if WorldQueries.isTileMud(tileX, tileY, world) then return false end
     -- Cannot be placed on a tile with an obstacle
     if WorldQueries.getObstacleAt(tileX, tileY, world) then
         return false
@@ -515,42 +524,39 @@ function WorldQueries.findValidTargetsForAttack(attacker, attackName, world)
     local attackData = AttackBlueprints[attackName]
     if not attackData then return {} end
 
-    -- New: Check if the attacker is taunted.
+    -- Add the attack name to the data table for the helper functions to use.
+    attackData.name = attackName
+
+    -- 1. Find all possible targets for the attack, ignoring taunt for now.
+    local finder = targetFinders[attackData.targeting_style]
+    if not finder then
+        return {} -- No valid targeting style found.
+    end
+    local allPossibleTargets = finder(attacker, attackData, world)
+
+    -- 2. Check if the attacker is taunted and filter the results if necessary.
     if attacker.statusEffects and attacker.statusEffects.taunted then
         local tauntData = attacker.statusEffects.taunted
         local taunter = tauntData.attacker
 
-            if taunter and taunter.hp > 0 and WorldQueries.areUnitsHostile(attacker, taunter) then
-            -- The unit is taunted. They can only target the taunter.
-            -- We need to check if the taunter is a valid target for the selected attack.
-            -- To do this, we can run the normal targeting logic but only check against the taunter.
-            attackData.name = attackName -- Ensure name is set for helpers
-            local finder = targetFinders[attackData.targeting_style]
-            if finder then
-                local allPossibleTargets = finder(attacker, attackData, world)
-                for _, possibleTarget in ipairs(allPossibleTargets) do
-                    if possibleTarget == taunter then
-                        return { taunter } -- The taunter is a valid target. Return ONLY them.
-                    end
+        if taunter and taunter.hp > 0 and WorldQueries.areUnitsHostile(attacker, taunter) then
+            -- The unit is taunted by a valid, living enemy.
+            -- Check if the taunter is in the list of possible targets.
+            for _, possibleTarget in ipairs(allPossibleTargets) do
+                if possibleTarget == taunter then
+                    return { taunter } -- If so, the taunter is the ONLY valid target.
                 end
             end
-            return {} -- The taunter is not a valid target for this move (e.g., out of range).
+            return {} -- If not, the unit cannot target anyone.
         else
-            -- Taunter is dead or gone, so the effect is broken.
+            -- The taunter is dead or no longer hostile, so the effect is broken.
             local StatusEffectManager = require("modules.status_effect_manager")
             StatusEffectManager.remove(attacker, "taunted", world)
         end
     end
 
-    -- Add the attack name to the data table for the helper functions to use.
-    attackData.name = attackName
-
-    local finder = targetFinders[attackData.targeting_style]
-    if finder then
-        return finder(attacker, attackData, world)
-    end
-
-    return {} -- Return an empty table if no handler is found.
+    -- 3. If not taunted (or if the taunt was broken), return all possible targets.
+    return allPossibleTargets
 end
 
 -- Helper to find adjacent allied units that satisfy a given condition.
@@ -668,37 +674,40 @@ function WorldQueries.findTakeTargets(taker, world)
     return findAdjacentAllies(taker, world, filter)
 end
 
--- Checks if any major game action (attack, movement, animation) is currently in progress.
--- This is used to lock UI elements and delay turn finalization.
-function WorldQueries.isActionOngoing(world)
+-- Checks if any modal UI element that pauses gameplay is currently active.
+-- This is separate from isActionOngoing to distinguish between world simulation and UI state.
+function WorldQueries.isUIBlockingInput(world)
     -- Lazily require to break circular dependency with level_up_display_system
     local LevelUpDisplaySystem = require("systems.level_up_display_system")
 
-    -- An action is considered ongoing if there are active global effects...
-    -- Check if the level up display sequence is active.
-    if LevelUpDisplaySystem.active then return true end
+    -- Check for active UI states that take over the game flow.
+    if (world.ui.expGainAnimation and world.ui.expGainAnimation.active) or
+       (world.ui.menus.promotion.active) or
+       (LevelUpDisplaySystem.active) then
+        return true
+    end
 
-    -- Check if the EXP gain animation is active.
-    if world.ui.expGainAnimation and world.ui.expGainAnimation.active then return true end
+    return false
+end
 
-    -- Check if the promotion menu is active, as this also pauses the game flow.
-    if world.ui.menus.promotion.active then return true end
+-- Checks if any major game action (attack, movement, animation) is currently in progress.
+-- This is used to lock UI elements and delay turn finalization.
+function WorldQueries.isActionOngoing(world)
+    -- Check if any logic queues are being processed.
+    if #world.attackEffects > 0 or #world.rippleEffectQueue > 0 or #world.projectiles > 0 or #world.pendingCounters > 0 then
+        return true
+    end
 
-    -- An action is ongoing if there are pending attack effects or ripples.
-    -- These can trigger further game logic like damage, death, and other effects.
-    if #world.attackEffects > 0 or #world.rippleEffectQueue > 0 then return true end
-
-    -- An action is ongoing if a projectile is in flight, or a counter-attack is pending.
-    if #world.projectiles > 0 or #world.pendingCounters > 0 then return true end
-
-    -- ...or if any single unit is still performing a visual action.
+    -- Check if any single entity is still performing a visual action.
     for _, entity in ipairs(world.all_entities) do
-        -- Check for animations like lunges, careening, or any entity that is currently moving towards a target pixel.
-        if entity.components.lunge or
+        -- An entity is busy if it's moving or has a component indicating an ongoing animation.
+        local isMoving = entity.targetX and (math.abs(entity.x - entity.targetX) > 0.5 or math.abs(entity.y - entity.targetY) > 0.5)
+        if isMoving or
+           entity.components.lunge or
            entity.components.reviving or
            entity.components.pending_damage or
-           (entity.statusEffects and entity.statusEffects.careening) or
-           (entity.targetX and (math.abs(entity.x - entity.targetX) > 0.5 or math.abs(entity.y - entity.targetY) > 0.5)) then
+           (entity.statusEffects and entity.statusEffects.careening)
+        then
             return true -- Found a busy unit.
         end
     end

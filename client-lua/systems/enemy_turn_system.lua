@@ -61,6 +61,7 @@ local function findBestCycleTargetAttackPosition(enemy, target, attackName, reac
     for k, v in pairs(enemy) do tempEnemy[k] = v end
     
     for posKey, data in pairs(reachableTiles) do
+        -- This is the crucial fix: Only consider tiles the unit can actually land on.
         if data.landable then
             local tileX = tonumber(string.match(posKey, "(-?%d+)"))
             local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
@@ -69,7 +70,7 @@ local function findBestCycleTargetAttackPosition(enemy, target, attackName, reac
             local validTargets = WorldQueries.findValidTargetsForAttack(tempEnemy, attackName, world)
             for _, validTarget in ipairs(validTargets) do
                 if validTarget == target then
-                    -- This is a valid attack spot. Is it the best one so far (closest to target)?
+                    -- This is a valid attack spot. Check if it's the best one so far (closest to target).
                     local distSq = (tileX - target.tileX)^2 + (tileY - target.tileY)^2
                     if distSq < closestDistSq then
                         closestDistSq = distSq
@@ -133,16 +134,46 @@ local function findBestMoveOnlyTile(enemy, target, reachableTiles, world)
                nextTileX >= 0 and nextTileX < world.map.width and
                nextTileY >= 0 and nextTileY < world.map.height then
                 
-                -- The path for the BFS should not go through obstacles or opponents. It CAN go through allies.
+                -- This logic must mirror the passability checks in pathfinding.lua exactly
+                -- to ensure the AI follows the same movement rules as the player.
+                local obstacle = WorldQueries.getObstacleAt(nextTileX, nextTileY, world)
+                local occupyingUnit = WorldQueries.getUnitAt(nextTileX, nextTileY, enemy, world)
+                local isLedgeBlocked = WorldQueries.isLedgeBlockingPath(current.tileX, current.tileY, nextTileX, nextTileY, world)
+
                 local canPass = true
-                if WorldQueries.isTileWater(nextTileX, nextTileY, world) and not enemy.isFlying then
-                    canPass = false -- Can't path through water unless flying.
-                elseif WorldQueries.getObstacleAt(nextTileX, nextTileY, world) then
-                    canPass = false -- Can't path through obstacles.
-                else
-                    local occupyingUnit = WorldQueries.getUnitAt(nextTileX, nextTileY, enemy, world)
-                    if occupyingUnit and occupyingUnit.type ~= enemy.type then
-                        canPass = false -- Can't path through opponents.
+
+                if isLedgeBlocked then
+                    canPass = false
+                elseif WorldQueries.isTileWater(nextTileX, nextTileY, world) then
+                    local hasFrozenfoot = WorldQueries.hasPassive(enemy, "Frozenfoot", world)
+                    if not (enemy.isFlying or enemy.canSwim or hasFrozenfoot) then
+                        canPass = false
+                    end
+                elseif obstacle then
+                    if obstacle.isImpassable then
+                        canPass = false
+                    elseif obstacle.objectType ~= "molehill" and not obstacle.isTrap then
+                        -- Regular obstacles like trees can only be passed by flying units.
+                        if not enemy.isFlying then
+                            canPass = false
+                        end
+                    end
+                    -- Molehills and traps are always passable.
+                elseif occupyingUnit then
+                    -- Flying units can pass over other units.
+                    if not enemy.isFlying then
+                        if occupyingUnit.type ~= enemy.type then -- It's an enemy
+                            local hasElusive = false
+                            if world.teamPassives[enemy.type].Elusive then
+                                for _, provider in ipairs(world.teamPassives[enemy.type].Elusive) do
+                                    if provider == enemy then hasElusive = true; break end
+                                end
+                            end
+                            if not hasElusive then
+                                canPass = false
+                            end
+                        end
+                        -- Allies are always passable for ground units.
                     end
                 end
 

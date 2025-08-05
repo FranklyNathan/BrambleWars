@@ -36,7 +36,14 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
         -- Explore neighbors
         for _, move in ipairs(neighbors) do
             local nextTileX, nextTileY = current.tileX + move.dx, current.tileY + move.dy
-            local nextCost = current.cost + 1
+            
+            -- New: Determine movement cost for the tile.
+            local moveCost = 1
+            if WorldQueries.isTileMud(nextTileX, nextTileY, world) and not startUnit.isFlying then
+                moveCost = 2
+            end
+
+            local nextCost = current.cost + moveCost
             local nextPosKey = nextTileX .. "," .. nextTileY
             
             -- Check if the neighbor is within map boundaries before proceeding.
@@ -46,62 +53,51 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
                     if not cost_so_far[nextPosKey] or nextCost < cost_so_far[nextPosKey] then                        
                         -- New logic incorporating impassable obstacles and water tiles.
                         local obstacle = WorldQueries.getObstacleAt(nextTileX, nextTileY, world)
-                        local isWater = WorldQueries.isTileWater(nextTileX, nextTileY, world)
                         local occupyingUnit = WorldQueries.getUnitAt(nextTileX, nextTileY, startUnit, world)
                         local isLedgeBlocked = WorldQueries.isLedgeBlockingPath(current.tileX, current.tileY, nextTileX, nextTileY, world)
 
-                        local canPass, canLand = false, false
+                        local canPass = true -- Assume passable unless a condition fails.
 
-                        if obstacle then                            
-                            if obstacle.objectType == "molehill" then
-                                canPass = true
-                                canLand = not occupyingUnit
-                            elseif obstacle.isTrap then
-                                -- Can always land on traps. The trigger happens on landing.
-                                -- Flying units are immune to the trigger, but can still land.
-                                canPass = true
-                                canLand = not occupyingUnit
-                            elseif obstacle.isImpassable then
-                                -- Impassable obstacles (like Boxes) block everything, even flying units.
-                                canPass = false
-                                canLand = false
-                            else -- Regular obstacles (trees)
-                                canPass = startUnit.isFlying
-                                canLand = false -- Cannot land on any non-trap obstacle.
-                            end
-                    elseif isWater then 
-                            local hasFrozenfoot = WorldQueries.hasPassive(startUnit, "Frozenfoot", world)
-                            canPass = startUnit.isFlying or startUnit.canSwim or hasFrozenfoot
-                            canLand = (startUnit.isFlying or startUnit.canSwim or hasFrozenfoot) and not occupyingUnit
-                        elseif occupyingUnit then
-                        if occupyingUnit.type == startUnit.type then
-                            -- Can always pass through allies.
-                            canPass = true
-                        else
-                            -- It's an enemy. Check for Elusive.
-                            local hasElusive = false
-                            if world.teamPassives[startUnit.type].Elusive then
-                                for _, provider in ipairs(world.teamPassives[startUnit.type].Elusive) do
-                                    if provider == startUnit then hasElusive = true; break end
-                                end
-                            end
-                            canPass = startUnit.isFlying or hasElusive
-                        end
-                            canLand = false
-                        else -- Tile is empty and not special terrain.
-                            canPass = true
-                            canLand = true
-                        end
-
-                        -- Ledges are a final check that can override passability.
                         if isLedgeBlocked then
                             canPass = false
+                        elseif WorldQueries.isTileWater(nextTileX, nextTileY, world) then
+                            local hasFrozenfoot = WorldQueries.hasPassive(startUnit, "Frozenfoot", world)
+                            if not (startUnit.isFlying or startUnit.canSwim or hasFrozenfoot) then
+                                canPass = false
+                            end
+                        elseif obstacle then
+                            if obstacle.isImpassable then
+                                canPass = false
+                            elseif obstacle.objectType ~= "molehill" and not obstacle.isTrap then
+                                -- Regular obstacles like trees can only be passed by flying units.
+                                if not startUnit.isFlying then
+                                    canPass = false
+                                end
+                            end
+                            -- Molehills and traps are always passable.
+                        elseif occupyingUnit then
+                            -- Flying units can pass over other units.
+                            if not startUnit.isFlying then
+                                if occupyingUnit.type ~= startUnit.type then -- It's an enemy
+                                    local hasElusive = false
+                                    if world.teamPassives[startUnit.type].Elusive then
+                                        for _, provider in ipairs(world.teamPassives[startUnit.type].Elusive) do
+                                            if provider == startUnit then hasElusive = true; break end
+                                        end
+                                    end
+                                    if not hasElusive then
+                                        canPass = false
+                                    end
+                                end
+                                -- Allies are always passable for ground units.
+                            end
                         end
 
                         if canPass then
                             cost_so_far[nextPosKey] = nextCost
                             came_from[nextPosKey] = {tileX = current.tileX, tileY = current.tileY}
-                            -- Add to reachable tiles, but only mark as landable if it's truly empty.
+                            -- Use the centralized query to determine if the tile is landable.
+                            local canLand = WorldQueries.isTileLandable(nextTileX, nextTileY, startUnit, world)
                             reachable[nextPosKey] = { cost = nextCost, landable = canLand }
                             table.insert(frontier, {tileX = nextTileX, tileY = nextTileY, cost = nextCost})
                         end

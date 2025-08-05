@@ -42,6 +42,24 @@ function UnitInfoSystem.refresh_display(world)
         return -- Exit early, level-up display takes precedence.
     end
 
+    -- If an EXP gain animation is active, show the panel for that unit.
+    -- This is checked after level-up because level-up is a more specific state.
+    local expGainAnim = world.ui.expGainAnimation
+    if expGainAnim and expGainAnim.active then
+        world.ui.menus.unitInfo.active = true
+        world.ui.menus.unitInfo.unit = expGainAnim.unit
+        -- When an EXP gain animation starts, automatically expand the details panel
+        -- so the EXP bar is visible for the animation.
+        if not world.ui.menus.unitInfo.detailsAnimation.active then
+            world.ui.menus.unitInfo.detailsAnimation.active = true
+            world.ui.menus.unitInfo.detailsAnimation.timer = 0
+        end
+        world.ui.pathing.hoverReachableTiles = nil
+        world.ui.pathing.hoverAttackableTiles = nil
+        world.ui.menus.unitInfo.rippleSourceUnit = nil
+        return -- Exit early, EXP gain display takes precedence.
+    end
+
     -- If a major action is happening (animations, etc.), or a menu is open that should
     -- hide the info box, then we ensure it's hidden.
     local shouldHide = WorldQueries.isActionOngoing(world) or
@@ -138,10 +156,16 @@ local function on_action_finalized(data)
     UnitInfoSystem.refresh_display(data.world)
 end
 
+-- Event handler for when an EXP gain animation starts.
+local function on_exp_gain_started(data)
+    UnitInfoSystem.refresh_display(data.world)
+end
+
 -- Register the event listeners. This code runs when the module is required.
 EventBus:register("cursor_moved", on_cursor_moved)
 EventBus:register("player_state_changed", on_player_state_changed)
 EventBus:register("cycle_target_changed", on_cycle_target_changed)
 EventBus:register("action_finalized", on_action_finalized)
+EventBus:register("exp_gain_started", on_exp_gain_started)
 
 return UnitInfoSystem

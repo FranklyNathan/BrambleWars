@@ -273,10 +273,12 @@ function EffectTimerSystem.update(dt, world)
             if anim.state == "filling" then
                 anim.animationTimer = math.min(anim.animationTimer + dt, anim.animationDuration)
                 local progress = anim.animationTimer / anim.animationDuration
+                -- Apply an easing function for a smoother fill. easeOutQuad is a good choice.
+                local easedProgress = progress * (2 - progress)
 
                 -- The target EXP for the animation is the starting EXP plus the total gained.
                 local targetExp = anim.expStart + anim.expGained
-                anim.expCurrentDisplay = lerp(anim.expStart, targetExp, progress)
+                anim.expCurrentDisplay = lerp(anim.expStart, targetExp, easedProgress)
 
                 -- Check if the bar has filled up to trigger a level-up "pop".
                 if anim.expCurrentDisplay >= unit.maxExp then
@@ -358,23 +360,26 @@ function EffectTimerSystem.update(dt, world)
     end
 
     -- 7. Update Unit Info Menu EXP Slice Animation
-    if world.ui.menus.unitInfo.active and world.ui.menus.unitInfo.expSliceAnimation then
-        local anim = world.ui.menus.unitInfo.expSliceAnimation
+    if world.ui.menus.unitInfo.active and world.ui.menus.unitInfo.detailsAnimation then
+        local anim = world.ui.menus.unitInfo.detailsAnimation
+
         local SLICE_HEIGHT = 22 -- This must match the height in unit_info_menu.lua
+        local NUM_DETAIL_SLICES = 4 -- 1 for EXP, 3 for stats grid.
+        local TOTAL_ANIM_HEIGHT = SLICE_HEIGHT * NUM_DETAIL_SLICES -- Total height of the collapsible section.
 
         -- Determine if the animation is already at its target state to avoid unnecessary updates.
-        local isAtTarget = (anim.active and anim.currentHeight >= SLICE_HEIGHT) or (not anim.active and anim.currentHeight <= 0)
+        local isAtTarget = (anim.active and anim.currentHeight >= TOTAL_ANIM_HEIGHT) or (not anim.active and anim.currentHeight <= 0)
 
         if not isAtTarget then
             anim.timer = math.min(anim.duration, anim.timer + dt)
             local progress = anim.timer / anim.duration
 
             if anim.active then
-                -- Animate opening: height goes from 0 to SLICE_HEIGHT
-                anim.currentHeight = progress * SLICE_HEIGHT
+                -- Animate opening: height goes from 0 to the total height of all slices.
+                anim.currentHeight = progress * TOTAL_ANIM_HEIGHT
             else
-                -- Animate closing: height goes from SLICE_HEIGHT to 0
-                anim.currentHeight = (1 - progress) * SLICE_HEIGHT
+                -- Animate closing: height goes from the total height down to 0.
+                anim.currentHeight = (1 - progress) * TOTAL_ANIM_HEIGHT
             end
         end
     end

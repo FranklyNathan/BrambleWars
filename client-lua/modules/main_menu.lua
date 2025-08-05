@@ -1,6 +1,7 @@
 -- modules/main_menu.lua
 -- Contains the logic and drawing for the main menu.
 
+local InputHelpers = require("modules.input_helpers")
 local Assets = require("modules.assets")
 local Config = require("config")
 
@@ -13,6 +14,28 @@ MainMenu.state = {
     },
     selectedIndex = 1
 }
+
+function MainMenu.handle_key_press(key)
+    local menu = MainMenu.state
+    if not menu or not menu.options or #menu.options == 0 then return end
+
+    if key == "w" or key == "s" then
+        local oldIndex = menu.selectedIndex
+        if key == "w" then
+            menu.selectedIndex = (menu.selectedIndex - 2 + #menu.options) % #menu.options + 1
+        elseif key == "s" then
+            menu.selectedIndex = menu.selectedIndex % #menu.options + 1
+        end
+        if oldIndex ~= menu.selectedIndex and Assets.sounds.menu_scroll then
+            Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play()
+        end
+    elseif key == "j" then
+        InputHelpers.play_main_menu_select_sound()
+        local selectedOption = menu.options[menu.selectedIndex]
+        if selectedOption.key == "play" then return "start_game"
+        elseif selectedOption.key == "draft" then return "draft_mode" end
+    end
+end
 
 -- Helper to draw a standard menu slice.
 local function drawSlice(x, y, width, height, text, isSelected, font)

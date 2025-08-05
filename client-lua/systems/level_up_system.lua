@@ -38,9 +38,12 @@ function LevelUpSystem.applyInstantLevelUp(unit)
             -- Stat increase!
             if unit[statName] then
                 unit[statName] = unit[statName] + 1
-                -- If maxHp increases, also increase current hp by 1.
+                -- If maxHp increases, also increase current hp by 1, but only if hp is already initialized.
+                -- This prevents a crash when creating a new unit at a higher level, as hp is set after leveling.
                 if statName == "maxHp" then
-                    unit.hp = unit.hp + 1
+                    if unit.hp then
+                        unit.hp = unit.hp + 1
+                    end
                 end
             end
         end

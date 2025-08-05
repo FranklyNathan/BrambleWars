@@ -79,11 +79,22 @@ function UnitInfoMenu.draw(world)
         local menuX = Config.VIRTUAL_WIDTH - menuWidth - 10 -- Position from the right edge with a 10px gap
         local menuY = 10 -- Position from the top
 
+        -- Check if this menu is being used for an EXP gain display.
+        local expGainAnim = world.ui.expGainAnimation
+        local isExpGainDisplay = expGainAnim and expGainAnim.active and expGainAnim.unit == unit
+
         -- Check if this menu is being used for a level-up display.
         local levelUpAnim = world.ui.levelUpAnimation
         local isLevelUpDisplay = levelUpAnim and levelUpAnim.active and levelUpAnim.unit == unit
         local gainsMap = {}
         if isLevelUpDisplay then
+            -- When a level up display starts, automatically expand the details panel
+            -- to show the stat changes. We only do this if it's not already active.
+            if not menu.detailsAnimation.active then
+                menu.detailsAnimation.active = true
+                menu.detailsAnimation.timer = 0
+            end
+
             for stat, _ in pairs(levelUpAnim.statGains) do
                 gainsMap[stat] = true
             end
@@ -314,19 +325,30 @@ function UnitInfoMenu.draw(world)
                 end
             end
 
-            local function drawStatSlicePair(text1, value1, key1, text2, value2, key2)
+            local function drawStatSlicePair(text1, value1, key1, text2, value2, key2, isSelectable)
+                -- Default to true if isSelectable is not provided.
+                isSelectable = (isSelectable == nil) and true or isSelectable
+
                 local sliceWidth = menuWidth / 2
                 local sliceX1 = menuX
                 local sliceX2 = menuX + sliceWidth
 
+                local index1, index2 = -1, -1 -- Use -1 for non-selectable indices
+
                 -- Draw left slice
-                currentSliceIndex = currentSliceIndex + 1
-                local isSelected1 = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == currentSliceIndex
+                if isSelectable then
+                    currentSliceIndex = currentSliceIndex + 1
+                    index1 = currentSliceIndex
+                end
+                local isSelected1 = isSelectable and menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == index1
                 drawSingleStatSlice(sliceX1, text1, value1, key1, isSelected1)
 
                 -- Draw right slice
-                currentSliceIndex = currentSliceIndex + 1
-                local isSelected2 = menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == currentSliceIndex
+                if isSelectable then
+                    currentSliceIndex = currentSliceIndex + 1
+                    index2 = currentSliceIndex
+                end
+                local isSelected2 = isSelectable and menu.isLocked and not isLevelUpDisplay and menu.selectedIndex == index2
                 drawSingleStatSlice(sliceX2, text2, value2, key2, isSelected2)
 
                 yOffset = yOffset + sliceHeight
@@ -376,14 +398,16 @@ function UnitInfoMenu.draw(world)
                 yOffset = yOffset + sliceHeight
             end
 
- -- NEW: Handle EXP Slice animation and drawing
-            local expAnim = menu.expSliceAnimation
-            if expAnim and expAnim.currentHeight > 0 then
+            -- NEW: Handle collapsible details (EXP + Stats) animation and drawing
+            local yOffsetBeforeAnimation = yOffset
+            local detailsAnim = menu.detailsAnimation
+            if detailsAnim and detailsAnim.currentHeight > 0 then
                 -- The slice grows from the bottom of the name slice.
-                -- The background for the slice.
-                love.graphics.setColor(0.2, 0.2, 0.1, 0.9)
                 -- Use a scissor to clip the drawing as it grows.
-                love.graphics.setScissor(menuX, yOffset, menuWidth, expAnim.currentHeight)
+                love.graphics.setScissor(menuX, yOffset, menuWidth, detailsAnim.currentHeight)
+
+                -- Draw the EXP bar background
+                love.graphics.setColor(0.2, 0.2, 0.1, 0.9)
                 love.graphics.rectangle("fill", menuX, yOffset, menuWidth, sliceHeight)
 
                 -- Draw the EXP bar inside the slice.
@@ -392,17 +416,21 @@ function UnitInfoMenu.draw(world)
                 local barX = menuX + 10
                 local barY = yOffset + (sliceHeight - barHeight) / 2
 
-                -- Black background for the bar
                 love.graphics.setColor(0, 0, 0, 1)
                 love.graphics.rectangle("fill", barX, barY, barWidth, barHeight)
 
-                -- White fill for the EXP progress
-                local expRatio = (unit.exp or 0) / (unit.maxExp or 100)
-                local fillWidth = barWidth * expRatio
+                -- Use the animated display value if an EXP gain animation is active for this unit.
+                local expToDraw = unit.exp or 0
+                if isExpGainDisplay then
+                    expToDraw = expGainAnim.expCurrentDisplay
+                end
+
+                local expRatio = (expToDraw or 0) / (unit.maxExp or 100)
+                -- Clamp the fill width to the bar's maximum width to prevent overflow when EXP > maxExp during level up.
+                local fillWidth = math.min(barWidth, barWidth * expRatio)
                 love.graphics.setColor(1, 1, 1, 1)
                 love.graphics.rectangle("fill", barX, barY, fillWidth, barHeight)
 
-                -- Draw black ticks every 20 EXP
                 love.graphics.setColor(0, 0, 0, 1)
                 local maxExp = unit.maxExp or 100
                 for tickExp = 20, maxExp - 1, 20 do
@@ -411,19 +439,27 @@ function UnitInfoMenu.draw(world)
                     love.graphics.line(tickX, barY, tickX, barY + barHeight)
                 end
 
-                -- Draw the EXP text
                 love.graphics.setColor(1, 1, 1, 1) -- Reset color to white for the text
-                local expText = (unit.exp or 0) .. " Exp"
+                local expText = math.floor(expToDraw or 0) .. " Exp"
                 local textX = barX + barWidth + 8
                 local textY = yOffset + (sliceHeight - font:getHeight()) / 2
                 love.graphics.print(expText, textX, textY)
 
+                -- Move the drawing position down to draw the stats grid.
+                -- The drawStatSlicePair function increments yOffset internally.
+                yOffset = yOffset + sliceHeight
+
+                -- Draw the stats grid inside the same scissor clip.
+                drawStatSlicePair("Atk:", unit.finalAttackStat, "attackStat", "Def:", unit.finalDefenseStat, "defenseStat", false)
+                drawStatSlicePair("Mag:", unit.finalMagicStat, "magicStat", "Res:", unit.finalResistanceStat, "resistanceStat", false)
+                drawStatSlicePair("Wit:", unit.finalWitStat, "witStat", "Wgt:", unit.finalWeight, "weight", false)
+
                 -- Reset scissor
                 love.graphics.setScissor()
-
-                -- Push down all subsequent slices
-                yOffset = yOffset + expAnim.currentHeight
             end
+            -- After the animation block, reset the yOffset to its position before the animation,
+            -- then add the final animated height. This ensures subsequent slices are drawn correctly.
+            yOffset = yOffsetBeforeAnimation + (detailsAnim and detailsAnim.currentHeight or 0)
 
             -- 2. Draw Class
             do
@@ -466,11 +502,6 @@ function UnitInfoMenu.draw(world)
 
             -- 4. Draw HP and Wisp on the same slice
             drawStatSlicePair("HP:", math.floor(unit.hp) .. "/" .. unit.finalMaxHp, "maxHp", "Wisp:", math.floor(unit.wisp) .. "/" .. unit.finalMaxWisp, "maxWisp")
-
-            -- 5. Draw Stats Grid
-            drawStatSlicePair("Atk:", unit.finalAttackStat, "attackStat", "Def:", unit.finalDefenseStat, "defenseStat")
-            drawStatSlicePair("Mag:", unit.finalMagicStat, "magicStat", "Res:", unit.finalResistanceStat, "resistanceStat")
-            drawStatSlicePair("Wit:", unit.finalWitStat, "witStat", "Wgt:", unit.finalWeight, "weight")
 
             -- 6. Draw Passives List
             if #passiveList > 0 then
@@ -516,7 +547,8 @@ function UnitInfoMenu.draw(world)
 
             -- We need to know the absolute start index of the moves list to calculate selection correctly.
             -- This is based on the number of slices that came before it.
-            local moves_start_index = 2 + numWeaponSlots + 8 + #passiveList + 1
+            -- The formula is: Name/Class (2) + Weapons (1-2) + HP/Wisp (2) + Passives + 1
+            local moves_start_index = 2 + numWeaponSlots + 2 + #passiveList + 1
 
             for i = 1, numVisibleMoves do
                 local isFirstVisibleMove = (i == 1)
@@ -558,8 +590,8 @@ function UnitInfoMenu.draw(world)
                 -- Dynamically calculate the start/end indices of each section
                 local NAME_CLASS_END = 2
                 local WEAPONS_END = NAME_CLASS_END + numWeaponSlots
-                -- HP/Wisp is 1 slice pair (2 items), then 3 stat rows (6 items).
-                local STATS_END = WEAPONS_END + 8
+                -- Only HP/Wisp are selectable stats, making 1 slice pair (2 items).
+                local STATS_END = WEAPONS_END + 2
                 local PASSIVES_START = STATS_END + 1
                 local PASSIVES_END = PASSIVES_START + numPassives - 1
                 local MOVES_START = PASSIVES_END + 1

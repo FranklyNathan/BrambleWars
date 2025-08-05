@@ -292,21 +292,21 @@ local function draw_visual_effect_overlays(entity, currentAnim, spriteSheet, w, 
 end
 
 -- Draws shader-based overlays for game states, like "has acted" or "is selected".
-local function draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, onWater)
+local function draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, clipRatio)
     -- Dying units should not have state overlays.
     if entity.components.fade_out then return end
 
-    -- If the unit is swimming, set up the scissor clipping for all state overlays.
+    -- If the unit is submerged, set up the scissor clipping for all state overlays.
     -- This ensures that effects like the greyscale overlay are also clipped correctly.
     local oldScissor = {love.graphics.getScissor()}
-    if onWater then
+    if clipRatio then
         -- The sprite is drawn anchored at bottom-center. Its top-left corner in world space is at
         -- (drawX - w / 2, finalDrawY - h).
-        -- We want to set a scissor for the top half of the sprite's area.
+        -- We want to set a scissor for the top portion of the sprite's area.
         local scissorWorldX = drawX - w / 2
         local scissorWorldY = finalDrawY - h
         local scissorWorldW = w
-        local scissorWorldH = h * 0.7 -- Show the top 70% of the sprite, hiding the bottom 30%.
+        local scissorWorldH = h * clipRatio
         -- Convert world coordinates to screen coordinates for the scissor.
         love.graphics.setScissor(scissorWorldX - Camera.x, scissorWorldY - Camera.y, scissorWorldW, scissorWorldH)
     end
@@ -414,23 +414,30 @@ local function draw_entity(entity, world, is_active_player)
             baseAlpha = entity.components.fade_out.timer / entity.components.fade_out.initialTimer
         end
 
-        -- Check if the unit is swimming to apply the submerged effect.
+        -- Check if the unit is submerged in water or mud to determine the clipping ratio.
         local onWater = entity.canSwim and WorldQueries.isTileWater(entity.tileX, entity.tileY, world)
+        local inMud = (not entity.isFlying) and WorldQueries.isTileMud(entity.tileX, entity.tileY, world)
+        local clipRatio = nil
+        if onWater then
+            clipRatio = 0.7 -- Show top 70% (hide 30%)
+        elseif inMud then
+            clipRatio = 0.75 -- Show top 75% (hide 25%)
+        end
 
         -- 3. Draw the base sprite at the final calculated position.
         love.graphics.setShader()
         love.graphics.setColor(1, 1, 1, baseAlpha)
 
-        if onWater and not entity.components.sinking then
-            -- Unit is swimming, draw only the top portion of the sprite using a scissor.
+        if clipRatio and not entity.components.sinking then
+            -- Unit is submerged, draw only the top portion of the sprite using a scissor.
             local oldScissor = {love.graphics.getScissor()}
             -- The sprite is drawn anchored at bottom-center. Its top-left corner in world space is at
             -- (drawX - w / 2, finalDrawY - h).
-            -- We want to set a scissor for the top half of the sprite's area.
+            -- We want to set a scissor for the top portion of the sprite's area.
             local scissorWorldX = drawX - w / 2
             local scissorWorldY = finalDrawY - h
             local scissorWorldW = w
-            local scissorWorldH = h * 0.7 -- Show the top 70% of the sprite, hiding the bottom 30%.
+            local scissorWorldH = h * clipRatio
             -- Convert world coordinates to screen coordinates for the scissor.
             love.graphics.setScissor(scissorWorldX - Camera.x, scissorWorldY - Camera.y, scissorWorldW, scissorWorldH)
             currentAnim:draw(spriteSheet, drawX, finalDrawY, rotation, 1, 1, w / 2, h)
@@ -478,7 +485,7 @@ local function draw_entity(entity, world, is_active_player)
         draw_visual_effect_overlays(entity, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, baseAlpha)
 
         -- 5. Draw overlays for game state (acted, selected)
-        draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, onWater)
+        draw_state_overlays(entity, is_active_player, currentAnim, spriteSheet, w, h, drawX, finalDrawY, rotation, clipRatio)
 
         -- 6. Reset shader state
         love.graphics.setShader()
@@ -711,6 +718,33 @@ local function calculate_ripple_brightness_map(world)
     return brightness_map
 end
 
+-- New helper to draw reachable tiles, coloring them based on whether they are landable.
+local function draw_reachable_tiles(tileSet, baseAlpha, world, brightness_map)
+    if not tileSet then return end
+    local BORDER_WIDTH = 1
+    local INSET_SIZE = Config.SQUARE_SIZE - (BORDER_WIDTH * 2)
+
+    for posKey, data in pairs(tileSet) do
+        local tileX = tonumber(string.match(posKey, "(-?%d+)"))
+        local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+        if tileX and tileY then
+            local finalAlpha = baseAlpha
+            if brightness_map and brightness_map[tileY] and brightness_map[tileY][tileX] then
+                finalAlpha = finalAlpha + brightness_map[tileY][tileX]
+            end
+
+            -- Only draw a tile overlay if the tile is actually landable.
+            -- Passable-but-not-landable tiles (like water for non-flyers) will not be colored.
+            -- They will still show up as red if they are also in the attackableTiles set (danger zone).
+            if data.landable then
+                love.graphics.setColor(0.2, 0.4, 1, math.min(1, finalAlpha)) -- Blue for landable
+                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+                love.graphics.rectangle("fill", pixelX + BORDER_WIDTH, pixelY + BORDER_WIDTH, INSET_SIZE, INSET_SIZE)
+            end
+        end
+    end
+end
+
 -- Helper to draw a set of tiles with a specific color and transparency.
 local function draw_tile_set(tileSet, r, g, b, a, world, brightness_map)
     if not tileSet then return end
@@ -796,7 +830,7 @@ local function draw_world_space_ui(world)
 
             -- Draw fading reachable tiles (movement range)
             if effect.reachableTiles then
-                draw_tile_set(effect.reachableTiles, 0.2, 0.4, 1, 0.6 * progress, world, brightness_map)
+                draw_reachable_tiles(effect.reachableTiles, 0.6 * progress, world, brightness_map)
             end
         end
 
@@ -813,18 +847,18 @@ local function draw_world_space_ui(world)
 
         -- Draw hovered unit's movement range
         if world.ui.menus.unitInfo.active and world.ui.pathing.hoverReachableTiles then
-            draw_tile_set(world.ui.pathing.hoverReachableTiles, 0.2, 0.4, 1, 0.2, world, brightness_map)
+            draw_reachable_tiles(world.ui.pathing.hoverReachableTiles, 0.2, world, brightness_map)
         end
 
         -- 2. Draw the movement range for the selected unit. This is drawn on top of the attack range.
         if world.ui.playerTurnState == "unit_selected" and world.ui.pathing.reachableTiles then 
-            draw_tile_set(world.ui.pathing.reachableTiles, 0.2, 0.4, 1, 0.6, world, brightness_map)
+            draw_reachable_tiles(world.ui.pathing.reachableTiles, 0.6, world, brightness_map)
         end
 
         -- Draw enemy range display if active
         if world.ui.menus.enemyRangeDisplay.active then
-            draw_tile_set(world.ui.menus.enemyRangeDisplay.attackableTiles, 1, 0.2, 0.2, 0.4, world, brightness_map) -- Red for attack
-            draw_tile_set(world.ui.menus.enemyRangeDisplay.reachableTiles, 0.2, 0.4, 1, 0.4, world, brightness_map) -- Blue for movement
+            draw_tile_set(world.ui.menus.enemyRangeDisplay.attackableTiles, 1, 0.2, 0.2, 0.4, world, brightness_map) -- Red for attack range
+            draw_reachable_tiles(world.ui.menus.enemyRangeDisplay.reachableTiles, 0.4, world, brightness_map) -- Blue/Red for movement
         end
 
         -- 3. Draw the movement path.

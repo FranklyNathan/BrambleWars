@@ -153,11 +153,13 @@ function CombatActions.grantExp(unit, amount, world)
         -- A base duration, plus a little extra for larger gains.
         anim.animationDuration = 0.5 + (amount / 100) * 0.5
         anim.lingerTimer = 0 -- Reset linger timer
+        -- Dispatch an event so other systems (like the UI) can react immediately.
+        EventBus:dispatch("exp_gain_started", { world = world, unit = unit })
     elseif anim.unit == unit then
         -- If an animation is already active for the same unit, just add to the gain.
         anim.expGained = anim.expGained + amount
-        -- If it was lingering, restart the fill animation from its current point.
-        if anim.state == "lingering" then
+        -- If it was shrinking, restart the fill animation from its current point.
+        if anim.state == "shrinking" then
             anim.state = "filling"
             anim.animationTimer = 0
             anim.expStart = anim.expCurrentDisplay
