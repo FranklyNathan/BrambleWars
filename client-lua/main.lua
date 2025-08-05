@@ -233,4 +233,3 @@ end
 function love.quit()
     -- No specific cleanup needed for this simple game.
 end
-        
