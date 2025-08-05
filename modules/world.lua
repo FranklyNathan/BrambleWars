@@ -102,7 +102,7 @@ function World.new(gameMap)
                 rippleSourceUnit = nil,
                 isLocked = false, -- For the new locked-in inspection mode
                 selectedIndex = 1,
-                detailsAnimation = { active = false, timer = 0, duration = 0.
+                expSliceAnimation = { active = false, timer = 0, duration = 0.2, currentHeight = 0 },
                 moveListScrollOffset = 0
             },
             weaponSelect = {
@@ -264,8 +264,8 @@ function World.new(gameMap)
     -- Define the full roster in a fixed order based on the asset load sequence.
     -- This order determines their position in the party select grid.
     local characterOrder = {
-        "clementine", "biblo", "mortimer",
-        "winthrop", "plop", "dupe",
+        "clementine", "plop", "dupe",
+        "winthrop", "biblo", "mortimer",
         "ollo", "cedric"
     }
 

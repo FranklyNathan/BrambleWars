@@ -324,26 +324,32 @@ local function move_unit_info_selection(key, world)
     local WEAPON_END_INDEX = WEAPON_START_INDEX + numWeaponSlots - 1
     local HP_INDEX = WEAPON_END_INDEX + 1
     local WISP_INDEX = WEAPON_END_INDEX + 2
-    -- The stats grid is no longer part of the selectable list.
-    local PASSIVES_START = WISP_INDEX + 1
+    local STATS_START = WEAPON_END_INDEX + 3
+    local STATS_END = STATS_START + 5 -- 3 rows of 2 stats each = 6 items.
+    local PASSIVES_START = STATS_END + 1
     local PASSIVES_END = PASSIVES_START + numPassives - 1
     local MOVES_START = PASSIVES_END + 1
     local MOVES_END = MOVES_START + numMoves - 1
-
+    
     local hasCarriedUnit = menu.unit.carriedUnit and true or false
     local CARRIED_UNIT_INDEX = hasCarriedUnit and (MOVES_END + 1) or nil
-
+    
     local totalSlices = MOVES_END
     if hasCarriedUnit then totalSlices = CARRIED_UNIT_INDEX end
 
     if key == "w" then
         if oldIndex == NAME_INDEX then
-            -- Wrap to the bottom of the list (either carried unit or last move)
-            newIndex = totalSlices
+            -- Wrap to the bottom of the move list.
+            newIndex = MOVES_END
+            -- If the move list is scrollable, jump to the last page.
+            if numMoves > MAX_VISIBLE_MOVES then
+                menu.moveListScrollOffset = numMoves - MAX_VISIBLE_MOVES
+            end
         elseif oldIndex > NAME_INDEX and oldIndex <= WEAPON_END_INDEX then newIndex = oldIndex - 1
         elseif oldIndex == HP_INDEX or oldIndex == WISP_INDEX then newIndex = WEAPON_END_INDEX -- This should navigate up to the last weapon
+        elseif oldIndex >= STATS_START and oldIndex <= STATS_END then newIndex = oldIndex - 2
         elseif oldIndex > PASSIVES_START and oldIndex <= PASSIVES_END then newIndex = oldIndex - 1
-        elseif oldIndex
+        elseif oldIndex == PASSIVES_START then newIndex = STATS_END
         elseif oldIndex > MOVES_START and oldIndex <= MOVES_END then newIndex = oldIndex - 1
         elseif oldIndex == MOVES_START then
             if numPassives > 0 then newIndex = PASSIVES_END else newIndex = STATS_END end

@@ -98,21 +98,12 @@ function WorldQueries.isTileWater_Base(tileX, tileY, world)
     return tile ~= nil
 end
 
-function WorldQueries.isTileMud(tileX, tileY, world)
-    local mudLayer = world.map.layers["Mud"]
-    if not mudLayer then return false end
-    -- Tiled data is 1-based, our grid is 0-based.
-    local tile = mudLayer.data[tileY + 1] and mudLayer.data[tileY + 1][tileX + 1]
-    return tile ~= nil
-end
-
 -- A new helper to check if a tile is valid for a ground-based status (Aflame, Tall Grass, etc.)
 function WorldQueries.isTileValidForGroundStatus(tileX, tileY, world)
     -- Cannot be placed on water (frozen or not)
     if WorldQueries.isTileWater_Base(tileX, tileY, world) then
         return false
     end
-    if WorldQueries.isTileMud(tileX, tileY, world) then return false end
     -- Cannot be placed on a tile with an obstacle
     if WorldQueries.getObstacleAt(tileX, tileY, world) then
         return false

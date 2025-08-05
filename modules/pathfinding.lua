@@ -36,14 +36,7 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
         -- Explore neighbors
         for _, move in ipairs(neighbors) do
             local nextTileX, nextTileY = current.tileX + move.dx, current.tileY + move.dy
-
-            -- New: Determine movement cost for the tile.
-            local moveCost = 1
-            if WorldQueries.isTileMud(nextTileX, nextTileY, world) and not startUnit.isFlying then
-                moveCost = 2
-            end
-
-            local nextCost = current.cost + moveCost
+            local nextCost = current.cost + 1
             local nextPosKey = nextTileX .. "," .. nextTileY
             
             -- Check if the neighbor is within map boundaries before proceeding.
