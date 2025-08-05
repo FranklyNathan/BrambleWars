@@ -94,6 +94,14 @@ function StatSystem.recalculate_for_unit(unit, world)
         end
     end
 
+    -- 4.6. Apply modifiers from Bogbound passive.
+    if WorldQueries.hasPassive(unit, "Bogbound", world) then
+        if WorldQueries.isTileMud(unit.tileX, unit.tileY, world) then
+            unit.finalDefenseStat = math.floor(unit.finalDefenseStat * 1.25)
+            unit.finalResistanceStat = math.floor(unit.finalResistanceStat * 1.25)
+        end
+    end
+
     -- 5. Apply modifiers from the tile the unit is standing on.
     if unit.tileX and unit.tileY then
         local posKey = unit.tileX .. "," .. unit.tileY

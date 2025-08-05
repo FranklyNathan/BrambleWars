@@ -20,6 +20,13 @@ function CounterAttackSystem.update(dt, world)
             local defender = counter.defender
             local attacker = counter.attacker
 
+            -- New: Do not counter-attack if the original attacker is already dead.
+            -- This prevents countering on-death effects like Combustive.
+            if not attacker or attacker.hp <= 0 then
+                table.remove(world.pendingCounters, i)
+                goto continue_counter_loop
+            end
+
             -- New: Re-validate range before executing the counter-attack.
             -- This handles cases where the defender was moved (e.g., by Careen) after the counter was queued.
             local basicAttackData = AttackBlueprints[counter.attackName]

@@ -120,6 +120,18 @@ function Renderer.draw(world)
         world.map:draw(-math.floor(Camera.x), -math.floor(Camera.y))
     end
 
+    -- New: Draw our manually created procedural batches. These are drawn after the main map
+    -- but before other entities, effectively acting as new map layers.
+    if world.proceduralBatches then
+        love.graphics.setColor(1, 1, 1, 1) -- Ensure color is reset
+        local camOffsetX = -math.floor(Camera.x)
+        local camOffsetY = -math.floor(Camera.y)
+        -- The order here determines the draw order (e.g., Water is drawn first, then Mud, then Ground).
+        if world.proceduralBatches.Water then love.graphics.draw(world.proceduralBatches.Water, camOffsetX, camOffsetY) end
+        if world.proceduralBatches.Mud then love.graphics.draw(world.proceduralBatches.Mud, camOffsetX, camOffsetY) end
+        if world.proceduralBatches.Ground then love.graphics.draw(world.proceduralBatches.Ground, camOffsetX, camOffsetY) end
+    end
+
     -- 3. Now, apply the camera's transformation to draw all other world-space objects
     -- (entities, UI elements like range indicators, etc.) so they are positioned correctly
     -- relative to the map.

@@ -39,7 +39,8 @@ function Pathfinding.calculateReachableTiles(startUnit, world)
             
             -- New: Determine movement cost for the tile.
             local moveCost = 1
-            if WorldQueries.isTileMud(nextTileX, nextTileY, world) and not startUnit.isFlying then
+            local isBogbound = WorldQueries.hasPassive(startUnit, "Bogbound", world)
+            if WorldQueries.isTileMud(nextTileX, nextTileY, world) and not startUnit.isFlying and not isBogbound then
                 moveCost = 2
             end
 

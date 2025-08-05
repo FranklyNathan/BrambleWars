@@ -137,9 +137,6 @@ function love.update(dt)
 
     -- Only update game logic if the state is 'gameplay' and the world exists.
     if gameState == "gameplay" then
-        -- Failsafe in case update is called before world is ready.
-        if not world then return end
-
         -- Handle continuous input for things like holding down keys for cursor movement.
         InputHandler.handle_continuous_input(dt, world)
 
