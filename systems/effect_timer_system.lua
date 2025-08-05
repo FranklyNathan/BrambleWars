@@ -358,12 +358,14 @@ function EffectTimerSystem.update(dt, world)
     end
 
     -- 7. Update Unit Info Menu EXP Slice Animation
-    if world.ui.menus.unitInfo.active and world.ui.menus.unitInfo.expSliceAnimation then
-        local anim = world.ui.menus.unitInfo.expSliceAnimation
+    if world.ui.menus.unitInfo.active and world.ui.menus.unitInfo.detailsAnimation then
+        local anim = world.ui.menus.unitInfo.detailsAnimation
         local SLICE_HEIGHT = 22 -- This must match the height in unit_info_menu.lua
+        local NUM_DETAIL_SLICES = 4 -- 1 for EXP, 3 for stats grid
+        local TOTAL_ANIM_HEIGHT = SLICE_HEIGHT * NUM_DETAIL_SLICES
 
         -- Determine if the animation is already at its target state to avoid unnecessary updates.
-        local isAtTarget = (anim.active and anim.currentHeight >= SLICE_HEIGHT) or (not anim.active and anim.currentHeight <= 0)
+        local isAtTarget = (anim.active and anim.currentHeight >= TOTAL_ANIM_HEIGHT) or (
 
         if not isAtTarget then
             anim.timer = math.min(anim.duration, anim.timer + dt)
