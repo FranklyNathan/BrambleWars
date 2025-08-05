@@ -33,7 +33,10 @@ function MainMenu.handle_key_press(key)
         InputHelpers.play_main_menu_select_sound()
         local selectedOption = menu.options[menu.selectedIndex]
         if selectedOption.key == "play" then return "start_game"
-        elseif selectedOption.key == "draft" then return "draft_mode" end
+        elseif selectedOption.key == "draft" then
+            require('tests.websocket_tests')
+            return "draft_mode"
+        end
     end
 end
 
