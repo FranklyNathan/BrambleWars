@@ -101,7 +101,9 @@ function World.new(gameMap)
                 rippleStartTime = 0,
                 rippleSourceUnit = nil,
                 isLocked = false, -- For the new locked-in inspection mode
-                selectedIndex = 1
+                selectedIndex = 1,
+                expSliceAnimation = { active = false, timer = 0, duration = 0.2, currentHeight = 0 },
+                moveListScrollOffset = 0
             },
             weaponSelect = {
                 active = false,

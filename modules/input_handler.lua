@@ -24,6 +24,30 @@ local InputHandler = {}
 -- TURN-BASED HELPER FUNCTIONS
 --------------------------------------------------------------------------------
 
+-- Helper to play the confirmation sound
+local function play_confirm_sound()
+    if Assets.sounds.confirm then
+        Assets.sounds.confirm:stop()
+        Assets.sounds.confirm:play()
+    end
+end
+
+-- Helper to play the menu selection sound
+local function play_menu_select_sound()
+    if Assets.sounds.menu_select then
+        Assets.sounds.menu_select:stop()
+        Assets.sounds.menu_select:play()
+    end
+end
+
+-- Helper to play the main menu selection sound
+local function play_main_menu_select_sound()
+    if Assets.sounds.main_menu_select then
+        Assets.sounds.main_menu_select:stop()
+        Assets.sounds.main_menu_select:play()
+    end
+end
+
 -- Sets the player's turn state and dispatches an event to notify other systems.
 -- This is the single source of truth for changing the player's state.
 local function set_player_turn_state(newState, world)
@@ -161,6 +185,7 @@ end
 -- Handles input when the player is freely moving the cursor around the map.
 local function handle_free_roam_input(key, world)
     if key == "j" then
+        play_confirm_sound()
         local unit = WorldQueries.getUnitAt(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y, nil, world)
         if unit then
             -- A unit is on the tile
@@ -202,6 +227,7 @@ local function handle_free_roam_input(key, world)
             menu.isLocked = true -- The unit_info_system will now keep this menu active.
             menu.unit = unit -- Lock the current unit
             menu.selectedIndex = 1 -- Reset index
+            menu.moveListScrollOffset = 0 -- Reset scroll on lock
             world.ui.previousPlayerTurnState = "free_roam"
             set_player_turn_state("unit_info_locked", world)
         end
@@ -222,6 +248,7 @@ local function handle_weapon_select_input(key, world)
         menu.active = false
         set_player_turn_state("unit_info_locked", world)
     elseif key == "j" then -- Confirm selection
+        play_menu_select_sound()
         local selectedOption = menu.options[menu.selectedIndex]
         local unit = menu.unit
         local slot = menu.slot
@@ -237,7 +264,6 @@ local function handle_weapon_select_input(key, world)
             menu.unit = nil
             menu.slot = nil
             set_player_turn_state("unit_info_locked", world)
-            if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
         elseif selectedOption ~= "unequip" then
             local oldWeaponKey = unit.equippedWeapons[slot]
             local newWeaponKey = selectedOption
@@ -258,7 +284,6 @@ local function handle_weapon_select_input(key, world)
             menu.slot = nil
             menu.active = false
             set_player_turn_state("unit_info_locked", world)
-            if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
         else
             -- TODO: Play an error/invalid sound if you have one.
         end
@@ -281,6 +306,8 @@ local function move_unit_info_selection(key, world)
     local numPassives = #passiveList
     local moveList = WorldQueries.getUnitMoveList(menu.unit)
     local numMoves = #moveList
+
+    local MAX_VISIBLE_MOVES = 5 -- The maximum number of moves to display at once.
 
     local hasDualWielder = false
     for _, p in ipairs(passiveList) do
@@ -311,7 +338,13 @@ local function move_unit_info_selection(key, world)
     if hasCarriedUnit then totalSlices = CARRIED_UNIT_INDEX end
 
     if key == "w" then
-        if oldIndex == NAME_INDEX then newIndex = totalSlices
+        if oldIndex == NAME_INDEX then
+            -- Wrap to the bottom of the move list.
+            newIndex = MOVES_END
+            -- If the move list is scrollable, jump to the last page.
+            if numMoves > MAX_VISIBLE_MOVES then
+                menu.moveListScrollOffset = numMoves - MAX_VISIBLE_MOVES
+            end
         elseif oldIndex > NAME_INDEX and oldIndex <= WEAPON_END_INDEX then newIndex = oldIndex - 1
         elseif oldIndex == HP_INDEX or oldIndex == WISP_INDEX then newIndex = WEAPON_END_INDEX -- This should navigate up to the last weapon
         elseif oldIndex >= STATS_START and oldIndex <= STATS_END then newIndex = oldIndex - 2
@@ -363,6 +396,27 @@ local function move_unit_info_selection(key, world)
         menu.selectedIndex = newIndex
         if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
         EventBus:dispatch("unit_info_menu_selection_changed", { world = world })
+
+        -- New scrolling logic, handled after the index changes.
+        if numMoves > MAX_VISIBLE_MOVES then
+            local oldRelativeIndex = oldIndex - MOVES_START + 1
+            local newRelativeIndex = newIndex - MOVES_START + 1
+
+            -- Check if we are moving within the moves list
+            if oldRelativeIndex >= 1 and oldRelativeIndex <= numMoves and newRelativeIndex >= 1 and newRelativeIndex <= numMoves then
+                local firstVisibleRelative = menu.moveListScrollOffset + 1
+                local lastVisibleRelative = menu.moveListScrollOffset + MAX_VISIBLE_MOVES
+
+                if key == "s" and oldRelativeIndex == lastVisibleRelative and menu.moveListScrollOffset < numMoves - MAX_VISIBLE_MOVES then
+                    menu.moveListScrollOffset = menu.moveListScrollOffset + 1
+                elseif key == "w" and oldRelativeIndex == firstVisibleRelative and menu.moveListScrollOffset > 0 then
+                    menu.moveListScrollOffset = menu.moveListScrollOffset - 1
+                end
+            -- Check if we just moved *out* of the moves list
+            elseif oldRelativeIndex >= 1 and oldRelativeIndex <= numMoves then
+                menu.moveListScrollOffset = 0
+            end
+        end
     end
 end
 
@@ -379,6 +433,7 @@ local function handle_unit_info_locked_input(key, world)
         end
         menu.isLocked = false
         menu.selectedIndex = 1
+        menu.moveListScrollOffset = 0 -- Reset scroll on unlock
         -- Return to the previous state.
         local returnState = world.ui.previousPlayerTurnState or "free_roam"
         set_player_turn_state(returnState, world)
@@ -391,7 +446,14 @@ local function handle_unit_info_locked_input(key, world)
         for _, p in ipairs(passives) do if p == "DualWielder" then hasDualWielder = true; break; end end
         local numWeaponSlots = hasDualWielder and 2 or 1
 
-        if menu.selectedIndex >= 3 and menu.selectedIndex < 3 + numWeaponSlots then
+        if menu.selectedIndex == 1 then -- Name slice
+            play_menu_select_sound()
+            local anim = world.ui.menus.unitInfo.expSliceAnimation
+            -- Toggle the animation's active state and reset its timer.
+            anim.active = not anim.active
+            anim.timer = 0
+        elseif menu.selectedIndex >= 3 and menu.selectedIndex < 3 + numWeaponSlots then
+            play_menu_select_sound()
             -- Open the weapon selection menu
             local weaponMenu = world.ui.menus.weaponSelect
             weaponMenu.active = true
@@ -449,6 +511,7 @@ end
 
 local function handle_unit_selected_input(key, world)
     if key == "j" then -- Confirm Move
+        play_confirm_sound()
         local cursorOnUnit = world.ui.mapCursorTile.x == world.ui.selectedUnit.tileX and
                              world.ui.mapCursorTile.y == world.ui.selectedUnit.tileY
 
@@ -761,7 +824,6 @@ local function handle_action_menu_input(key, world)
             end
         end
     elseif key == "j" then -- Confirm action
-
         local selectedOption = menu.options[menu.selectedIndex]
         if not selectedOption then return end
 
@@ -775,6 +837,9 @@ local function handle_action_menu_input(key, world)
                 return -- No valid targets, do nothing.
             end
         end
+
+        -- If we passed validation, play the sound.
+        play_menu_select_sound()
 
         -- Use the new handler table for special actions.
         local handler = specialActionHandlers[selectedOption.key]
@@ -899,6 +964,7 @@ local function handle_map_menu_input(key, world)
         menu.active = false
         set_player_turn_state("free_roam", world)
     elseif key == "j" then -- Confirm
+        play_confirm_sound()
         local selectedOption = menu.options[menu.selectedIndex]
         if selectedOption and selectedOption.key == "end_turn" then
             menu.active = false
@@ -955,6 +1021,7 @@ local function handle_ground_aiming_input(key, world)
     -- WASD movement is handled by the continuous input handler for smooth scrolling.
     -- This function only needs to process confirm/cancel actions.
     if key == "j" then -- Confirm Attack
+        play_confirm_sound()
         local attackName = world.ui.targeting.selectedAttackName
 
         -- The attack implementation itself will validate the target tile.
@@ -994,6 +1061,7 @@ local function handle_tile_cycling_input(key, world)
         tileCycle.tiles = {}
         world.ui.targeting.selectedAttackName = nil
     elseif key == "j" then -- Confirm
+        play_confirm_sound()
         local attacker = world.ui.menus.action.unit
         local attackName = world.ui.targeting.selectedAttackName
         -- The attack implementation will now read the selected tile from world.ui.targeting.tile_cycle
@@ -1035,6 +1103,7 @@ local function handle_secondary_targeting_input(key, world)
         secondary.tiles = {}
         secondary.primaryTarget = nil
     elseif key == "j" then -- Confirm final target tile
+        play_confirm_sound()
         local attacker = world.ui.menus.action.unit
         local attackName = world.ui.targeting.selectedAttackName
         
@@ -1067,7 +1136,7 @@ local function handle_shop_menu_input(key, world)
             else menu.selectedIndex = menu.selectedIndex % #options + 1 end
             if oldIndex ~= menu.selectedIndex and Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
         elseif key == "j" then
-            if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+            play_menu_select_sound()
             if menu.selectedIndex == 1 then -- Buy
                 menu.view = "buy"; menu.selectedIndex = 1
             elseif menu.selectedIndex == 2 then -- Sell
@@ -1093,7 +1162,7 @@ local function handle_shop_menu_input(key, world)
                 local shoppingUnit = world.ui.menus.action.unit
                 local price = WorldQueries.getPurchasePrice(shoppingUnit, weaponKey, world)
                 if world.playerInventory.nutmegs >= price then
-                    if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+                    play_menu_select_sound()
                     menu.view = "confirm_buy"; menu.itemToConfirm = weaponKey
                     menu.confirmMessage = "Buy " .. weapon.name .. " for " .. price .. " Nutmegs?"
                     menu.selectedIndex = 1 -- Default to "Yes"
@@ -1118,7 +1187,7 @@ local function handle_shop_menu_input(key, world)
                 local weaponKey = menu.sellOptions[menu.selectedIndex]
                 local weapon = WeaponBlueprints[weaponKey]
                 local sellPrice = math.floor(weapon.value / 2)
-                if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
+                play_menu_select_sound()
                 menu.view = "confirm_sell"; menu.itemToConfirm = weaponKey
                 menu.confirmMessage = "Sell " .. weapon.name .. " for " .. sellPrice .. " Nutmegs?"
                 menu.selectedIndex = 1 -- Default to "Yes"
@@ -1137,6 +1206,8 @@ local function handle_shop_menu_input(key, world)
                 local weaponKey = menu.itemToConfirm
                 local shoppingUnit = world.ui.menus.action.unit
                 local price = WorldQueries.getPurchasePrice(shoppingUnit, weaponKey, world)
+                play_menu_select_sound()
+
                 -- 1. Update player inventory and nutmegs.
                 world.playerInventory.nutmegs = world.playerInventory.nutmegs - price
                 world.playerInventory.weapons[weaponKey] = (world.playerInventory.weapons[weaponKey] or 0) + 1
@@ -1151,8 +1222,6 @@ local function handle_shop_menu_input(key, world)
                 if unit then unit.components.move_is_committed = true end
                 repopulate_buy_options(world) -- Repopulate buy list after buying
                 repopulate_sell_options(world) -- Repopulate sell list after buying
-
-                if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
                 menu.view = "buy"; menu.selectedIndex = 1
             else -- No
                 if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
@@ -1168,6 +1237,7 @@ local function handle_shop_menu_input(key, world)
             if Assets.sounds.cursor_move then Assets.sounds.cursor_move:stop(); Assets.sounds.cursor_move:play() end
         elseif key == "j" then
             if menu.selectedIndex == 1 then -- Yes
+                play_menu_select_sound()
                 local weaponKey = menu.itemToConfirm
                 local weapon = WeaponBlueprints[weaponKey]
                 -- 1. Update player inventory and nutmegs.
@@ -1185,7 +1255,6 @@ local function handle_shop_menu_input(key, world)
                 local unit = world.ui.menus.action.unit
                 if unit then unit.components.move_is_committed = true end
                 repopulate_buy_options(world) -- Repopulate buy list after selling
-                if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
                 repopulate_sell_options(world)
                 menu.view = "sell"
                 menu.selectedIndex = math.min(menu.selectedIndex, #menu.sellOptions)
@@ -1200,7 +1269,7 @@ local function handle_shop_menu_input(key, world)
         end
     elseif menu.view == "insufficient_funds" then
         if key == "j" or key == "k" then
-            if Assets.sounds.back_out then Assets.sounds.back_out:stop(); Assets.sounds.back_out:play() end
+            play_menu_select_sound()
             menu.view = "buy"; menu.selectedIndex = 1
         end
     end
@@ -1222,6 +1291,7 @@ local function handle_burrow_teleport_input(key, world)
         end
         indexChanged = true
     elseif key == "j" then -- Confirm teleport
+        play_confirm_sound()
         -- 1. Find the burrowed unit. There should only be one.
         local burrowedUnit = nil
         for _, unit in ipairs(world.all_entities) do
@@ -1268,8 +1338,6 @@ local function handle_burrow_teleport_input(key, world)
         molehillSelect.active = false
         molehillSelect.targets = {}
         
-        if Assets.sounds.menu_scroll then Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play() end
-
     elseif key == "k" then -- Cancel Burrow
         -- The action is already "spent". Pop the unit back out and end their turn.
         -- We'll need to add a small case to animation_effects_system to handle this.
@@ -1302,6 +1370,7 @@ local function handle_main_menu_input(key)
             Assets.sounds.menu_scroll:stop(); Assets.sounds.menu_scroll:play()
         end
     elseif key == "j" then
+        play_main_menu_select_sound()
         local selectedOption = menu.options[menu.selectedIndex]
         if selectedOption.key == "play" then
             return "start_game"
@@ -1347,6 +1416,7 @@ local function handle_cycle_targeting_input(key, world)
             set_player_turn_state("unit_info_locked", world)
         end
     elseif key == "j" then -- Confirm
+        play_confirm_sound()
         local attacker = world.ui.menus.action.unit
         local attackName = world.ui.targeting.selectedAttackName
         local attackData = attackName and AttackBlueprints[attackName]
@@ -1430,6 +1500,7 @@ local function handle_rescue_targeting_input(key, world)
         rescue.active = false
         rescue.targets = {}
     elseif key == "j" then -- Confirm
+        play_confirm_sound()
         local rescuer = world.ui.menus.action.unit
         local target = rescue.targets[rescue.selectedIndex]
 
@@ -1467,6 +1538,7 @@ local function handle_drop_targeting_input(key, world)
         drop.active = false
         drop.tiles = {}
     elseif key == "j" then -- Confirm
+        play_confirm_sound()
         local rescuer = world.ui.menus.action.unit
         local tile = drop.tiles[drop.selectedIndex]
 
@@ -1504,6 +1576,7 @@ local function handle_shove_targeting_input(key, world)
         shove.active = false
         shove.targets = {}
     elseif key == "j" then -- Confirm
+        play_confirm_sound()
         local shover = world.ui.menus.action.unit
         local target = shove.targets[shove.selectedIndex]
 
@@ -1546,6 +1619,7 @@ local function handle_take_targeting_input(key, world)
         take.active = false
         take.targets = {}
     elseif key == "j" then -- Confirm
+        play_confirm_sound()
         local taker = world.ui.menus.action.unit
         local carrier = take.targets[take.selectedIndex]
 
@@ -1585,6 +1659,7 @@ local function handle_promotion_select_input(key, world)
     if key == "w" or key == "s" then
         navigate_vertical_menu(key, menu, nil, world)
     elseif key == "j" then -- Confirm
+        play_menu_select_sound()
         local selectedOption = menu.options[menu.selectedIndex]
         PromotionSystem.apply(menu.unit, selectedOption, world)
         menu.active = false -- Close the menu

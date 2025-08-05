@@ -86,6 +86,13 @@ function Assets.load()
     Assets.sounds.back_out = loadSound("assets/sfx/back_out.wav", 0.7)
     Assets.sounds.attack_hit = loadSound("assets/sfx/attack_hit.ogg", 0.6)
     Assets.sounds.attack_miss = loadSound("assets/sfx/attack_miss.ogg", 0.6)
+    Assets.sounds.stat_up = loadSound("assets/sfx/stat_up.mp3", 0.6)
+    Assets.sounds.heal = loadSound("assets/sfx/heal.wav", 0.6)
+    Assets.sounds.level_up = loadSound("assets/sfx/level_up.mp3", 0.2)
+    -- Assets.sounds.unit_death = loadSound("assets/sfx/unit_death.wav", 0.6)
+    Assets.sounds.confirm = loadSound("assets/sfx/confirm.wav", 0.03)
+    Assets.sounds.menu_select = loadSound("assets/sfx/menu_select.wav", 0.4)
+    Assets.sounds.main_menu_select = loadSound("assets/sfx/main_menu_select.wav", 0.4)
 
     -- Define animation grids
     -- We assume each character sprite is 64x64 pixels per frame.
