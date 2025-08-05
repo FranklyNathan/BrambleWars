@@ -1,4 +1,4 @@
-local server = "localhost"
+local server = "100.76.15.33"
 local port = 3000
 local socket_path = "/ws"
 package.path = package.path .. ";../?.lua"

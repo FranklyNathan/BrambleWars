@@ -43,6 +43,6 @@ async fn main() {
     let app = Router::new()
         .route("/ws", any(handler));
 
-    let listener = tokio::net::TcpListener::bind("localhost:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("100.76.15.33:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
