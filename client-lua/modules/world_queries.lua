@@ -647,6 +647,55 @@ function WorldQueries.findShoveTargets(shover, world)
     return findAdjacentAllies(shover, world, filter)
 end
 
+-- A generic helper to find adjacent tiles that satisfy a given condition.
+-- @param unit (table): The unit to check around.
+-- @param world (table): The game world.
+-- @param filterFunc (function): A function that takes (tileX, tileY, unit, world) and returns true if the tile is valid.
+-- @return (table): A list of valid adjacent tile coordinates.
+function WorldQueries.getAdjacentTiles(unit, world, filterFunc)
+    local validTiles = {}
+    if not unit then return validTiles end
+
+    local neighbors = {{dx=0,dy=-1},{dx=0,dy=1},{dx=-1,dy=0},{dx=1,dy=0}}
+
+    for _, move in ipairs(neighbors) do
+        local tileX, tileY = unit.tileX + move.dx, unit.tileY + move.dy
+        if tileX >= 0 and tileX < world.map.width and tileY >= 0 and tileY < world.map.height then
+            if filterFunc(tileX, tileY, unit, world) then
+                table.insert(validTiles, {tileX = tileX, tileY = tileY})
+            end
+        end
+    end
+    return validTiles
+end
+
+-- Finds all adjacent, valid tiles that a rescuer can drop their carried unit onto.
+function WorldQueries.findValidDropTiles(rescuer, world)
+    if not rescuer or not rescuer.carriedUnit then return {} end
+    local carriedUnit = rescuer.carriedUnit
+ 
+    -- A tile is a valid drop location if it's not occupied by an impassable obstacle or another unit.
+    -- Water tiles are explicitly allowed to enable drowning strategies.
+    local filter = function(tileX, tileY, _, wrld)
+        -- Check for impassable obstacles.
+        local obstacle = WorldQueries.getObstacleAt(tileX, tileY, wrld)
+        if obstacle then
+            -- Can't drop on most obstacles, but molehills and traps are okay.
+            if obstacle.objectType ~= "molehill" and not obstacle.isTrap then
+                return false
+            end
+        end
+
+        -- Check if another unit is on the tile.
+        if WorldQueries.getUnitAt(tileX, tileY, nil, wrld) then
+            return false
+        end
+        return true
+    end
+    -- The search for adjacent tiles is relative to the RESCUER's position.
+    return WorldQueries.getAdjacentTiles(rescuer, world, filter)
+end
+
 -- Finds all adjacent player units who are carrying a unit that the 'taker' can take.
 function WorldQueries.findTakeTargets(taker, world)
     if not taker or taker.carriedUnit then return {} end -- A unit already carrying someone cannot take.

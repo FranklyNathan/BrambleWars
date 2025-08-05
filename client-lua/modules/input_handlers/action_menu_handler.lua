@@ -60,7 +60,7 @@ specialActionHandlers.rescue = function(unit, world)
 end
 
 specialActionHandlers.drop = function(unit, world)
-    local adjacentTiles = WorldQueries.getAdjacentEmptyTiles(unit, world)
+    local adjacentTiles = WorldQueries.findValidDropTiles(unit, world)
 
     if #adjacentTiles > 0 then
         InputHelpers.set_player_turn_state("drop_targeting", world)
