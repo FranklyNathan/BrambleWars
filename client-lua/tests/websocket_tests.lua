@@ -74,5 +74,43 @@ local function echo_test()
 
 end
 
+local function heartbeat_test()
+    local client = websocket.new(server, port, socket_path)
+    local response_binary
+
+    local heartbeat_message = {
+        client_id = "test",
+        timestamp = "test",
+    }
+
+    local envelope = {
+        heartbeat_message = heartbeat_message
+    }
+
+    local encoded_msg = pb.encode("bramble.Envelope", envelope)
+
+    function client:onmessage(message)
+        response_binary = message
+        self:close()
+    end
+    function client:onopen()
+        self:send_binary(encoded_msg)
+    end
+
+    while client.status ~= websocket.STATUS.CLOSED do
+        client:update()
+        socket.sleep(0.0001)
+    end
+
+    local envelope_response = pb.decode("bramble.Envelope", response_binary)
+    local heartbeat_response = envelope_response.heartbeat_message.client_id
+
+    assert(
+        heartbeat_response.client_id ~= "test",
+        string.format("act_msg: %s", heartbeat_response.client_id)
+    )
+
+end
 
 run_test("Echo Test", echo_test)
+run_test("Heartbeat Test", heartbeat_test)
