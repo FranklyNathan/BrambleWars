@@ -41,6 +41,17 @@ local ObjectBlueprints = {
         attacks = {},
         sprite = Assets.images.Molehill,
         isObstacle = true -- So it's treated as an obstacle by the world.
+    },
+    generated_wall = {
+        displayName = "Wall",
+        objectType = "wall",
+        maxHp = nil, -- Indestructible
+        isImpassable = true,
+        weight = 999, -- Effectively immovable
+        -- TODO: Create and assign a proper wall sprite in assets.lua. Using a placeholder for now.
+        sprite = Assets.images.Flag,
+        attacks = {},
+        isObstacle = true,
     }
 }
 

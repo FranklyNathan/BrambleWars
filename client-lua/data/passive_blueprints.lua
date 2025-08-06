@@ -14,6 +14,10 @@ local PassiveBlueprints = {
         name = "Blustering",
         description = "This unit's basic attacks inflict Careen 1."
     },
+    Bogbound = {
+        name = "Bogbound",
+        description = "Unit is not slowed by mud. While on a mud tile, unit gains 1.25x Def and Res.",
+    },
     Captor = {
         name = "Captor",
         description = "Allows this unit to rescue adjacent enemies."

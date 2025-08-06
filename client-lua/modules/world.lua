@@ -10,6 +10,7 @@ local EntityFactory = require("data.entities")
 local ObjectBlueprints = require("data.object_blueprints")
 local WeaponBlueprints = require("data.weapon_blueprints")
 local InputHelpers = require("modules.input_helpers")
+local MapGenerator = require("modules.map_generator")
 
 local World = {}
 World.__index = World
@@ -34,6 +35,7 @@ function World.new(gameMap)
     self.ascension_shadows = {}
     self.enemyPathfindingCache = {} -- Cache for AI pathfinding data for the current turn.
     self.tileStatuses = {} -- Stores temporary statuses on map tiles, like "aflame".
+    self.proceduralBatches = {} -- For procedurally generated map layers that need manual rendering.
     self.shopkeep = nil -- A direct reference to the shopkeeper entity for easy access.
 
     -- Player's global inventory
@@ -59,7 +61,7 @@ function World.new(gameMap)
         turnShouldEnd = false, -- Flag to defer ending the turn
         cursorInput = {
             timer = 0,
-            initialDelay = 0.35, -- Time before repeat starts
+            initialDelay = 0.25, -- Time before repeat starts
             repeatDelay = 0.05,  -- Time between subsequent repeats
             activeKey = nil
         },
@@ -168,6 +170,7 @@ function World.new(gameMap)
     self.teamPassives = {
         player = {
             Aetherfall = {},
+            Bogbound = {},
             Bloodrush = {},
             Blustering = {},
             Captor = {},
@@ -200,6 +203,7 @@ function World.new(gameMap)
         enemy = {
             -- Enemies can also have team-wide passives.
             Aetherfall = {},
+            Bogbound = {},
             Bloodrush = {},
             Blustering = {},
             Captor = {},
@@ -231,6 +235,7 @@ function World.new(gameMap)
         },
         neutral = {
             Aetherfall = {},
+            Bogbound = {},
             Bloodrush = {},
             Blustering = {},
             Captor = {},
@@ -276,6 +281,138 @@ function World.new(gameMap)
     -- will be set when they are added to the active party or swapped in.
 
     -- Define the starting positions for the player party (bottom-middle of the screen).
+
+    -- New: Find template tiles for procedural generation.
+    -- The user must place at least one of each tile type on the map for the generator to use.
+    local function find_template_tile(layerName)
+        local layer = self.map.layers[layerName]
+        if layer and layer.type == "tilelayer" then
+            for y = 1, layer.height do
+                for x = 1, layer.width do
+                    if layer.data[y] and layer.data[y][x] then
+                        return layer.data[y][x] -- Return the first tile object found.
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    self.map.template_mud_tile = find_template_tile("Mud")
+    self.map.template_water_tile = find_template_tile("Water")
+    self.map.template_ground_tile = find_template_tile("Ground")
+
+    -- New: Check for and process procedural generation zones BEFORE placing any units or objects.
+    -- This modifies the map data in memory.
+    if self.map.layers["GenerationZone"] then
+        -- Check that we have the necessary templates before trying to generate.
+        if not self.map.template_mud_tile then
+            print("WARNING: Map Generator could not find a 'Mud' template tile. Place at least one mud tile on the 'Mud' layer in Tiled.")
+        end
+        if not self.map.template_water_tile then
+            print("WARNING: Map Generator could not find a 'Water' template tile. Place at least one water tile on the 'Water' layer in Tiled.")
+        end
+        if not self.map.template_ground_tile then
+            print("WARNING: Map Generator could not find a 'Ground' template tile. Place at least one ground tile on the 'Ground' layer in Tiled.")
+        end
+
+        -- This table will aggregate tile data from all generation zones.
+        local all_procedural_tiles = { Ground = {}, Mud = {}, Water = {} }
+
+        for _, zoneObject in ipairs(self.map.layers["GenerationZone"].objects) do
+            -- The generator now returns a table of tile coordinates for this specific zone.
+            local procedural_tiles = MapGenerator.generate(self, zoneObject)
+            if procedural_tiles then
+                for tileType, tiles in pairs(procedural_tiles) do
+                    for _, tileCoord in ipairs(tiles) do
+                        table.insert(all_procedural_tiles[tileType], tileCoord)
+                    end
+                end
+            end
+        end
+
+        -- After generating data for all zones, create unified SpriteBatches.
+        local function create_unified_batch(template_instance, tiles)
+            if not template_instance or not template_instance.tileset or not tiles or #tiles == 0 then return nil end
+
+            -- 1. Get the tileset object from the map's master list.
+            local tileset_ref = template_instance.tileset
+            local tileset = nil
+            if type(tileset_ref) == "number" and self.map.tilesets and self.map.tilesets[tileset_ref] then
+                tileset = self.map.tilesets[tileset_ref]
+            end
+            if not tileset or not tileset.image then return nil end
+
+            -- 2. If the tileset is missing its quads table, generate them manually.
+            if not tileset.quads then
+                print("Tileset '" .. (tileset.name or "unnamed") .. "' is missing quads. Generating them now.")
+                tileset.quads = {}
+                local ts = tileset
+                local cols = math.floor((ts.imagewidth - ts.margin * 2 + ts.spacing) / (ts.tilewidth + ts.spacing))
+                for i = 0, ts.tilecount - 1 do
+                    local x = (i % cols) * (ts.tilewidth + ts.spacing) + ts.margin
+                    local y = math.floor(i / cols) * (ts.tileheight + ts.spacing) + ts.margin
+                    tileset.quads[i + 1] = love.graphics.newQuad(x, y, ts.tilewidth, ts.tileheight, ts.imagewidth, ts.imageheight)
+                end
+            end
+
+            -- 3. Get the specific quad for our template tile.
+            local local_id = template_instance.gid - tileset.firstgid + 1
+            local quad = tileset.quads[local_id]
+            if not quad then return nil end
+
+            -- 4. Create the SpriteBatch and populate it from the aggregated tile list.
+            local batch = love.graphics.newSpriteBatch(tileset.image, #tiles)
+            for _, coord in ipairs(tiles) do
+                local pixelX, pixelY = Grid.toPixels(coord.x, coord.y)
+                batch:add(quad, pixelX, pixelY)
+            end
+
+            print(string.format("Created unified procedural batch with %d tiles.", #tiles))
+            return batch
+        end
+
+        self.proceduralBatches.Ground = create_unified_batch(self.map.template_ground_tile, all_procedural_tiles.Ground)
+        self.proceduralBatches.Mud = create_unified_batch(self.map.template_mud_tile, all_procedural_tiles.Mud)
+        self.proceduralBatches.Water = create_unified_batch(self.map.template_water_tile, all_procedural_tiles.Water)
+
+        -- Instead of hiding the entire original layers, we now clear the tiles
+        -- only within the generated zones. This allows hand-placed tiles elsewhere on the map
+        -- to remain visible.
+        local layersToClear = {
+            Ground = self.map.layers["Ground"],
+            Mud = self.map.layers["Mud"],
+            Water = self.map.layers["Water"]
+        }
+
+        local cleared_count = 0
+        for tileType, tiles in pairs(all_procedural_tiles) do
+            local layer = layersToClear[tileType]
+            if layer then
+                for _, coord in ipairs(tiles) do
+                    -- STI data tables are 1-based.
+                    if layer.data[coord.y + 1] then
+                        layer.data[coord.y + 1][coord.x + 1] = nil
+                        cleared_count = cleared_count + 1
+                    end
+                end
+            end
+        end
+
+        if cleared_count > 0 then
+            print(string.format("Cleared %d tiles from original STI layers to make room for procedural content.", cleared_count))
+            -- Invalidate the original layers' caches to force a redraw with the cleared tiles.
+            if layersToClear.Ground then layersToClear.Ground.batch = nil end
+            if layersToClear.Mud then layersToClear.Mud.batch = nil end
+            if layersToClear.Water then layersToClear.Water.batch = nil end
+            -- Trigger the STI update to process the changes.
+            self.map:update(0)
+        end
+
+        -- Hide the GenerationZone layer itself so the rectangles aren't visible.
+        self.map.layers["GenerationZone"].visible = false
+    end
+
     -- Create all playable characters and store them in the roster.
     for _, playerType in ipairs(characterOrder) do
         local playerEntity = EntityFactory.createSquare(0, 0, "player", playerType)
