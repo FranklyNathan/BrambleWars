@@ -3,9 +3,10 @@ syntax = "proto3";
 package bramble;
 
 message Envelope {
-  oneof MessageType {
+  oneof Message {
     EchoMessage echo_message = 1;
     HeartbeatMessage heartbeat_message = 2;
+    Auction auction = 3;
   }
 }
 
@@ -18,4 +19,45 @@ message HeartbeatMessage {
   string timestamp = 2;
 }
 
+message Auction {
+  oneof Action {
+    HostAuction host_auction = 1;
+    JoinAuction join_auction = 2;
+    StartAuction start_auction = 3;
+  }
+}
 
+message HostAuction {
+  string auction_id = 1;
+}
+
+message JoinAuction {
+  string auction_id = 1;
+}
+
+message StartAuction {
+  string auction_id = 1;
+}
+
+message PauseAuction {
+  string auction_id = 1;
+}
+
+message Bid {
+  uint32 amount = 1;
+  string lot_id = 2;
+  string result = 3;
+}
+
+enum AuctionState {
+  PENDING = 0;
+  RUNNING = 1;
+  PAUSED = 2;
+  ENDED = 3;
+}
+
+message Update {
+  string auction_id = 1;
+  AuctionState state = 2;
+  uint64 duration = 3;
+}
