@@ -6,7 +6,9 @@ use crate::bramble::AuctionState;
 
 pub mod message_handler;
 pub mod websocket_handler;
-pub mod auction_handler;
+pub mod auction_utils;
+mod auction_handler;
+pub use auction_handler::auction_handler;
 
 pub mod bramble {
     include!(concat!(env!("OUT_DIR"), "/bramble.rs"));

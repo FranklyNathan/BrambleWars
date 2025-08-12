@@ -1,5 +1,5 @@
 use crate::{bramble, auction_handler};
-use crate::bramble::{envelope::Message, auction::Action};
+use crate::bramble::envelope::Message;
 use axum::extract::ws::{self, WebSocket};
 use prost::Message as Msg;
 
