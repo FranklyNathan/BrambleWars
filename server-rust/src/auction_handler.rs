@@ -18,6 +18,5 @@ pub async fn auction_handler(socket: &mut WebSocket, request: bramble::Auction)
 async fn host_handler(socket: &mut WebSocket, host_auction: bramble::HostAuction) 
     -> Result <(), ()>
 {
-
     Ok(())
 }

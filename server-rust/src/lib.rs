@@ -6,3 +6,6 @@ pub mod bramble {
     include!(concat!(env!("OUT_DIR"), "/bramble.rs"));
 }
 
+pub struct ServerState {
+    
+}
