@@ -2,15 +2,16 @@ use crate::bramble::{self, envelope::Message, auction::Action};
 use crate::{Auction, auction_utils::*};
 use axum::extract::ws::{self, WebSocket};
 use prost::Message as Msg;
+use uuid::Uuid;
 
 
-pub async fn auction_handler(socket: &mut WebSocket, request: bramble::Auction)
+pub async fn auction_handler(socket: &mut WebSocket, request: bramble::Auction, client_id: &Uuid)
     -> Result <(), ()>
 {
     dbg!(&request);
     match request.action {
         Some(Action::HostAuction(host_auction)) => {
-            host_handler(socket, host_auction).await;
+            host_handler(socket, host_auction, client_id).await;
         },
         _ => todo!()
     }
@@ -18,7 +19,7 @@ pub async fn auction_handler(socket: &mut WebSocket, request: bramble::Auction)
     Ok(())
 }
 
-async fn host_handler(socket: &mut WebSocket, _host_auction: bramble::HostAuction)
+async fn host_handler(socket: &mut WebSocket, _host_auction: bramble::HostAuction, client_id: &Uuid)
     -> Result <(), ()>
 {
     let auction_action = bramble::HostAuction {

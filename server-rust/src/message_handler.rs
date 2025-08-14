@@ -2,31 +2,32 @@ use crate::{bramble, auction_handler};
 use crate::bramble::envelope::Message;
 use axum::extract::ws::{self, WebSocket};
 use prost::Message as Msg;
+use uuid::Uuid;
 
-pub async fn message_handler(socket: &mut WebSocket, message: &ws::Message) {
+pub async fn message_handler(socket: &mut WebSocket, message: &ws::Message, client_id: &Uuid) {
     match message {
         ws::Message::Binary(binary_msg) => {
             let envelope = bramble::Envelope::decode(&binary_msg[..]).expect("Couldn't decode binary message");
             match envelope.message {
                 Some(Message::EchoMessage(request)) => {
-                    if echo_handler(socket, request).await.is_err() {
+                    if echo_handler(socket, request, client_id).await.is_err() {
                         eprintln!("Failed to handle Echo message");
                         return;
                     }
                 }
                 Some(Message::HeartbeatMessage(request)) => {
-                    if heartbeat_handler(socket, request).await.is_err() {
+                    if heartbeat_handler(socket, request, client_id).await.is_err() {
                         eprintln!("Failed to handle Heartbeat message");
                         return;
                     }
                 }
                 Some(Message::Auction(request)) => {
-                    if auction_handler(socket, request).await.is_err() {
+                    if auction_handler(socket, request, client_id).await.is_err() {
                         eprintln!("Failed to handle Auction message");
                         return;
                     }
                 }
-                None => eprintln!("Unhandled message recieved"),
+                None => eprintln!("Empty message recieved"),
             };
         },
         ws::Message::Close(_) => println!("Socket Closed"),
@@ -37,7 +38,7 @@ pub async fn message_handler(socket: &mut WebSocket, message: &ws::Message) {
     };
 }
 
-async fn echo_handler(socket: &mut WebSocket, request: bramble::EchoMessage)
+async fn echo_handler(socket: &mut WebSocket, request: bramble::EchoMessage, client_id: &Uuid)
     -> Result<(), ()>
 {
     dbg!(&request);
@@ -59,7 +60,7 @@ async fn echo_handler(socket: &mut WebSocket, request: bramble::EchoMessage)
     Ok(())
 }
 
-async fn heartbeat_handler(socket: &mut WebSocket, request: bramble::HeartbeatMessage)
+async fn heartbeat_handler(socket: &mut WebSocket, request: bramble::HeartbeatMessage, client_id: &Uuid)
     -> Result<(), ()>
 {
     dbg!(&request);
