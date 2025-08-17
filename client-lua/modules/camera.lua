@@ -12,61 +12,69 @@ Camera.y = 0
 
 -- The update function is called every frame to move the camera smoothly.
 function Camera.update(dt, world)
-    -- Get cursor position in pixels.
-    local cursorPixelX, cursorPixelY = Grid.toPixels(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y)
-    local cursorSize = Config.SQUARE_SIZE
+    local targetX, targetY
 
-    -- 1. By default, the camera's target is its current position (it doesn't move).
-    local targetX, targetY = Camera.x, Camera.y
+    -- Prioritize focusing on a specific entity if one is set (e.g., for watching enemy turns).
+    if world.ui.cameraFocusEntity then
+        local entity = world.ui.cameraFocusEntity
+        -- Target the center of the entity.
+        targetX = entity.x - (Config.VIRTUAL_WIDTH / 2) + (entity.size / 2)
+        targetY = entity.y - (Config.VIRTUAL_HEIGHT / 2) + (entity.size / 2)
+    else
+        -- Original cursor-following logic for when there's no specific focus.
+        local cursorPixelX, cursorPixelY = Grid.toPixels(world.ui.mapCursorTile.x, world.ui.mapCursorTile.y)
+        local cursorSize = Config.SQUARE_SIZE
 
-    -- 2. Define a margin for edge-scrolling. The camera will move when the cursor enters this area.
-    -- The margin is defined in tiles and converted to pixels.
-    local horizontalScrollMargin = 4 * Config.SQUARE_SIZE -- Scroll when cursor is 3 tiles from the left/right edge.
-    local verticalScrollMargin = 3 * Config.SQUARE_SIZE   -- Scroll when cursor is 2 tiles from the top/bottom edge.
+        -- By default, the camera's target is its current position (it doesn't move).
+        targetX, targetY = Camera.x, Camera.y
+
+        -- Define a margin for edge-scrolling.
+        local horizontalScrollMargin = 4 * Config.SQUARE_SIZE
+        local verticalScrollMargin = 3 * Config.SQUARE_SIZE
+
+        -- Horizontal Scrolling
+        if cursorPixelX < Camera.x + horizontalScrollMargin then
+            targetX = cursorPixelX - horizontalScrollMargin
+        elseif cursorPixelX + cursorSize > Camera.x + Config.VIRTUAL_WIDTH - horizontalScrollMargin then
+            targetX = cursorPixelX + cursorSize - (Config.VIRTUAL_WIDTH - horizontalScrollMargin)
+        end
+
+        -- Vertical Scrolling
+        if cursorPixelY < Camera.y + verticalScrollMargin then
+            targetY = cursorPixelY - verticalScrollMargin
+        elseif cursorPixelY + cursorSize > Camera.y + Config.VIRTUAL_HEIGHT - verticalScrollMargin then
+            targetY = cursorPixelY + cursorSize - (Config.VIRTUAL_HEIGHT - verticalScrollMargin)
+        end
+    end
 
     -- Get map dimensions in pixels to check against boundaries.
     local mapPixelWidth = world.map.width * world.map.tilewidth
     local mapPixelHeight = world.map.height * world.map.tileheight
 
-    -- 3. Check if the cursor is in the margin and update the camera's target position.
-    -- This creates a "dead zone" in the center of the screen where the camera doesn't move.
-
-    -- Horizontal Scrolling
-    if cursorPixelX < Camera.x + horizontalScrollMargin then
-        -- Cursor is in the left margin, move camera left.
-        targetX = cursorPixelX - horizontalScrollMargin
-    elseif cursorPixelX + cursorSize > Camera.x + Config.VIRTUAL_WIDTH - horizontalScrollMargin then
-        -- Cursor is in the right margin, move camera right.
-        targetX = cursorPixelX + cursorSize - (Config.VIRTUAL_WIDTH - horizontalScrollMargin)
-    end
-
-    -- Vertical Scrolling
-    if cursorPixelY < Camera.y + verticalScrollMargin then
-        -- Cursor is in the top margin, move camera up.
-        targetY = cursorPixelY - verticalScrollMargin
-    elseif cursorPixelY + cursorSize > Camera.y + Config.VIRTUAL_HEIGHT - verticalScrollMargin then
-        -- Cursor is in the bottom margin, move camera down.
-        targetY = cursorPixelY + cursorSize - (Config.VIRTUAL_HEIGHT - verticalScrollMargin)
-    end
-
-    -- 4. Clamp the TARGET position to the map boundaries. This ensures the camera
-    -- never tries to move towards a point outside the map, allowing the lerp
-    -- to function correctly at the edges.
+    -- Clamp the TARGET position to the map boundaries.
     targetX = math.max(0, math.min(targetX, mapPixelWidth - Config.VIRTUAL_WIDTH))
     targetY = math.max(0, math.min(targetY, mapPixelHeight - Config.VIRTUAL_HEIGHT))
 
-    -- 5. Smoothly move the camera towards the (now clamped) target position.
-    local lerpFactor = 0.2 -- A higher value makes the camera "snappier".
-    Camera.x = Camera.x + (targetX - Camera.x) * lerpFactor
-    Camera.y = Camera.y + (targetY - Camera.y) * lerpFactor
-    
-    -- Snap to the target position if the camera is very close. This prevents the
-    -- camera from having tiny decimal values when it should be stationary, and
-    -- ensures it can reach its final destination perfectly. This fixes the "sticking"
-    -- at the edge of the screen.
-    local snapThreshold = 0.5 -- Snap if within half a pixel.
-    if math.abs(targetX - Camera.x) < snapThreshold then Camera.x = targetX end
-    if math.abs(targetY - Camera.y) < snapThreshold then Camera.y = targetY end
+    -- If there is a focus entity, we want the camera to be locked, not smoothly moving.
+    -- However, we still need a smooth pan *to* the focus entity. This is handled in the
+    -- EnemyTurnSystem's "panning_camera" phase. For all other times, we check if we are
+    -- already focused. If not, we lerp. If we are, we stay put.
+    if world.ui.cameraFocusEntity then
+        local snapThreshold = 0.5
+        local isAtTarget = math.abs(targetX - Camera.x) < snapThreshold and math.abs(targetY - Camera.y) < snapThreshold
+        if not isAtTarget then
+            -- Smoothly move towards the target.
+            local lerpFactor = 0.2
+            Camera.x = Camera.x + (targetX - Camera.x) * lerpFactor
+            Camera.y = Camera.y + (targetY - Camera.y) * lerpFactor
+        end
+        -- Once at the target, the camera will stop moving until the focus changes.
+    else
+        -- No focus entity, so always use smooth movement for the player cursor.
+        local lerpFactor = 0.2
+        Camera.x = Camera.x + (targetX - Camera.x) * lerpFactor
+        Camera.y = Camera.y + (targetY - Camera.y) * lerpFactor
+    end
 
 end
 
@@ -79,6 +87,16 @@ end
 -- Reverts the camera's transformation.
 function Camera.revert()
     love.graphics.pop()
+end
+
+-- New helper function to check if an entity is currently visible on screen.
+function Camera.isEntityVisible(entity)
+    if not entity then return false end
+    local entityRight = entity.x + entity.size
+    local entityBottom = entity.y + entity.size
+    local cameraRight = Camera.x + Config.VIRTUAL_WIDTH
+    local cameraBottom = Camera.y + Config.VIRTUAL_HEIGHT
+    return entityRight > Camera.x and entity.x < cameraRight and entityBottom > Camera.y and entity.y < cameraBottom
 end
 
 return Camera

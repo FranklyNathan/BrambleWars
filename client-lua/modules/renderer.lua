@@ -53,6 +53,30 @@ local function draw_tile_statuses_by_layer(world, layer)
     end
 end
 
+-- New helper to draw the fog of war.
+local function draw_fog(world)
+    if not world.fogTiles or not Assets.images.Fog then return end
+
+    local fogImage = Assets.images.Fog
+    -- The fog is drawn with a slight transparency to obscure rather than completely hide.
+    love.graphics.setColor(1, 1, 1, 0.9)
+
+    for posKey, fogData in pairs(world.fogTiles) do
+        -- Only draw the fog if its current alpha is greater than 0.
+        if fogData.currentAlpha > 0 then
+            -- Set the color with the tile's current alpha for smooth fading.
+            love.graphics.setColor(1, 1, 1, fogData.currentAlpha * 0.9)
+
+            local tileX = tonumber(string.match(posKey, "(-?%d+)"))
+            local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
+            if tileX and tileY then
+                local pixelX, pixelY = Grid.toPixels(tileX, tileY)
+                love.graphics.draw(fogImage, pixelX, pixelY)
+            end
+        end
+    end
+end
+
 local function draw_all_entities(world)
     -- Create a single list of all units and obstacles to be drawn.
     local drawOrder = {}
@@ -142,6 +166,9 @@ function Renderer.draw(world)
 
     UIRenderer.drawWorldSpaceUI(world)
     EffectRenderer.drawBackground(world) -- Draw effects that should be behind entities
+    
+    -- Draw fog over the terrain but behind the units themselves for a classic fog of war feel.
+    draw_fog(world)
     draw_all_entities(world)
     EffectRenderer.drawForeground(world) -- Draw effects that should be on top of entities
 

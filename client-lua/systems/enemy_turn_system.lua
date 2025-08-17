@@ -1,568 +1,236 @@
--- enemy_turn_system.lua
--- Manages the AI logic for enemies during their turn.
+-- systems/enemy_turn_system.lua
+-- Manages the sequence of enemy actions during their turn and controls camera focus.
 
 local Pathfinding = require("modules.pathfinding")
 local WorldQueries = require("modules.world_queries")
-local AttackPatterns = require("modules.attack_patterns")
-local AscensionSystem = require("systems.ascension_system")
-local CombatFormulas = require("modules.combat_formulas")
-local EntityFactory = require("data.entities")
-local EnemyBlueprints = require("data.enemy_blueprints")
-local WeaponBlueprints = require("data.weapon_blueprints")
-local AttackBlueprints = require("data.attack_blueprints")
-local UnitAttacks = require("data.unit_attacks")
 local Grid = require("modules.grid")
+local EffectFactory = require("modules.effect_factory")
+local Camera = require("modules.camera")
 
 local EnemyTurnSystem = {}
 
--- Helper to find the closest player to an enemy.
-local function findClosestPlayer(enemy, world)
-    local closestPlayer, shortestDistSq = nil, math.huge
+-- State for the system's internal logic.
+EnemyTurnSystem.state = {
+    activeEnemyIndex = 1,
+    phase = "picking_enemy", -- "picking_enemy", "panning_camera", "acting", "waiting_for_action"
+    timer = 0
+}
+
+-- A static, non-moving entity for the camera to focus on to keep it stationary.
+-- It needs a 'size' property so the camera system can calculate its center point.
+local cameraAnchor = { x = 0, y = 0, size = 0 }
+
+-- A very simple AI to find the closest player unit.
+local function find_closest_player(enemy, world)
+    local closestPlayer = nil
+    local min_dist = math.huge
     for _, player in ipairs(world.players) do
         if player.hp > 0 then
-            local distSq = (player.tileX - enemy.tileX)^2 + (player.tileY - enemy.tileY)^2
-            if distSq < shortestDistSq then
-                shortestDistSq, closestPlayer = distSq, player
+            local dist = math.abs(enemy.tileX - player.tileX) + math.abs(enemy.tileY - player.tileY)
+            if dist < min_dist then
+                min_dist = dist
+                closestPlayer = player
             end
         end
     end
     return closestPlayer
 end
 
--- Helper to find the closest win tile to an enemy.
-local function findClosestWinTile(enemy, world)
-    if not world.winTiles or #world.winTiles == 0 then return nil end
-    local closestTile, shortestDistSq = nil, math.huge
-    for _, tile in ipairs(world.winTiles) do
-        -- Check if the tile is already occupied by another enemy. If so, it's not a valid target for movement.
-        local isOccupiedByEnemy = false
-        for _, otherEnemy in ipairs(world.enemies) do
-            if otherEnemy ~= enemy and otherEnemy.tileX == tile.x and otherEnemy.tileY == tile.y then
-                isOccupiedByEnemy = true
-                break
-            end
-        end
+-- A simple AI action: move towards the closest player and attack if possible.
+local function perform_ai_action(enemy, world)
+    -- First, calculate all possible moves. This is needed for both winning and moving towards a player.
+    local reachableTiles, cameFrom, costSoFar = Pathfinding.calculateReachableTiles(enemy, world)
 
-        if not isOccupiedByEnemy then
-            local distSq = (tile.x - enemy.tileX)^2 + (tile.y - enemy.tileY)^2
-            if distSq < shortestDistSq then
-                shortestDistSq, closestTile = distSq, tile
+    -- 1. HIGHEST PRIORITY: Check if a winning move is possible.
+    -- If an enemy can reach a win tile, it should always take that opportunity.
+    if world.winTiles and #world.winTiles > 0 then
+        for _, winTile in ipairs(world.winTiles) do
+            local winPosKey = winTile.x .. "," .. winTile.y
+            if reachableTiles[winPosKey] and reachableTiles[winPosKey].landable then
+                print(string.format("[AI DEBUG] %s prioritizing winning move to (%d,%d)!", enemy.enemyType, winTile.x, winTile.y))
+                local startPosKey = enemy.tileX .. "," .. enemy.tileY
+                local pathInPixels = Pathfinding.reconstructPath(cameFrom, costSoFar, nil, startPosKey, winPosKey)
+                if #pathInPixels > 0 then
+                    enemy.components.movement_path = pathInPixels
+                else
+                    enemy.hasActed = true -- Should not happen, but a failsafe.
+                end
+                return -- Winning move chosen, exit.
             end
         end
     end
-    return closestTile
-end
 
--- Finds the best tile in a unit's range from which to use a cycle_target attack on a target.
-local function findBestCycleTargetAttackPosition(enemy, target, attackName, reachableTiles, world)
-    local bestPosKey, closestDistSq = nil, math.huge
-    -- Create a temporary copy of the enemy to test positions without modifying the real one.
-    local tempEnemy = {}
-    for k, v in pairs(enemy) do tempEnemy[k] = v end
-    
+    -- 2. If no winning move is possible, check for an attack from the current position.
+    -- This is more robust than the old logic, which only considered attacking the closest player.
+    local available_attacks = WorldQueries.getUnitMoveList(enemy)
+    for _, attackName in ipairs(available_attacks) do
+        local validTargets = WorldQueries.findValidTargetsForAttack(enemy, attackName, world)
+        if #validTargets > 0 then
+            -- Found a valid attack. Execute it against the first available target.
+            local targetToAttack = validTargets[1]
+
+            -- Make the enemy face its target and trigger the lunge animation.
+            -- This was missing, causing enemies to attack without turning or animating.
+            enemy.lastDirection = Grid.getDirection(enemy.tileX, enemy.tileY, targetToAttack.tileX, targetToAttack.tileY)
+            enemy.components.lunge = { timer = 0.2, initialTimer = 0.2, direction = enemy.lastDirection }
+
+            enemy.components.action_in_progress = true
+            local targetType = (enemy.type == "player") and "enemy" or "player"
+            EffectFactory.addAttackEffect(world, {
+                attacker = enemy,
+                attackName = attackName,
+                x = targetToAttack.x, y = targetToAttack.y,
+                width = targetToAttack.size, height = targetToAttack.size,
+                targetType = targetType
+            })
+            return -- Action chosen, exit.
+        end
+    end
+
+    -- 2. If no attack was possible, find the closest player and move towards them.
+    local target = find_closest_player(enemy, world)
+    if not target then
+        -- No players left on the map.
+        enemy.hasActed = true
+        return
+    end
+
+    -- Capture the 'cameFrom' table which is needed to reconstruct the path.
+    -- We now capture 'costSoFar' as it's required by the updated reconstructPath function.
+    local reachableTiles, cameFrom, costSoFar = Pathfinding.calculateReachableTiles(enemy, world)
+
+    -- DEBUG: Print the number of reachable tiles found.
+    local reachableTileCount = 0
+    for _ in pairs(reachableTiles) do reachableTileCount = reachableTileCount + 1 end
+    print(string.format("[AI DEBUG] %s at (%d,%d) found %d reachable tiles.", enemy.enemyType, enemy.tileX, enemy.tileY, reachableTileCount))
+
+
+    local best_move_tile = nil
+    local min_dist_to_target = math.huge
+
     for posKey, data in pairs(reachableTiles) do
-        -- This is the crucial fix: Only consider tiles the unit can actually land on.
         if data.landable then
             local tileX = tonumber(string.match(posKey, "(-?%d+)"))
             local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
-            tempEnemy.tileX, tempEnemy.tileY = tileX, tileY
-            
-            local validTargets = WorldQueries.findValidTargetsForAttack(tempEnemy, attackName, world)
-            for _, validTarget in ipairs(validTargets) do
-                if validTarget == target then
-                    -- This is a valid attack spot. Check if it's the best one so far (closest to target).
-                    local distSq = (tileX - target.tileX)^2 + (tileY - target.tileY)^2
-                    if distSq < closestDistSq then
-                        closestDistSq = distSq
-                        bestPosKey = posKey
-                    end
-                    break -- Found a valid spot for this tile, no need to check other targets from this same tile.
-                end
-            end
-        end
-    end
-    return bestPosKey
-end
 
--- Finds the reachable tile that is closest to the target.
--- This is a simple greedy approach and is used as a fallback.
-local function findClosestReachableTileByDistance(enemy, target, reachableTiles)
-    local closestKey, closestDistSq = nil, math.huge
-    for posKey, data in pairs(reachableTiles) do
-        if data.landable and posKey ~= (enemy.tileX .. "," .. enemy.tileY) then
-            local tileX = tonumber(string.match(posKey, "(-?%d+)"))
-            local tileY = tonumber(string.match(posKey, ",(-?%d+)"))
-            local distSq = (tileX - target.tileX)^2 + (tileY - target.tileY)^2
-            if distSq < closestDistSq then 
-                closestDistSq, closestKey = distSq, posKey 
-            end
-        end
-    end
-    return closestKey
-end
+            -- Check if the tile is a water hazard for units that can't swim or fly.
+            -- This prevents the AI from pathing into tiles that would cause them to drown.
+            local isWater = WorldQueries.isTileWater(tileX, tileY, world)
+            local canTraverseWater = enemy.isFlying or enemy.canSwim
 
--- A more intelligent way to find a tile to move to when no attack is possible.
--- It performs a Breadth-First Search (BFS) starting from the target player, and the
--- first tile it finds that is in the enemy's reachable set is the optimal one.
--- This ensures the enemy is always moving along a valid path towards the target,
--- preventing it from getting stuck in loops.
-local function findBestMoveOnlyTile(enemy, target, reachableTiles, world)
-    -- If there's nowhere to move, don't bother.
-    if not next(reachableTiles) then return nil end
-
-    local frontier = {{tileX = target.tileX, tileY = target.tileY}}
-    local visited = {[target.tileX .. "," .. target.tileY] = true}
-    local head = 1
-
-    while head <= #frontier do
-        local current = frontier[head]
-        head = head + 1
-
-        local currentKey = current.tileX .. "," .. current.tileY
-        -- Check if the current tile in our search is one the enemy can actually land on this turn.
-        if reachableTiles[currentKey] and reachableTiles[currentKey].landable and currentKey ~= (enemy.tileX .. "," .. enemy.tileY) then
-            -- Success! We found a reachable tile that is on a valid path from the target.
-            return currentKey
-        end
-
-        local neighbors = {{dx=0,dy=-1},{dx=0,dy=1},{dx=-1,dy=0},{dx=1,dy=0}}
-        for _, move in ipairs(neighbors) do
-            local nextTileX, nextTileY = current.tileX + move.dx, current.tileY + move.dy
-            local nextKey = nextTileX .. "," .. nextTileY
-
-            if not visited[nextKey] and
-               nextTileX >= 0 and nextTileX < world.map.width and
-               nextTileY >= 0 and nextTileY < world.map.height then
-                
-                -- This logic must mirror the passability checks in pathfinding.lua exactly
-                -- to ensure the AI follows the same movement rules as the player.
-                local obstacle = WorldQueries.getObstacleAt(nextTileX, nextTileY, world)
-                local occupyingUnit = WorldQueries.getUnitAt(nextTileX, nextTileY, enemy, world)
-                local isLedgeBlocked = WorldQueries.isLedgeBlockingPath(current.tileX, current.tileY, nextTileX, nextTileY, world)
-
-                local canPass = true
-
-                if isLedgeBlocked then
-                    canPass = false
-                elseif WorldQueries.isTileWater(nextTileX, nextTileY, world) then
-                    local hasFrozenfoot = WorldQueries.hasPassive(enemy, "Frozenfoot", world)
-                    if not (enemy.isFlying or enemy.canSwim or hasFrozenfoot) then
-                        canPass = false
-                    end
-                elseif obstacle then
-                    if obstacle.isImpassable then
-                        canPass = false
-                    elseif obstacle.objectType ~= "molehill" and not obstacle.isTrap then
-                        -- Regular obstacles like trees can only be passed by flying units.
-                        if not enemy.isFlying then
-                            canPass = false
-                        end
-                    end
-                    -- Molehills and traps are always passable.
-                elseif occupyingUnit then
-                    -- Flying units can pass over other units.
-                    if not enemy.isFlying then
-                        if occupyingUnit.type ~= enemy.type then -- It's an enemy
-                            local hasElusive = false
-                            if world.teamPassives[enemy.type].Elusive then
-                                for _, provider in ipairs(world.teamPassives[enemy.type].Elusive) do
-                                    if provider == enemy then hasElusive = true; break end
-                                end
-                            end
-                            if not hasElusive then
-                                canPass = false
-                            end
-                        end
-                        -- Allies are always passable for ground units.
-                    end
-                end
-
-                if canPass then
-                    visited[nextKey] = true
-                    table.insert(frontier, {tileX = nextTileX, tileY = nextTileY})
+            if not (isWater and not canTraverseWater) then
+                local dist = math.abs(tileX - target.tileX) + math.abs(tileY - target.tileY)
+                if dist < min_dist_to_target then
+                    min_dist_to_target = dist
+                    best_move_tile = {x = tileX, y = tileY}
                 end
             end
         end
     end
 
-    -- Fallback: If the target is completely unreachable (e.g., walled off), revert to the simple "closest distance" approach.
-    return findClosestReachableTileByDistance(enemy, target, reachableTiles)
-end
+    if best_move_tile then
+        -- DEBUG: Print the chosen destination.
+        print(string.format("[AI DEBUG] %s is moving to (%d,%d) to get closer to %s.", enemy.enemyType, best_move_tile.x, best_move_tile.y, target.displayName))
 
--- Helper to check if a value exists in a table.
-local function table_contains(tbl, val)
-    for _, value in ipairs(tbl) do
-        if value == val then
-            return true
+        -- Reconstruct the path from the start to the best destination tile.
+        local startPosKey = enemy.tileX .. "," .. enemy.tileY
+        local goalPosKey = best_move_tile.x .. "," .. best_move_tile.y
+        -- Call reconstructPath with the correct arguments. The AI has no cursor path, so we pass 'nil'.
+        -- The Pathfinding.reconstructPath function returns a path in PIXEL coordinates.
+        local pathInPixels = Pathfinding.reconstructPath(cameFrom, costSoFar, nil, startPosKey, goalPosKey)
+
+        -- The old code was converting these pixel coordinates a second time, leading to massive values.
+        -- By removing the conversion loop, we use the correct pixel coordinates directly.
+
+        -- DEBUG: Print the length of the generated path.
+        print(string.format("[AI DEBUG] Path reconstructed with %d steps.", #pathInPixels))
+
+        -- Assign the path to the enemy. The TurnBasedMovementSystem will handle the rest,
+        -- including setting hasActed = true when the movement is complete.
+        if #pathInPixels > 0 then
+            enemy.components.movement_path = pathInPixels
+        else
+            enemy.hasActed = true -- No path found, end turn.
         end
+    else
+        -- DEBUG: Print that no valid move was found.
+        print(string.format("[AI DEBUG] %s could not find a valid move tile from its reachable set.", enemy.enemyType))
+        enemy.hasActed = true -- No valid move, end turn.
     end
-    return false
-end
-
--- Finds the best possible attack action against any player, prioritizing lethal hits.
-local function findBestPlayerAttackAction(enemy, reachableTiles, world)
-    local bestAction = nil
-    local bestScore = -1 -- Kills will have a score > 1000
-
-    -- Build a list of all units that are hostile to the acting enemy.
-    -- This correctly includes players and neutrals.
-    local hostile_units = {}
-    for _, unit in ipairs(world.all_entities) do
-        if unit.type and WorldQueries.areUnitsHostile(enemy, unit) then
-            table.insert(hostile_units, unit)
-        end
-    end
-
-    local all_moves = WorldQueries.getUnitMoveList(enemy)
-
-    for _, targetPlayer in ipairs(hostile_units) do
-        if targetPlayer.hp > 0 then
-            for _, attackName in ipairs(all_moves) do
-                local attackData = AttackBlueprints[attackName]
-                if attackData and enemy.wisp >= (attackData.wispCost or 0) then
-                    -- Check if we can attack from the current position.
-                    local currentTargets = WorldQueries.findValidTargetsForAttack(enemy, attackName, world)
-                    if table_contains(currentTargets, targetPlayer) then                        local damage = CombatFormulas.calculateFinalDamage(enemy, targetPlayer, attackData, false, attackName, world)
-                        local hitChance = CombatFormulas.calculateHitChance(enemy, targetPlayer, attackData.Accuracy or 100)
-                        local expectedDamage = damage * hitChance
-                        local score = expectedDamage - (attackData.wispCost or 0) * 5
-
-                        if damage >= targetPlayer.hp then
-                            score = (1000 + expectedDamage) * hitChance -- Prioritize likely kills.
-                        end
-
-                        if score > bestScore then
-                            bestScore = score
-                            bestAction = { type = "attack_now", attackName = attackName, target = targetPlayer }
-                        end
-                    end
-
-                    -- Check if we can move to a position to attack (only for cycle_target attacks).
-                    if attackData.targeting_style == "cycle_target" then
-                        local bestMovePosKey = findBestCycleTargetAttackPosition(enemy, targetPlayer, attackName, reachableTiles, world)
-                        if bestMovePosKey then
-                            local damage = CombatFormulas.calculateFinalDamage(enemy, targetPlayer, attackData, false, attackName, world)
-                            local hitChance = CombatFormulas.calculateHitChance(enemy, targetPlayer, attackData.Accuracy or 100)
-                            local expectedDamage = damage * hitChance
-                            local score = (expectedDamage - (attackData.wispCost or 0) * 5) - 1 -- A small penalty for moving first.
-
-                            if damage >= targetPlayer.hp then
-                                score = ((1000 + expectedDamage) * hitChance) - 1
-                            end
-
-                            if score > bestScore then
-                                bestScore = score
-                                bestAction = { type = "move_and_attack", attackName = attackName, target = targetPlayer, destinationKey = bestMovePosKey }
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return bestAction
-end
-
--- Finds the best obstacle to attack if it's blocking the path to the main objective.
-local function findBestObstacleAttackAction(enemy, moveTarget, reachableTiles, world)
-    local bestAction = nil
-    local closestDistSq = math.huge
-
-    local all_moves = WorldQueries.getUnitMoveList(enemy)
-
-    -- Check every destructible obstacle on the map.
-    for _, obstacle in ipairs(world.obstacles) do
-        if obstacle.hp and obstacle.hp > 0 then
-            for _, attackName in ipairs(all_moves) do
-                local attackData = AttackBlueprints[attackName]
-                -- Only consider damaging attacks.
-                if attackData and enemy.wisp >= (attackData.wispCost or 0) and attackData.useType ~= "support" then
-                    -- Can we move to a position to attack this obstacle?
-                    if attackData.targeting_style == "cycle_target" then
-                        local bestMovePosKey = findBestCycleTargetAttackPosition(enemy, obstacle, attackName, reachableTiles, world)
-                        if bestMovePosKey then
-                            -- It's a good idea to attack if the obstacle is "on the way" to the main goal.
-                            local obsDistSq = (obstacle.tileX - enemy.tileX)^2 + (obstacle.tileY - enemy.tileY)^2
-                            local targetDistSq = (moveTarget.tileX - enemy.tileX)^2 + (moveTarget.tileY - enemy.tileY)^2
-
-                            if obsDistSq < targetDistSq and obsDistSq < closestDistSq then
-                                closestDistSq = obsDistSq
-                                bestAction = { type = "move_and_attack", attackName = attackName, target = obstacle, destinationKey = bestMovePosKey }
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return bestAction
 end
 
 function EnemyTurnSystem.update(dt, world)
-    if world.turn ~= "enemy" then return end
-
-    -- If any action is ongoing (animations, projectiles, etc.), wait for it to resolve.
-    if WorldQueries.isActionOngoing(world) then return end
-
-    -- Find the next enemy that has not yet acted.
-    local actingEnemy = nil
-    for _, enemy in ipairs(world.enemies) do
-        if enemy.hp > 0 and not enemy.hasActed then
-            -- Check if the unit is stunned at the start of its turn.
-            if enemy.statusEffects and enemy.statusEffects.stunned then
-                -- If stunned, their turn is skipped. Mark them as having acted.
-                -- The loop will then continue to the next available enemy.
-                enemy.hasActed = true
-            else
-                -- This is the enemy that will act.
-                actingEnemy = enemy
-                break
-            end
-        end
+    if world.turn ~= "enemy" then
+        -- This needs to be reset at the start of the player's turn so the enemy turn can run correctly next time.
+        EnemyTurnSystem.state.activeEnemyIndex = 1
+        EnemyTurnSystem.state.phase = "picking_enemy"
+        world.ui.cameraFocusEntity = nil -- Ensure focus is cleared when turn ends.
+        return
     end
 
-    if actingEnemy then
-        -- At the start of the turn, check if the enemy was disarmed.
-        if actingEnemy.statusEffects and actingEnemy.statusEffects.disarmed then
-            local effectData = actingEnemy.statusEffects.disarmed
-            if effectData.originalWeapon then
-                actingEnemy.equippedWeapon = effectData.originalWeapon
-            end
-            -- The status effect will be removed at the end of the turn by the status_system.
+    -- If a level-up animation is playing (e.g., from a player's counter-attack kill),
+    -- pause the entire enemy turn state machine. This prevents other enemies from
+    -- moving or acting while the player is focused on the level-up sequence.
+    if world.ui.levelUpAnimation and world.ui.levelUpAnimation.active then
+        return
+    end
+
+    local state = EnemyTurnSystem.state
+
+    if state.phase == "picking_enemy" then
+        while state.activeEnemyIndex <= #world.enemies and (world.enemies[state.activeEnemyIndex].hp <= 0 or world.enemies[state.activeEnemyIndex].hasActed) do
+            state.activeEnemyIndex = state.activeEnemyIndex + 1
         end
 
-        -- This block handles post-move logic. If a unit has no movement path,
-        -- it could be at the start of its turn, or it could have just finished moving.
-        if not actingEnemy.components.movement_path then
-            if actingEnemy.components.ai and actingEnemy.components.ai.pending_attack then
-                -- Execute the pending attack.
-                local pending = actingEnemy.components.ai.pending_attack
-                world.ui.targeting.cycle.active = true
-                world.ui.targeting.cycle.targets = {pending.target}
-                world.ui.targeting.cycle.selectedIndex = 1
-                world.ui.targeting.selectedAttackName = pending.name
-                UnitAttacks[pending.name](actingEnemy, world)
-                actingEnemy.components.ai.pending_attack = nil
-                world.ui.targeting.cycle.active = false
-                world.ui.targeting.selectedAttackName= nil
-                actingEnemy.components.action_in_progress = true
-                return
-            elseif actingEnemy.components.action_in_progress then
-                -- The unit just finished a move-only action. Its turn is over.
-                -- The action_finalization_system will set hasActed. We just need to stop here
-                -- to prevent the AI from running again this frame.
-                return
-            end
+        -- After finding the next valid enemy, decide if we need to move the camera.
+        if state.activeEnemyIndex > #world.enemies then
+            -- No more enemies to move. End the turn if no actions are ongoing.
+            if not WorldQueries.isActionOngoing(world) then world.ui.turnShouldEnd = true end
         else
-            return -- Has a movement path, so it's currently moving. Do nothing.
-        end
+            local currentEnemy = world.enemies[state.activeEnemyIndex]
+            local targetPlayer = find_closest_player(currentEnemy, world)
 
-        -- Get pathfinding data for the current enemy.
-        local pathData = world.enemyPathfindingCache[actingEnemy]
-        if not pathData then
-            local reachable, came, cost = Pathfinding.calculateReachableTiles(actingEnemy, world)
-            pathData = { reachableTiles = reachable, came_from = came, cost_so_far = cost }
-            world.enemyPathfindingCache[actingEnemy] = pathData
-        end
-        local reachableTiles = pathData.reachableTiles
-        local came_from = pathData.came_from
-        local cost_so_far = pathData.cost_so_far
+            -- Determine if a camera pan is necessary. Pan if the current actor or its
+            -- intended target are not visible. This keeps the action on-screen.
+            local isTargetVisible = not targetPlayer or Camera.isEntityVisible(targetPlayer)
+            local needsPan = not Camera.isEntityVisible(currentEnemy) or not isTargetVisible
 
-        -- New: Check for Taunt status. This overrides all other AI logic.
-        if actingEnemy.statusEffects and actingEnemy.statusEffects.taunted then
-            local tauntData = actingEnemy.statusEffects.taunted
-            local taunter = tauntData.attacker
-
-            if taunter and taunter.hp > 0 then
-                -- This enemy is taunted and must target the taunter.
-                local bestTauntAttack = nil
-                local bestScore = -1
-                local all_moves = WorldQueries.getUnitMoveList(actingEnemy)
-
-                for _, attackName in ipairs(all_moves) do
-                    local attackData = AttackBlueprints[attackName]
-                    if attackData and actingEnemy.wisp >= (attackData.wispCost or 0) and attackData.useType ~= "support" then
-                        -- Check if can attack from current position
-                        local currentTargets = WorldQueries.findValidTargetsForAttack(actingEnemy, attackName, world)
-                        if table_contains(currentTargets, taunter) then
-                            local score = 100 -- Prioritize attacking now over moving.
-                            if score > bestScore then
-                                bestScore = score
-                                bestTauntAttack = { type = "attack_now", attackName = attackName, target = taunter }
-                            end
-                        end
-
-                        -- Check if can move to attack
-                        if attackData.targeting_style == "cycle_target" then
-                            local bestMovePosKey = findBestCycleTargetAttackPosition(actingEnemy, taunter, attackName, reachableTiles, world)
-                            if bestMovePosKey then
-                                local score = 99 -- Slightly lower score for moving.
-                                if score > bestScore then
-                                    bestScore = score
-                                    bestTauntAttack = { type = "move_and_attack", attackName = attackName, target = taunter, destinationKey = bestMovePosKey }
-                                end
-                            end
-                        end
-                    end
-                end
-
-                -- Execute the best found action against the taunter.
-                if bestTauntAttack then
-                    if bestTauntAttack.type == "attack_now" then
-                        world.ui.targeting.cycle.targets = {bestTauntAttack.target}
-                        UnitAttacks[bestTauntAttack.attackName](actingEnemy, world)
-                        actingEnemy.components.action_in_progress = true
-                    elseif bestTauntAttack.type == "move_and_attack" then
-                        local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-                        local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, bestTauntAttack.destinationKey)
-                        actingEnemy.components.movement_path = path
-                        actingEnemy.speedMultiplier = 2
-                        actingEnemy.components.ai.pending_attack = { name = bestTauntAttack.attackName, target = bestTauntAttack.target }
-                    end
-                    return -- Taunted action decided.
-                end
-
-                -- No attack is possible, so just move closer.
-                local moveDestinationKey = findBestMoveOnlyTile(actingEnemy, taunter, reachableTiles, world)
-                if moveDestinationKey then
-                    local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-                    local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, moveDestinationKey)
-                    actingEnemy.components.movement_path = path
-                    actingEnemy.speedMultiplier = 2
-                    actingEnemy.components.action_in_progress = true
-                    return
-                end
+            if needsPan then
+                -- An important unit is off-screen. Set focus and pan the camera.
+                world.ui.cameraFocusEntity = currentEnemy
+                state.phase = "panning_camera"
+                state.timer = 0.5 -- Time for camera to pan.
             else
-                -- Taunter is dead, remove the status.
-                local StatusEffectManager = require("modules.status_effect_manager")
-                StatusEffectManager.remove(actingEnemy, "taunted", world)
+                -- Everything is visible. Skip the pan and act immediately.
+                state.phase = "acting"
             end
         end
-
-        -- AI Decision Making Logic
-
-        -- Priority 1: Winning Move. If a win tile is reachable, move to it.
-        if world.winTiles and #world.winTiles > 0 then
-            for _, winTile in ipairs(world.winTiles) do
-                local winTileKey = winTile.x .. "," .. winTile.y
-                if reachableTiles[winTileKey] and reachableTiles[winTileKey].landable then
-                    local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-                    local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, winTileKey)
-                    if path and #path > 0 then
-                        actingEnemy.components.movement_path = path
-                        actingEnemy.speedMultiplier = 2
-                        actingEnemy.components.action_in_progress = true -- Set flag to prevent re-evaluation
-                        return
-                    end
-                end
-            end
+    elseif state.phase == "panning_camera" then
+        state.timer = state.timer - dt
+        if state.timer <= 0 then
+            state.phase = "acting"
+            -- After the pan, make the camera focus on a static anchor point at the
+            -- enemy's current location. This keeps the camera stationary without it
+            -- snapping back to a default position.
+            local currentEnemy = world.enemies[state.activeEnemyIndex]
+            cameraAnchor.x, cameraAnchor.y = currentEnemy.x, currentEnemy.y
+            -- This was the missing piece. The anchor must also have the same size as the
+            -- enemy to ensure the camera's calculated center point doesn't change.
+            cameraAnchor.size = currentEnemy.size
+            world.ui.cameraFocusEntity = cameraAnchor
         end
-
-        -- Priority 2: Lethal Attack. Find the best attack against any player, prioritizing kills.
-        local bestPlayerAttack = findBestPlayerAttackAction(actingEnemy, reachableTiles, world)
-        if bestPlayerAttack then
-            if bestPlayerAttack.type == "attack_now" then
-                world.ui.targeting.cycle.active = true
-                world.ui.targeting.cycle.targets = {bestPlayerAttack.target}
-                world.ui.targeting.cycle.selectedIndex = 1
-                world.ui.targeting.selectedAttackName = bestPlayerAttack.attackName
-                UnitAttacks[bestPlayerAttack.attackName](actingEnemy, world)
-                world.ui.targeting.cycle.active = false
-                world.ui.targeting.selectedAttackName = nil
-                actingEnemy.components.action_in_progress = true
-            elseif bestPlayerAttack.type == "move_and_attack" then
-                local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-                local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, bestPlayerAttack.destinationKey)
-                if path and #path > 0 then
-                    actingEnemy.components.movement_path = path
-                    actingEnemy.speedMultiplier = 2
-                    actingEnemy.components.ai.pending_attack = { name = bestPlayerAttack.attackName, target = bestPlayerAttack.target }
-                else
-                    actingEnemy.components.action_in_progress = true
-                end
-            end
-            return
+    elseif state.phase == "acting" then
+        perform_ai_action(world.enemies[state.activeEnemyIndex], world)
+        state.phase = "waiting_for_action"
+    elseif state.phase == "waiting_for_action" then
+        local currentEnemy = world.enemies[state.activeEnemyIndex]
+        -- The action is over when there are no global actions (like attacks or animations)
+        -- AND the current enemy is no longer moving (its movement_path is nil).
+        -- This prevents the camera from jumping to the next enemy before the current one finishes its move.
+        if not WorldQueries.isActionOngoing(world) and not (currentEnemy and currentEnemy.components.movement_path) then
+            state.activeEnemyIndex = state.activeEnemyIndex + 1
+            state.phase = "picking_enemy"
         end
-
-        -- Priority 3, 4, 5, 6: No player attack is possible. Decide where to move or what to attack.
-        local moveTarget = nil
-        if world.winTiles and #world.winTiles > 0 then
-            -- Priority 3: Move towards the closest win tile.
-            local closestWinTile = findClosestWinTile(actingEnemy, world)
-            if closestWinTile then
-                moveTarget = { tileX = closestWinTile.x, tileY = closestWinTile.y }
-            end
-        end
-
-        if not moveTarget then
-            -- Priority 6 (Fallback): No win tiles, or they are all occupied. Move towards the closest player.
-            moveTarget = findClosestPlayer(actingEnemy, world)
-        end
-
-        -- Priority 4: Attack Obstacle. If a move target exists, check for obstacles to attack on the way.
-        if moveTarget then
-            local bestObstacleAttack = findBestObstacleAttackAction(actingEnemy, moveTarget, reachableTiles, world)
-            if bestObstacleAttack then
-                -- This will always be a "move_and_attack" action.
-                local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-                local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, bestObstacleAttack.destinationKey)
-                if path and #path > 0 then
-                    actingEnemy.components.movement_path = path
-                    actingEnemy.speedMultiplier = 2
-                    actingEnemy.components.ai.pending_attack = { name = bestObstacleAttack.attackName, target = bestObstacleAttack.target }
-                    return -- Action decided, exit.
-                end
-            end
-
-            -- Priority 5: Move Only. If no attack was possible, just move towards the target.
-            local moveDestinationKey = findBestMoveOnlyTile(actingEnemy, moveTarget, reachableTiles, world)
-            if moveDestinationKey then
-                local startKey = actingEnemy.tileX .. "," .. actingEnemy.tileY
-                local path = Pathfinding.reconstructPath(came_from, cost_so_far, nil, startKey, moveDestinationKey)
-                if path and #path > 0 then
-                    actingEnemy.components.movement_path = path
-                    actingEnemy.speedMultiplier = 2
-                    actingEnemy.components.action_in_progress = true -- Set flag to prevent re-evaluation
-                    return
-                end
-            end
-        end
-
-        -- No action possible, end turn.
-        actingEnemy.components.action_in_progress = true
-    else
-        -- No more enemies to act. Time for reinforcements.
-        if world.reinforcementTiles and #world.reinforcementTiles > 0 then
-            -- 1. Calculate reinforcement level based on turn count.
-            -- Level increases by 1 every 3 turns (1-3 -> L1, 4-6 -> L2, etc.)
-            local reinforcementLevel = 1 + math.floor((world.turnCount - 1) / 3)
-            reinforcementLevel = math.min(reinforcementLevel, 50) -- Cap at max level
-
-            -- 2. Get a list of all possible enemy types from the blueprints.
-            local enemyTypes = {}
-            for typeName, _ in pairs(EnemyBlueprints) do
-                table.insert(enemyTypes, typeName)
-            end
-
-            if #enemyTypes > 0 then
-                -- 3. Iterate through reinforcement tiles and spawn enemies.
-                for _, tile in ipairs(world.reinforcementTiles) do
-                    if not WorldQueries.isTileOccupied(tile.x, tile.y, nil, world) then
-                        -- Each unoccupied reinforcement tile has a 50% chance to spawn an enemy.
-                        if love.math.random() < 0.5 then
-                            local randomEnemyType = enemyTypes[love.math.random(1, #enemyTypes)]
-                            local newEnemy = EntityFactory.createSquare(tile.x, tile.y, "enemy", randomEnemyType, { level = reinforcementLevel })
-                            world:queue_add_entity(newEnemy)
-                        end
-                    end
-                end
-            end
-        end
-        -- Before ending the turn, resolve any pending ascensions.
-        AscensionSystem.descend_units(world)
-
-        -- No more enemies to act, which means the enemy turn is over.
-        world.ui.turnShouldEnd = true
     end
 end
 

@@ -24,6 +24,7 @@ local EnemyTurnSystem = require("systems.enemy_turn_system")
 local TurnBasedMovementSystem = require("systems.turn_based_movement_system")
 local CounterAttackSystem = require("systems.counter_attack_system")
 local PassiveSystem = require("systems.passive_system")
+local PendingActionSystem = require("systems.pending_action_system")
 local ActionFinalizationSystem = require("systems.action_finalization_system")
 local AttackResolutionSystem = require("systems.attack_resolution_system")
 local ActionMenuPreviewSystem = require("systems.action_menu_preview_system")
@@ -47,6 +48,8 @@ local TileHazardSystem = require("systems.tile_hazard_system")
 local MainMenu = require("modules.main_menu")
 local DraftScreen = require("modules.draft_screen")
 local AnimationEffectsSystem = require("systems.animation_effects_system")
+local FogAnimationSystem = require("systems.fog_animation_system")
+local FogSystem = require("modules.fog_system")
 
 world = nil -- Will be initialized in love.load after assets are loaded
 gameState = "booting" -- A temporary state to prevent errors before love.load finishes
@@ -61,6 +64,7 @@ local update_systems = {
     -- 1. State and timer updates (timers, visual state changes)
     EffectTimerSystem,
     LevelUpDisplaySystem,
+    FogAnimationSystem,
     AnimationEffectsSystem,
 
     -- 2. Movement and Animation (physical state updates)
@@ -82,6 +86,7 @@ local update_systems = {
     AttackResolutionSystem,
 
     -- 6. Finalize the turn state after all actions are resolved
+    PendingActionSystem,
     ActionFinalizationSystem,
 }
 
@@ -150,6 +155,9 @@ function love.update(dt)
         for _, system in ipairs(update_systems) do
             if system and system.update then system.update(dt, world) end
         end
+
+        -- Update fog visibility based on the current positions of player units.
+        FogSystem.update(world)
 
         -- Check if the turn should end, AFTER all systems have run for this frame.
         if world.ui.turnShouldEnd then

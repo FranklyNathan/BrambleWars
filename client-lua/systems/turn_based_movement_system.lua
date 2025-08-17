@@ -38,10 +38,17 @@ function TurnBasedMovementSystem.update(dt, world)
     for _, entity in ipairs(world.all_entities) do
         -- The check for entity.components is no longer needed, as world.lua now guarantees it exists.
         if entity.components.movement_path then
+            -- DEBUG: Print current movement state, including distance to target.
+            local path_len = #entity.components.movement_path
+            local dist_x = math.abs(entity.x - (entity.targetX or entity.x))
+            local dist_y = math.abs(entity.y - (entity.targetY or entity.y))
+            print(string.format("[MOVE DEBUG] %s at (%.1f, %.1f) -> (%.1f, %.1f). Dist: (%.1f, %.1f). Path steps left: %d", entity.displayName or entity.enemyType, entity.x, entity.y, entity.targetX, entity.targetY, dist_x, dist_y, path_len))
+
             -- Check if the unit is close enough to its current target tile.
             -- Using a small epsilon to handle floating-point inaccuracies from dt-based movement.
             local epsilon = 1
             if math.abs(entity.x - entity.targetX) < epsilon and math.abs(entity.y - entity.targetY) < epsilon then
+                print(string.format("[MOVE DEBUG] %s reached target tile.", entity.displayName or entity.enemyType))
                 -- Snap to the target position to prevent error accumulation.
                 entity.x, entity.y = entity.targetX, entity.targetY
                 -- Update the logical tile position to match.
@@ -123,12 +130,15 @@ function TurnBasedMovementSystem.update(dt, world)
 
                 -- Check if the movement path still exists after potential trap interaction.
                 if entity.components.movement_path and #entity.components.movement_path > 0 then
-                    -- It has arrived. Get the next step from the path.
                     local nextStep = table.remove(entity.components.movement_path, 1)
+                    print(string.format("[MOVE DEBUG] %s taking next step. %d steps now remaining.", entity.displayName or entity.enemyType, #entity.components.movement_path))
 
+                    -- It has arrived. Get the next step from the path.
                     -- Update the entity's facing direction for the upcoming move
                     -- by comparing the next step's coords to the entity's current position.
                     -- This must be done *before* setting the new target.
+                    print(string.format("[MOVE DEBUG] Next step target is (%.1f, %.1f)", nextStep.x, nextStep.y))
+
                     if nextStep.x > entity.x then entity.lastDirection = "right"
                     elseif nextStep.x < entity.x then entity.lastDirection = "left"
                     elseif nextStep.y > entity.y then entity.lastDirection = "down"
@@ -138,6 +148,7 @@ function TurnBasedMovementSystem.update(dt, world)
                     entity.targetX = nextStep.x
                     entity.targetY = nextStep.y
                 elseif entity.components.movement_path then -- Path exists but is now empty.
+                    print(string.format("[MOVE DEBUG] %s finished movement path. Cleaning up component.", entity.displayName or entity.enemyType))
                     -- The path is now empty, which means movement is complete.
                     entity.components.movement_path = nil -- Clean up the component.
 
@@ -246,24 +257,6 @@ function TurnBasedMovementSystem.update(dt, world)
                         end
                     end
                 end
-            end
-        end
-    end
-
-    -- This system runs on both turns, making it a good place to check for pending level-ups
-    -- that might have been triggered during combat on the enemy's turn.
-    -- We check this separately from movement to ensure it can happen even if no one is moving.
-    for _, entity in ipairs(world.all_entities) do
-        if entity.components.pending_level_up then
-            -- We must wait for any other major actions (like the attack that granted the EXP) to finish.
-            -- isActionOngoing checks for things like damage animations, projectiles, etc.
-            -- The EXP bar animation itself does NOT block isActionOngoing.
-            if not WorldQueries.isActionOngoing(world) then
-                local LevelUpSystem = require("systems.level_up_system")
-                entity.components.pending_level_up = nil -- Consume the flag
-                LevelUpSystem.checkForLevelUp(entity, world)
-                -- Only process one level up per frame to prevent UI overlap issues.
-                return
             end
         end
     end

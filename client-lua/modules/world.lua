@@ -35,6 +35,7 @@ function World.new(gameMap)
     self.ascension_shadows = {}
     self.enemyPathfindingCache = {} -- Cache for AI pathfinding data for the current turn.
     self.tileStatuses = {} -- Stores temporary statuses on map tiles, like "aflame".
+    self.fogTiles = {} -- A table of fog data. Keys are "x,y", values are {currentAlpha, targetAlpha}.
     self.proceduralBatches = {} -- For procedurally generated map layers that need manual rendering.
     self.shopkeep = nil -- A direct reference to the shopkeeper entity for easy access.
 
@@ -56,6 +57,7 @@ function World.new(gameMap)
     self.ui = {
         playerTurnState = "free_roam", -- e.g., "free_roam", "unit_selected", "action_menu"
         previousPlayerTurnState = nil, -- Stores the state before entering a sub-state like 'unit_info_locked'
+        cameraFocusEntity = nil, -- The entity the camera should be focused on (e.g., for enemy turns).
         selectedUnit = nil, -- The unit currently selected by the player
         mapCursorTile = {x = 0, y = 0}, -- The player's cursor on the game grid, in tile coordinates
         turnShouldEnd = false, -- Flag to defer ending the turn
@@ -328,6 +330,15 @@ function World.new(gameMap)
                         table.insert(all_procedural_tiles[tileType], tileCoord)
                     end
                 end
+            end
+        end
+
+        -- Initialize the fog data based on the generated non-wall tiles.
+        self.fogTiles = {}
+        for _, tiles in pairs(all_procedural_tiles) do
+            for _, coord in ipairs(tiles) do
+                -- Each fog tile tracks its own alpha for smooth fading.
+                self.fogTiles[coord.x .. "," .. coord.y] = { currentAlpha = 1.0, targetAlpha = 1.0 }
             end
         end
 
@@ -640,6 +651,8 @@ function World:endTurn()
         end
     elseif self.turn == "enemy" then
         self.turnCount = self.turnCount + 1 -- Increment turn count at the start of the new player turn.
+        -- At the start of the player's turn, clear any camera focus from the enemy turn.
+        self.ui.cameraFocusEntity = nil
         for _, enemy in ipairs(self.enemies) do
             if enemy.hp > 0 then StatusEffectManager.processTurnStart(enemy, self) end
         end
