@@ -34,7 +34,6 @@ function MainMenu.handle_key_press(key)
         local selectedOption = menu.options[menu.selectedIndex]
         if selectedOption.key == "play" then return "start_game"
         elseif selectedOption.key == "draft" then
-            require('tests.websocket_tests')
             return "draft_mode"
         end
     end

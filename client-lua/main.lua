@@ -2,6 +2,28 @@
 -- Orchestrator for the Grid Combat game.
 -- Loads all modules and runs the main game loop.
 
+-- Global client table for websocket connection with server
+-- initialized when entering the draft screen for the first time
+local server = "100.76.15.33"
+local port = 3000
+local socket_path = "/ws"
+local client = nil
+local message_handler = require("modules.message_handler")
+local pb = require("pb")
+
+-- creates absolute path to .pb file
+local script_path = debug.getinfo(1, "S").source
+script_path = script_path:match("^@?(.*)$")
+local script_dir = script_path:match("(.*[/\\])") or ""
+local relative_pb_file = "../protos/auction.pb"
+local absolute_path = script_dir .. relative_pb_file
+
+local ok, err = pb.loadfile(absolute_path)
+
+if not ok then
+    error("Failed to load protobuf file: " .. err)
+end
+
 -- Load data, modules, and systems
 local World = require("modules.world")
 AttackBlueprints = require("data.attack_blueprints")
@@ -32,7 +54,7 @@ local AetherfallSystem = require("systems.aetherfall_system")
 local GrappleHookSystem = require("systems.grapple_hook_system")
 local WhiplashSystem = require("systems.whiplash_system")
 local DeathSystem = require("systems.death_system")
-local Renderer = require("modules.renderer") 
+local Renderer = require("modules.renderer")
 local BloodrushSystem = require("systems.bloodrush_system")
 local HustleSystem = require("systems.hustle_system")
 local HealingWindsSystem = require("systems.healing_winds_system")
@@ -48,6 +70,7 @@ local TileHazardSystem = require("systems.tile_hazard_system")
 local MainMenu = require("modules.main_menu")
 local DraftScreen = require("modules.draft_screen")
 local AnimationEffectsSystem = require("systems.animation_effects_system")
+local websocket = require("libraries.websocket")
 local FogAnimationSystem = require("systems.fog_animation_system")
 local FogSystem = require("modules.fog_system")
 
@@ -138,6 +161,37 @@ function love.update(dt)
     -- This handles cases where a system changes the state internally (e.g., game over).
     if world and world.gameState ~= gameState then
         gameState = world.gameState
+    end
+
+    -- Only update websocket client if game is in "draft_mode"
+    if gameState == "draft_mode" then
+        if not client or client.status == websocket.STATUS.CLOSED then
+            client = websocket.new(server, port, socket_path)
+
+            function client:onmessage(message)
+                message_handler(message, self)
+            end
+
+            function client:onopen()
+                -- send initial heartbeart to begin communicating with server
+                local envelope = {
+                    heartbeat_message = {
+                        client_id = "",
+                        timestamp = "",
+                    }
+                }
+
+                local envelope_binary, err = pb.encode("bramble.Envelope", envelope)
+                if not envelope_binary then
+                    print("Error encoding protobuf: " .. (err or "unknown error"))
+                    return
+                end
+
+                self:send_binary(envelope_binary)
+            end
+        end
+
+        client:update()
     end
 
     -- Only update game logic if the state is 'gameplay' and the world exists.
