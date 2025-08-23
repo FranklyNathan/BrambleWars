@@ -4,25 +4,6 @@
 
 -- Global client table for websocket connection with server
 -- initialized when entering the draft screen for the first time
-local server = "100.76.15.33"
-local port = 3000
-local socket_path = "/ws"
-local client = nil
-local message_handler = require("modules.message_handler")
-local pb = require("pb")
-
--- creates absolute path to .pb file
-local script_path = debug.getinfo(1, "S").source
-script_path = script_path:match("^@?(.*)$")
-local script_dir = script_path:match("(.*[/\\])") or ""
-local relative_pb_file = "../protos/auction.pb"
-local absolute_path = script_dir .. relative_pb_file
-
-local ok, err = pb.loadfile(absolute_path)
-
-if not ok then
-    error("Failed to load protobuf file: " .. err)
-end
 
 -- Load data, modules, and systems
 local World = require("modules.world")
@@ -165,6 +146,26 @@ function love.update(dt)
 
     -- Only update websocket client if game is in "draft_mode"
     if gameState == "draft_mode" then
+        local server = "100.76.15.33"
+        local port = 3000
+        local socket_path = "/ws"
+        local client = nil
+        local message_handler = require("modules.message_handler")
+        local pb = require("pb")
+
+        -- creates absolute path to .pb file
+        local script_path = debug.getinfo(1, "S").source
+        script_path = script_path:match("^@?(.*)$")
+        local script_dir = script_path:match("(.*[/\\])") or ""
+        local relative_pb_file = "../protos/auction.pb"
+        local absolute_path = script_dir .. relative_pb_file
+
+        local ok, err = pb.loadfile(absolute_path)
+
+        if not ok then
+            error("Failed to load protobuf file: " .. err)
+        end
+
         if not client or client.status == websocket.STATUS.CLOSED then
             client = websocket.new(server, port, socket_path)
 
